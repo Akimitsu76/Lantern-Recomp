@@ -207,6 +207,8 @@ def main() -> int:
     parser.add_argument('--upscaler', choices=graphics.UPSCALERS, default=None)
     add_graphics_diagnostics(parser)
     parser.add_argument('--output-resolution', choices=graphics.OUTPUT_RESOLUTIONS, default='auto')
+    parser.add_argument('--fullscreen', action='store_true',
+                        help='Use the verified game window in fullscreen; windowed sizes can be clamped by desktop decorations.')
     parser.add_argument('--render-scale', type=int, choices=(1, 2, 3))
     parser.add_argument('--msaa', choices=('on', 'off'))
     parser.add_argument('--anisotropic', type=int, choices=tuple(graphics.ANISOTROPIC_LABELS))
@@ -436,7 +438,7 @@ def main() -> int:
                 texture_quality=args.texture_quality,
                 present_dither=None if args.dither is None else args.dither == 'on',
                 fps_target=fps_target, vsync=args.vsync == 'on', shader_mode=args.shader_mode,
-                shader_preload=args.shader_preload == 'on',
+                shader_preload=args.shader_preload == 'on', fullscreen=args.fullscreen,
                 upscaler=args.upscaler or env.get('ASTER_PRESENT_FILTER'), output_resolution=args.output_resolution,
                 antialiasing=args.antialiasing, fsr_sharpness=args.fsr_sharpness)
         except Exception as exc:

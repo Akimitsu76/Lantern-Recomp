@@ -33,6 +33,26 @@ class RuntimeEvidenceTests(unittest.TestCase):
             self.assertEqual(result['fatal_messages'], ['[FATAL] old failure'])
             self.assertEqual(result['present_calls_observed'], 2)
 
+    def test_clean_exit_and_presents_do_not_hide_renderer_failures(self):
+        lines = [
+            '[error] [gpu] vkCreateGraphicsPipelines failed (result=-2)',
+            '[error] [gpu] Failed to translate queued pixel shader',
+            '[error] [gpu] Failed to create graphics pipeline with VS AABB, PS CCDD',
+            '[error] [gpu] D3D12 device removed: DEVICE_REMOVED',
+        ]
+        result = summarize_runtime_log('\n'.join(lines + lines + ['XELOG_GPU PRESENT', 'Execution complete']))
+        self.assertEqual(len(result['rendering_errors']), 4)
+        self.assertEqual(result['fatal_messages'], [])
+        self.assertTrue(result['execution_complete_logged'])
+        self.assertFalse(result['ready'])
+        self.assertFalse(result['gameplay_verified'])
+
+    def test_recoverable_cache_warnings_and_optional_file_api_are_not_render_failures(self):
+        text = ('[warning] VulkanPipelineCache: Ignoring invalid/incompatible driver cache\n'
+                '[warning] Failed to initialize D3D12 resolve-downscale readback pipeline\n'
+                '[error] [krnl] NtQueryInformationFile(XFileXctdCompressionInformation) unimplemented\n')
+        self.assertEqual(summarize_runtime_log(text)['rendering_errors'], [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -47,9 +47,14 @@ Manually changing upscaling, AA, texture quality, anisotropic filtering or
 dithering selects Personalizada. Display, FPS and FSR sharpness preferences
 remain independent of that choice. Texture quality Alta or
 Ultra in Personalizada uses the corresponding HD scale, independent of FPS.
-Internal scene scale stays at 1x/720p for compatibility; output resolution and
-FSR change presentation size. MSAA, shadows and effects retain the game's
-behavior where independent working controls have not been established.
+Internal scene scale is selectable independently: 1x (720p), 2x (1440p) or
+3x (2160p). Alta selects 2x and Ultra selects 3x; Personalizada can combine
+1x with Ultra textures and 1920x1080 output. Patch 0024 corrects scaled depth
+pixel centers, but only opening scenes have been visually checked at 2x/3x.
+Exact 1080p internal rendering (1.5x) is not implemented. Output resolution and
+FSR control presentation; higher internal scales have a substantial GPU cost.
+MSAA, shadows and effects retain the game's behavior where independent working
+controls have not been established.
 
 Graphics settings do not create separate saves. All presets and FPS targets
 use the system user's shared game profile. The 60 FPS and unlimited modes

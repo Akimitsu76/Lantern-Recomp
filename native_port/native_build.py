@@ -209,6 +209,10 @@ def cpu_sdk_identity(recipe):
 
     Patches 0023/0024 change no public type or layout. Patch 0025 adds one CVar
     declaration and GPU-only selection branches, with no existing ABI change.
+    Patch 0027 changes Vulkan submission scheduling and protects memory exports;
+    no declarations, data members or layouts change.
+    Patch 0028 stores a once-only window retry in SDL properties, changing only
+    the focus event implementation and no class layout.
     Patch 0026 only stores an existing presenter's pipeline format after creation;
     no header, public type or layout changes. Presenter/UI patches 0004 and 0022
     remain ABI-sensitive. Unknown future patches force a
@@ -227,7 +231,9 @@ def cpu_sdk_identity(recipe):
                 '0023-guest-vblank-video-mode-clock.patch',
                 '0024-scaled-pixel-parameter-centers.patch',
                 '0025-known-shader-preload-selection.patch',
-                '0026-presenter-pipeline-format-cache.patch'}
+                '0026-presenter-pipeline-format-cache.patch',
+                '0027-worker-only-async-submissions.patch',
+                '0028-startup-fullscreen-focus-retry.patch'}
     result['patches'] = {name: digest for name, digest in recipe.get('patches', {}).items() if name not in gpu_only}
     return result
 

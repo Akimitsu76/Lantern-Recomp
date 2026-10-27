@@ -12,9 +12,9 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
-## Revisão de FPS e portabilidade — 24/10/2026
+## Histórico de FPS e portabilidade — 24/10/2026
 
-Candidata experimental: 60 FPS voltou a alcançar a fase no Linux, mas ainda há
+Naquela revisão experimental, 60 FPS voltou a alcançar a fase no Linux, mas havia
 engasgos; a navegação do ilimitado não foi validada. Corrigidos progresso/cancelamento
 da compilação no Windows e leitura UTF-8. Gameplay Windows nativo continua pendente.
 Veja os [resultados e critérios para stable](docs/RELEASE_READINESS.md).
@@ -32,16 +32,28 @@ missões e em recursos compartilhados.** Outros materiais mantêm os originais. 
 Linux/Windows; Wine valida o launcher, não certifica gameplay D3D12.
 Veja [texturas e limites](docs/HD_TEXTURES.md).
 
-## Código atual — 26/10/2026
+## Candidata v0.1.4-rc.1 — 27/10/2026
 
-Esta revisão corresponde à pré-release experimental **v0.1.3**, com os
-executáveis atuais do launcher Linux e Windows nos assets. O build usa um único
-perfil de usuário para todos os alvos de FPS, gráficos personalizados
-independentes e pré-compilação opcional do cache de shaders conhecido. A geração
-oferece preparação de dependências pelos gerenciadores oficiais suportados.
-Veja [requisitos e limites](docs/PORTABLE_BUILD.md), [validação
-visual](docs/VISUAL_QUALITY.md) e as [notas da
-pré-release](docs/RELEASE_v0.1.3.md).
+Esta é uma **pré-release experimental**, não stable. O patch 0027 remove uma
+espera indevida por workers no fim da submissão Vulkan em modo assíncrono,
+preservando o caminho bloqueante, os flushes de cache e a sincronização de
+shaders com efeitos na memória. O patch 0028 repete uma única vez o pedido de
+tela cheia no primeiro foco quando ele foi descartado na abertura. Duas sessões
+de dez minutos em 60 FPS alcançaram tutorial/combate inicial sem falha fatal ou
+de renderização detectada; cache aquecido reduziu pausas, sem eliminá-las.
+A sessão 156, repetindo a 153 com o cache aprendido, caiu de 517,57 ms para
+33,90 ms de pausa máxima entre 100–170 s e de 1 para 0 criações de pipeline,
+sem intervalo acima de 50 ms nessa repetição. São cenas curtas, não a campanha.
+Veja os [testes e limites atuais](docs/RELEASE_READINESS.md) e as
+[notas da candidata](docs/RELEASE_v0.1.4-rc.1.md).
+
+As mudanças até 26/10 correspondem à pré-release experimental **v0.1.3**,
+preservada no histórico. O build usa um único perfil de usuário para todos os
+alvos de FPS, gráficos personalizados independentes e pré-compilação opcional do
+cache de shaders conhecido. A geração oferece preparação de dependências pelos
+gerenciadores oficiais suportados. Veja [requisitos e
+limites](docs/PORTABLE_BUILD.md), [validação visual](docs/VISUAL_QUALITY.md) e
+as [notas da v0.1.3](docs/RELEASE_v0.1.3.md).
 
 O patch 0024 corrige a leitura de profundidade em 2x/3x nas duas traduções
 SPIR-V/DXBC; o 0025 pré-compila shaders conhecidos antes de jogar; o 0026
@@ -55,11 +67,12 @@ sem certificação; não há ganho acima de 60 FPS comprovado nem escala interna
 
 ## Launcher portátil e geração local
 
-Na pré-release v0.1.3, os downloads diretos são
+Na pré-release v0.1.4-rc.1, os downloads diretos são
 `AsterNative-windows-x64.exe` e `AsterNative-linux-x86_64.AppImage`: cada um é um
 arquivo único, sem ZIP para extrair. Recursos e dados persistentes ficam na
 pasta de dados do usuário. Os formatos anteriores ZIP/TAR.GZ não são
-necessários para esta entrega.
+necessários para esta entrega. `SHA256SUMS` e `LEIA-ME-CANDIDATA.txt` acompanham
+os executáveis.
 
 O launcher gera e compila o host a partir da pasta extraída do jogo, verifica a
 revisão do XEX e reutiliza builds íntegros. Incluem Python/Tk e CMake/Ninja; a
@@ -203,7 +216,8 @@ e BUILD_PIPELINE para reproduzir o experimento.
 
 ## Documentação
 
-- [Notas da pré-release v0.1.3](docs/RELEASE_v0.1.3.md)
+- [Notas da candidata v0.1.4-rc.1](docs/RELEASE_v0.1.4-rc.1.md)
+- [Notas históricas da v0.1.3](docs/RELEASE_v0.1.3.md)
 - [Arquivos únicos para Releases](docs/SINGLE_FILE_RELEASE.md)
 - [Progresso nativo e evidências atuais](docs/NATIVE_PROGRESS.md)
 - [Estudo dos ports indicados pelo usuário](docs/PORT_REFERENCES.md)

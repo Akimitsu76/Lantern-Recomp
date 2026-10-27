@@ -1,0 +1,24 @@
+--- a/src/graphics/vulkan/pipeline_cache.cpp
++++ b/src/graphics/vulkan/pipeline_cache.cpp
+@@ -773,7 +773,9 @@
+       std::lock_guard<std::mutex> lock(creation_request_lock_);
+       startup_loading = startup_loading_;
+     }
+-    if (startup_loading) {
++    // Async draws already retain incomplete frames. Do not compile or wait on
++    // the processor thread here, otherwise the worker queue still stalls play.
++    if (startup_loading || REXCVAR_GET(async_shader_compilation)) {
+       creation_request_cond_.notify_one();
+     } else {
+       // Help worker threads on the processor thread to reduce warm-up latency.
+@@ -1120,7 +1122,9 @@
+   }
+ 
+   bool use_async = REXCVAR_GET(async_shader_compilation) && !creation_threads_.empty() &&
+-                   pixel_shader && placeholder_pixel_shader_ != VK_NULL_HANDLE;
++                   pixel_shader && placeholder_pixel_shader_ != VK_NULL_HANDLE &&
++                   !vertex_shader->shader().memexport_eM_written() &&
++                   !pixel_shader->shader().memexport_eM_written();
+   uint8_t async_priority = pipeline_util::kPriorityLowest;
+   if (use_async) {
+     uint32_t bound_rts =

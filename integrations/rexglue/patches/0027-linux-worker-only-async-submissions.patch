@@ -1,0 +1,13 @@
+--- a/src/graphics/vulkan/pipeline_cache.cpp
++++ b/src/graphics/vulkan/pipeline_cache.cpp
+@@ -944,7 +944,9 @@
+       std::lock_guard<std::mutex> lock(creation_request_lock_);
+       startup_loading = startup_loading_;
+     }
+-    if (startup_loading) {
++    // Async draws already retain incomplete frames. Do not compile or wait on
++    // the processor thread here, otherwise the worker queue still stalls play.
++    if (startup_loading || REXCVAR_GET(async_shader_compilation)) {
+       creation_request_cond_.notify_one();
+     } else {
+       // Help worker threads on the processor thread to reduce warm-up latency.

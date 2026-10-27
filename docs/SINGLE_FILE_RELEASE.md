@@ -1,12 +1,13 @@
 # Arquivos únicos para Releases
 
-Os assets da pré-release experimental v0.1.3 são:
+Os assets da pré-release experimental v0.1.4-rc.1 são:
 
 - `AsterNative-windows-x64.exe` — executável Windows com recursos embutidos.
 - `AsterNative-linux-x86_64.AppImage` — AppImage Linux com recursos embutidos.
 - `SHA256SUMS` — checksums somente desses dois executáveis.
+- `LEIA-ME-CANDIDATA.txt` — nota curta da candidata e limites conhecidos.
 
-Esses três arquivos são os assets obrigatórios da prerelease. ZIP e TAR.GZ são
+Esses quatro arquivos são os assets obrigatórios da prerelease. ZIP e TAR.GZ são
 formatos anteriores opcionais e não substituem os executáveis acima. O `.exe`
 único não depende de `app` ou `_internal` ao lado. Os arquivos não são assinados
 digitalmente. O jogo não está incluído.
@@ -51,12 +52,17 @@ auditoria inclui `native_port/`, `apps/`, `scripts/`, `integrations/rexglue/`,
 dumps, saves, texturas extraídas/HD, código gerado do jogo e executáveis de build
 nunca entram no repositório.
 
-A pré-release v0.1.3 inclui os patches 0024 (profundidade em 2x/3x), 0025
-(pré-compilação de shaders conhecidos) e 0026 (cache de formato do pipeline do
-presenter Vulkan), o módulo de requisitos e as opções independentes de gráficos.
+A pré-release v0.1.4-rc.1 preserva os patches 0024 (profundidade em 2x/3x),
+0025 (pré-compilação de shaders conhecidos) e 0026 (cache de formato do pipeline
+do presenter Vulkan), e acrescenta 0027 (submissão Vulkan assíncrona sem drenar
+workers) e 0028 (uma repetição do pedido de tela cheia no primeiro foco). O
+módulo de requisitos e as opções independentes de gráficos continuam incluídos.
 Não altere o requisito de toolchain: Clang/C++23 e, no Windows, Build
 Tools/Windows SDK continuam necessários para GERAR o jogo, embora Python não seja
 necessário para ABRIR o launcher.
 
 A validação local de empacotamento fica em `.aster/` (privado) e não é enviada.
 Windows foi testado via Wine; o jogo em Windows real continua sem validação.
+O workflow público `native-graphics-windows.yml` só produz evidência se for
+publicado e executado; sem escopo `workflow` no token, ele precisa ser incluído
+manualmente e nenhum resultado de CI deve ser anunciado.

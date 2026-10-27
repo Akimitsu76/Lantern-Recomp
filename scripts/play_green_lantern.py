@@ -203,6 +203,8 @@ def validate_installation(parser, root, game, binary, report, target):
     check_mode_report(parser, report, target)
     if report.get('unregistered_targets'):
         parser.error('O probe contém destinos não registrados; corrija o port e gere uma nova referência.')
+    if report.get('rendering_errors'):
+        parser.error('O probe contém falhas de shaders, pipelines ou dispositivo gráfico; corrija o backend e gere uma nova referência.')
     if ('--render_target_path_vulkan=fsi' not in report['command'] or report.get('fatal_messages')
             or not report.get('xex_loaded_observed') or not report.get('present_calls_observed')):
         parser.error('É necessário um probe FSI desta compilação, com XEX carregado, apresentação observada e sem erros fatais.')

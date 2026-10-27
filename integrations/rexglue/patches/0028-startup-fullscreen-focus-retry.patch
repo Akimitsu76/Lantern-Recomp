@@ -1,0 +1,30 @@
+--- a/src/ui/window_sdl.cpp
++++ b/src/ui/window_sdl.cpp
+@@ -473,9 +473,26 @@
+       OnMonitorUpdate(e);
+       break;
+     }
+-    case SDL_EVENT_WINDOW_FOCUS_GAINED:
++    case SDL_EVENT_WINDOW_FOCUS_GAINED: {
++      // Some window managers discard fullscreen while the new window is being
++      // mapped. Retry once when it receives focus, after native registration.
++      // Window-owned properties keep this state out of the public class ABI.
++      SDL_PropertiesID properties = SDL_GetWindowProperties(sdl_window_);
++      constexpr const char* retry_key = "aster.fullscreen.focus_retry";
++      if (properties && !SDL_GetBooleanProperty(properties, retry_key, false)) {
++        SDL_SetBooleanProperty(properties, retry_key, true);
++        if (IsFullscreen() && !(SDL_GetWindowFlags(sdl_window_) & SDL_WINDOW_FULLSCREEN)) {
++          if (!SDL_SetWindowFullscreen(sdl_window_, true)) {
++            REXLOG_WARN("Failed to retry startup fullscreen: {}", SDL_GetError());
++          }
++          if (destruction_receiver.IsWindowDestroyed()) {
++            return;
++          }
++        }
++      }
+       OnFocusUpdate(true, destruction_receiver);
+       break;
++    }
+     case SDL_EVENT_WINDOW_FOCUS_LOST:
+       OnFocusUpdate(false, destruction_receiver);
+       break;

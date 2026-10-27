@@ -126,6 +126,13 @@ Vulkan, dados do driver. Novos pipelines são preparados por workers no modo
 `async`, mas tradução/análise de shaders inéditos ainda pode bloquear e causar
 engasgos. Mudanças de driver, resolução ou versão podem exigir novas variantes.
 Não existe promessa de compilar uma única vez todas as cenas futuras.
+O patch 0027 também remove a drenagem/espera incondicional dos workers no fim
+da submissão Vulkan quando o modo assíncrono está ativo. O caminho bloqueante
+e shaders com efeitos sobre a memória mantêm a sincronização necessária.
+Esta mudança não altera o agendador D3D12; Windows nativo segue pendente de teste.
+O patch 0028 repete uma única vez o pedido de tela cheia no primeiro foco,
+caso o gerenciador de janelas tenha descartado o pedido durante a abertura.
+Não força tela cheia quando a opção está desligada nem altera o modo do monitor.
 O backend Linux evita compilar um pipeline provisório na thread de
 desenho; os pipelines definitivos são preparados por workers. Shaders com
 efeitos sobre a memória guest preservam o caminho síncrono. Quadros incompletos

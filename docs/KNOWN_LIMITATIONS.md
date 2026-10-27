@@ -1,13 +1,19 @@
 # Limitações conhecidas
 
-- Revisão atual: 60 FPS voltou a alcançar a fase em Linux, mas ainda há pausas.
-  Ilimitado não avançou pelos menus nos probes mais recentes; a correção do
-  contador não comprova resolução desse problema. Windows nativo e stable não
-  estão aprovados. Ver RELEASE_READINESS.md; evidências antigas abaixo são históricas.
+- Revisão atual (27/10): dois probes Linux de dez minutos em modo 60 alcançaram
+  Oa, tutorial, combate inicial e morte/recarregamento sem fatal ou falha de
+  renderização detectada. Cache aquecido reduziu as pausas observadas, sem
+  eliminá-las. O ilimitado alcançou a abertura nos controles de 26/10, mas ganho
+  real acima de 60 FPS, campanha e Windows nativo continuam sem certificação.
+  Ver RELEASE_READINESS.md; contagens e modos anteriores abaixo são históricos.
+- O workflow público `native-graphics-windows.yml` só produz evidência se for
+  publicado e executado. Sem escopo `workflow` no token, ele precisa ser incluído
+  manualmente; não há resultado de CI Windows nesta revisão.
 
 - Texturas HD automáticas: 253 difusos opacos revisados, com usos nas dez missões,
   Alta 2x/Ultra 4x. Os demais materiais permanecem originais. A resolução de
-  saída não aumenta a escala interna (720p), mantida por compatibilidade.
+  saída não aumenta sozinha a escala interna, selecionável em 1x/2x/3x.
+  Não existe escala interna exata de 1080p (1,5x).
   Não há certificação da campanha nem de gameplay D3D12 em Windows real.
 
 - O backend nativo próprio do Aster Native continua sem runtime completo,
@@ -48,8 +54,10 @@
   Xwayland. Tearing, estabilidade, áudio e comportamento de combate/física
   continuam sem validação humana. A GPU observada foi 95–96% e ~91–107 W.
 - Os presets Baixa/Alta/Ultra não têm avaliação visual humana pareada nem
-  medição de VRAM/desempenho em outras GPUs. Escala interna 2x/3x apresentou
-  áreas pretas e é forçada a 1x. FSR 1 e FXAA são aplicados à apresentação;
+  medição de VRAM/desempenho em outras GPUs. O patch 0024 corrigiu a leitura de
+  profundidade escalada; capturas da abertura em 2x/3x deixaram de apresentar
+  as grandes áreas pretas. Isso não certifica todas as fases, sombras ou efeitos.
+  FSR 1 e FXAA são aplicados à apresentação;
   resolução da janela e detalhe das texturas são conceitos separados.
 - O launcher só habilita **Jogar agora** para o mesmo dump identificado e para
   builds/referências FSI presentes em `.aster/`. Não há suporte genérico a

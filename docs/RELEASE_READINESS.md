@@ -1,5 +1,75 @@
 # Preparação da release
 
+## Candidata v0.1.4-rc.1 — 27/10/2026
+
+**Ainda não aprovada como stable.** Esta seção descreve a candidata publicada
+como pré-release; não implica aprovação stable nem substitui os critérios abaixo.
+
+- Patch 0027 corrige a espera incondicional pela fila de pipelines no fim da
+  submissão Vulkan em modo assíncrono. O caminho bloqueante mantém ajuda/espera
+  e os flushes de cache são preservados. Um contrato C++ executa o ramo real
+  anterior e corrigido em diferentes estados de workers. D3D12 não foi alterado
+  por este patch. Tradução de shaders inéditos e leitura inicial de DDS ainda
+  podem provocar pausas.
+- Duas sessões Linux de 600,41 s em modo 60, escala interna 1x, FSR 1/FXAA e
+  saída Full HD solicitada terminaram com código 0, sem fatal, destino não
+  registrado ou falha de renderização detectada nos logs retidos. O percurso
+  observado inclui abertura de Oa, tutorial, combate inicial e morte/recarregamento.
+  Não certifica a primeira missão inteira nem a campanha. Nas capturas 1x
+  inspecionadas não apareceram os grandes polígonos pretos anteriores.
+- Após os primeiros 100 s, o cache da aplicação vazio teve 16 intervalos de
+  apresentação acima de 50 ms (máximo 599,88 ms); a repetição com cache aquecido
+  teve 3 (máximo 234,32 ms). Medianas de 16,82 ms em ambos. São timestamps de
+  retorno de `vkQueuePresentKHR`, incluindo menus/transições/capturas, sem medir
+  GPU ou quadros de conteúdo único. Mesmas entradas agendadas, gameplay não
+  determinístico; cache global NVIDIA preservado. O resultado demonstra
+  reutilização útil, sem atribuir todo o ganho ao patch nem prometer zero stutter.
+- Patch 0028 repete uma única vez o pedido de tela cheia no primeiro foco se
+  ele foi descartado durante o mapeamento da janela. O diagnóstico isolado
+  passou de 1920x1030 para 1920x1080 reais no Niri/Xwayland; a mudança preserva
+  modo janela, configuração do monitor e o layout público do SDK. O teste C++
+  cobre sucesso/falha, foco repetido e destruição da janela.
+- Suítes completas sem falhas: 386 testes Linux (2 ignorados) e 360 testes
+  Windows sob Wine (28 ignorados). A análise agora distingue falhas de
+  tradução/pipeline/dispositivo perdido de ausência de crash: apresentações
+  e saída limpa não aprovam um renderer que falhou.
+- O XEX original e os três arquivos do perfil humano permaneceram idênticos.
+  Os testes usam cópias de perfil. Evidências privadas: sessões 145/146 e
+  `.aster/reports/stability-2026-10-27/cold-warm27-comparison.json`.
+- A instalação final com 0028 completou 300,40 s em ilimitado, Ultra4x e saída
+  efetiva 1920x1080. Navegação, abertura, movimento e animações de ataque foram
+  observados; sem fatal/destino não registrado/erro de renderização detectado.
+  Entre 100–300 s, mediana de apresentação 16,82 ms, dois intervalos acima de
+  50 ms e máximo 517,57 ms. Não há ganho acima de 60 FPS comprovado. Escala
+  interna 1x e três materiais HD registrados; não certifica combate/campanha.
+- AppImage e EXE finais foram empacotados com 0027/0028, abriram a GUI com
+  dados isolados e tiveram os payloads extraídos comparados com as fontes.
+  Nenhum conteúdo de jogo proibido entrou nos pacotes; GLIBC máxima Linux2.27.
+  Os executáveis são os assets da pré-release v0.1.4-rc.1; o EXE foi exercitado
+  somente sob Wine. O workflow Windows só produz evidência se for publicado e
+  executado; sem escopo `workflow`, a inclusão é manual e o CI não é aprovado.
+- Na mesma instalação, modo60 em janela e modo30/Ultra em tela cheia também
+  alcançaram combate inicial e terminaram com código0, sem falha fatal ou de
+  renderização detectada. O teste em janela permaneceu em 1920x1030, comprovando
+  que 0028 respeita a opção desligada; tela cheia ficou em 1920x1080. Os trechos
+  de 100–180 s tiveram medianas de 16,82/33,36 ms e uma pausa >50 ms em cada.
+  São sessões curtas da abertura, sem certificação da missão/campanha ou FPS
+  constantes.
+- Repetindo as entradas da sessão 153 com seu cache recém-aprendido, a 156
+  completou 173,47 s, com combate visual observado e sem erro
+  fatal/renderização detectado. Entre 100–170 s, a pausa máxima passou de
+  517,57 para 33,90 ms e as criações de pipeline de 1 para 0; nenhuma
+  apresentação excedeu 50 ms na repetição. A chamada Vulkan anterior consumira
+  493,96 ms de CPU. Mesma base de perfil e
+  entradas, sem gameplay determinístico garantido. Isso verifica reutilização
+  nessa cena; não elimina a compilação ou pausas de variantes inéditas.
+
+Continuam necessários Windows nativo/D3D12, progresso prolongado na campanha,
+avaliação de efeitos/sombras/áudio, instalação limpa e validação dos executáveis
+publicados em máquinas diferentes. O CI Windows desta revisão não foi executado
+sem o workflow publicado.
+60 FPS e ilimitado permanecem experimentais; 30 FPS continua o padrão.
+
 ## Atualização — 26/10/2026 (pré-release v0.1.3)
 
 Estado: **pré-release experimental; não aprovada como release estável**.

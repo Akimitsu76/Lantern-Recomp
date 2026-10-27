@@ -38,7 +38,9 @@ PATCHES = ('integrations/rexglue/patches/0004-embedded-spatial-sdk.patch',
            'integrations/rexglue/patches/0023-guest-vblank-video-mode-clock.patch',
            'integrations/rexglue/patches/0024-scaled-pixel-parameter-centers.patch',
            'integrations/rexglue/patches/0025-known-shader-preload-selection.patch',
-           'integrations/rexglue/patches/0026-presenter-pipeline-format-cache.patch')
+           'integrations/rexglue/patches/0026-presenter-pipeline-format-cache.patch',
+           'integrations/rexglue/patches/0027-worker-only-async-submissions.patch',
+           'integrations/rexglue/patches/0028-startup-fullscreen-focus-retry.patch')
 CAPABILITY = 'sdk-spatial-fsr1'
 # Bump only when build semantics change. Logging/comments must not invalidate
 # gigabytes of correctly compiled source or force another source download.

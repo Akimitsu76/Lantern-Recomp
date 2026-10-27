@@ -106,7 +106,8 @@ def build_cache_plugin(root, work, prefix, tools, cancel, emit, run, allow_downl
         '0022-idle-notification-presentation.patch',
         '0023-guest-vblank-video-mode-clock.patch',
         '0024-scaled-pixel-parameter-centers.patch',
-        '0025-linux-known-shader-preload-selection.patch')]
+        '0025-linux-known-shader-preload-selection.patch',
+        '0027-linux-worker-only-async-submissions.patch')]
     sdk_abi = prefix / 'aster-spatial-sdk.json'
     abi_identity = file_hash(sdk_abi) if sdk_abi.is_file() else 'official-sdk-0.10.0'
     recipe = hashlib.sha256((''.join(file_hash(patch) for patch in patches) + file_hash(root / 'integrations/rexglue/plugin-only/CMakeLists.txt') + abi_identity).encode()).hexdigest()[:20]

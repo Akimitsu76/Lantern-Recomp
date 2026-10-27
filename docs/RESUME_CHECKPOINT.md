@@ -1,4 +1,40 @@
-# Revisão de FPS — 24/10/2026
+# Estado atual — 27/10/2026
+
+SDK com patches até 0028, integração 20. A correção 0027 evita que o fim da
+submissão Vulkan drene/espere a fila de pipelines no modo assíncrono; o caminho
+bloqueante e shaders com efeitos na memória guest mantêm a sincronização.
+Tradução de shaders inéditos e primeira leitura de DDS ainda podem pausar.
+Não foi alterado o agendador D3D12 por esta correção.
+0028 repete o pedido de tela cheia uma vez no primeiro foco caso tenha sido
+descartado na abertura. O diagnóstico isolado conseguiu 1920x1080 reais no
+Niri/Xwayland, sem alterar modo do monitor. Não muda classe/layout público.
+
+Dois probes Linux de dez minutos em 60 FPS, 720p interno e saída Full HD
+solicitada alcançaram a abertura, tutorial, combate e morte/recarregamento.
+Sem fatal, destino não registrado ou falha de renderização detectada nos logs.
+Entre 100–600 s, intervalos de apresentação acima de 50 ms caíram de 16 com
+cache da aplicação vazio para 3 com cache aquecido; máximos de 599,88/234,32 ms.
+Mesmas entradas agendadas, sem determinismo de gameplay garantido; menus e
+transições incluídos. Não é prova de ausência de engasgos nem da campanha.
+
+A sessão 153, no SDK final, completou 300,40 s em ilimitado/Ultra com saída
+1920x1080 real; 154/155 repetiram a abertura em 60/janela (1920x1030) e
+30/FullHD Ultra (1920x1080), com exit 0 e sem erro detectado. A 156 repetiu as
+entradas da 153 com o cache aprendido: entre 100–170 s, máximo de 517,57 para
+33,90 ms, criações de pipeline de 1 para 0 e nenhum intervalo >50 ms. São cenas
+curtas; não certificam campanha, ausência de stutter ou ganho acima de 60 FPS.
+
+Suítes completas: 386 testes Linux (2 ignorados), 360 Windows/Wine (28
+ignorados), sem falhas. Wine não valida GPU/compilação nativa Windows. Os
+probes usam cópias de perfil e preservaram XEX/saves humanos. Evidências
+privadas em `.aster/reports/stability-2026-10-27` e sessões 145/146/153–156.
+O workflow Windows só produz evidência se for publicado e executado; sem escopo
+`workflow`, a inclusão é manual e nenhum resultado de CI deve ser anunciado.
+
+Não aprovar stable antes dos critérios de RELEASE_READINESS.md. Os estados
+abaixo são históricos e não substituem esta seção.
+
+# Histórico — revisão de FPS de 24/10/2026
 
 Candidata não aprovada como stable: ver RELEASE_READINESS.md. Hook portátil agora
 preserva callback/contador no ilimitado, mas navegação não foi validada. Linux

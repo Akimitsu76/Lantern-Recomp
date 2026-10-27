@@ -353,6 +353,27 @@ class PlayLauncherTests(unittest.TestCase):
         dependencies.assert_not_called()
         self.assertIn('destinos não registrados', errors.getvalue())
 
+    def test_renderer_failure_blocks_reference_validation_after_successful_presents(self):
+        from unittest.mock import Mock
+        parser = launcher.argparse.ArgumentParser()
+        game, binary = Mock(), Mock()
+        game.is_dir.return_value = True
+        game.__truediv__ = Mock(return_value=game)
+        game.is_file.return_value = True
+        binary.is_file.return_value = True
+        report = {'command': ['--render_target_path_vulkan=fsi'],
+                  'xex_sha256_after': launcher.EXPECTED_XEX, 'executable_sha256': 'binary',
+                  'fatal_messages': [], 'unregistered_targets': [],
+                  'rendering_errors': ['vkCreateGraphicsPipelines failed (result=-2)'],
+                  'xex_loaded_observed': True, 'present_calls_observed': 1200}
+        errors = io.StringIO()
+        with patch.object(launcher, 'digest', side_effect=[launcher.EXPECTED_XEX, 'binary']), \
+                patch.object(launcher.subprocess, 'run') as dependencies, \
+                contextlib.redirect_stderr(errors), self.assertRaises(SystemExit):
+            launcher.validate_installation(parser, Path('.'), game, binary, report, '30')
+        dependencies.assert_not_called()
+        self.assertIn('falhas de shaders', errors.getvalue())
+
     def test_msaa_off_is_rejected_instead_of_sending_ineffective_flag(self):
         parser, args = launcher.parse_arguments(['--msaa', 'off'])
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
