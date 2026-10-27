@@ -56,9 +56,9 @@ arquivos** e **Diagnóstico**. O layout padrão é 1160×720, com mínimo 1088×
 os controles principais continuam visíveis em captura e testes. A suíte completa
 terminou com **152 testes aprovados**, sem falhas ou skips.
 
-Na aba **Gráficos** ficam os presets **Baixa/Padrão/Alta/Ultra/Personalizada** e
+Na aba **Gráficos** ficam os presets **Baixa/Média/Alta/Ultra/Personalizada** e
 os alvos **30/60/ilimitado**. 30 fps continua o padrão; 60 e ilimitado são
-opt-in, pedem confirmação e usam perfis isolados. O botão **Jogar agora** valida
+opt-in, pedem confirmação e compartilham o mesmo perfil/save do usuário. O botão **Jogar agora** valida
 dump, build, plugin e referência FSI antes de abrir. O backend completo próprio
 permanece indisponível. O comando de abertura ganhou ajuda em português,
 controles completos, erros claros, validação sem abrir e bloqueio de sessões

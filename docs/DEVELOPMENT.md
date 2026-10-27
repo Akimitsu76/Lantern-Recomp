@@ -4,9 +4,8 @@
 NATIVE_PROGRESS.md, BUILD_PIPELINE.md e VALIDATION.md para o estágio atual.
 Os testes PE/adapter em test_pe_xenon.py usam fixtures originais; testes opcionais
 que exigem ferramentas geradas são skipped em checkout sem build. A suíte atual
-tem **163 testes**, incluindo GUI, presets/CVars, schema 2, os três alvos, o probe
-nativo e a persistência do payload de arquivo único. Na máquina de
-desenvolvimento, com os artefatos locais presentes, os 163 passaram sem skips.
+tem **152 testes aprovados**, incluindo GUI, presets/CVars, schema 2, os três
+alvos e o probe nativo.
 
 
 O projeto roda diretamente com Python, sem instalar pacotes ou alterar o sistema.

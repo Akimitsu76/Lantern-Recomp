@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "Local source preparation framework for native port research"
 requires-python = ">=3.11"
 
+[project.optional-dependencies]
+hd = ["Pillow==12.3.0", "xxhash==3.6.0"]
+analysis = ["capstone==5.0.7"]
+
 [project.scripts]
 aster-native = "native_port.__main__:main"
 

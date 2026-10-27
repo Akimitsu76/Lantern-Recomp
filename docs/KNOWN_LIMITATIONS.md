@@ -1,12 +1,72 @@
-# Limitações atuais — atualização v0.1.2
+# Limitações conhecidas
 
-- Projeto experimental; campanha completa e compatibilidade ampla não certificadas.
-- 30 FPS é padrão; 60 FPS/ilimitado continuam experimentais. Saves pertencem ao usuário e são compartilhados entre configurações.
-- Renderização interna fixada em 720p para evitar os artefatos vistos com supersampling. Resolução de janela e ampliação não acrescentam detalhes de textura.
-- Ampliação bicúbica/nitidez e o novo backend Vulkan são específicos do Linux x86-64 com SDK fixado. Windows usa bilinear; o jogo em Windows real não foi validado.
-- Shaders conhecidos são reutilizados. Shaders novos, pipelines com memexport e retenção de quadros completos ainda podem causar pausas. Não há garantia de zero stutter.
-- A validação recente cobre o início da missão 1, movimento e combate; não certifica todo o jogo, áudio, todas as sombras nem todas as GPUs.
-- O launcher exige dump completo da revisão suportada e toolchain C++ local. Não contém jogo, assets, saves ou código recompilado do jogo.
-- Os executáveis não são assinados.
+- Revisão atual: 60 FPS voltou a alcançar a fase em Linux, mas ainda há pausas.
+  Ilimitado não avançou pelos menus nos probes mais recentes; a correção do
+  contador não comprova resolução desse problema. Windows nativo e stable não
+  estão aprovados. Ver RELEASE_READINESS.md; evidências antigas abaixo são históricas.
 
-Consulte VALIDATION.md e SPATIAL_FILTER.md para evidências e detalhes.
+- Texturas HD automáticas: 253 difusos opacos revisados, com usos nas dez missões,
+  Alta 2x/Ultra 4x. Os demais materiais permanecem originais. A resolução de
+  saída não aumenta a escala interna (720p), mantida por compatibilidade.
+  Não há certificação da campanha nem de gameplay D3D12 em Windows real.
+
+- O backend nativo próprio do Aster Native continua sem runtime completo,
+  renderização, áudio, controles ou gameplay implementados. O host experimental
+  ReXGlue recompilado abre menus e o começo da missão 1; não é um port completo
+  nem valida a campanha. Veja PLAYABILITY.md.
+- A função de oito bytes recompilada/executada como experimento não valida o
+  restante do jogo. O host ReXGlue usa código recompilado e hints; veja
+  NATIVE_PROGRESS.md, XENONRECOMP_EVALUATION.md e PLAYABILITY.md.
+- XEX decodificado após autorização. O original permanece intacto; os derivados
+  privados ficam em `.aster/`. A antiga ISO continua sem formato reconhecido.
+- REA MCP rejeita XEX e PE PowerPCBE. Ghidra direto funciona com linguagem explícita,
+  mas loader PE genérico tem limitações de imports/exceptions/TLS/RTTI e VMX.
+- Contagem de funções do analisador não prova cobertura completa nem nomes originais.
+  Nenhuma tabela reconhecida pelo XenonAnalyse não significa ausência de indireções.
+- Validadores verificam limites/estrutura, sem autenticar assinaturas criptográficas,
+  mídia completa, integridade de todos os assets ou equivalência integral de CPU.
+- O hash de um dump foi analisado; não há catálogo de revisões compatíveis.
+- CMake e XenonRecomp locais estão disponíveis. Builds locais foram executados sem
+  instalar pacotes do sistema. Dependências e obrigações de distribuição constam
+  de TOOLING_LICENSES.md. Launchers Linux/Windows foram empacotados; o jogo e seus assets não são redistribuídos.
+- Relatórios de análise só são associados ao mesmo hash de origem e PE normalizado
+  correspondente. Compilação C++ usa incremento do Ninja; relatórios de preparação
+  continuam recalculando hash/diagnóstico. Não há retomada automática de jobs.
+- GUI mantém Compilar/Iniciar desabilitados para o jogo; **Jogar agora** abre o
+  build local validado. Os alvos 30/60/ilimitado e os presets
+  Baixa/Média/Alta/Ultra/Personalizada ficam na aba **Gráficos**. 60 e
+  ilimitado são opt-in, com confirmação. Todos os alvos compartilham o save por usuário; 30 fps continua o
+  padrão. Preparar mostra análise validada e experimento nativo quando
+  pertencem ao mesmo dump; não inicia o probe.
+- Sessão humana 058 confirmou gameplay/combate visual em 60 fps, mas teve 6
+  janelas de 5 s abaixo de 59 apresentações/s (3 abaixo de 55), incluindo uma
+  queda de 822 ms em transição. A percepção desses engasgos e a qualidade de
+  física, animações e áudio continuam sem certificação; a sessão não mediu áudio.
+- O modo ilimitado v10 tem apenas evidência automatizada: 90,16 s, 38.627
+  apresentações, FSI, simulação em alvo 60/tempo real e nenhum fatal. O probe
+  registra `gameplay_verified=false`; não há captura visual de gameplay no
+  Xwayland. Tearing, estabilidade, áudio e comportamento de combate/física
+  continuam sem validação humana. A GPU observada foi 95–96% e ~91–107 W.
+- Os presets Baixa/Alta/Ultra não têm avaliação visual humana pareada nem
+  medição de VRAM/desempenho em outras GPUs. Escala interna 2x/3x apresentou
+  áreas pretas e é forçada a 1x. FSR 1 e FXAA são aplicados à apresentação;
+  resolução da janela e detalhe das texturas são conceitos separados.
+- O launcher só habilita **Jogar agora** para o mesmo dump identificado e para
+  builds/referências FSI presentes em `.aster/`. Não há suporte genérico a
+  outras revisões do dump nem redistribuição de assets/código proprietário.
+- Pasta é limitada a 100.000 arquivos e 32 níveis; links internos são rejeitados.
+  Manifesto de assets usa nomes/tamanhos/mtime; completude não certificada.
+- O runtime Linux atualizado usa um módulo separado para remover apenas arenas
+  criadas com exclusividade por sua própria sessão. Builds anteriores podem deixar arenas `xenia_memory_*` em `/dev/shm`
+  porque o runtime usa `_Exit`. A limpeza exige auditoria de inode/mapas e
+  autorização explícita; não limpar `/dev/shm` genericamente.
+- Isolamento de caminhos pressupõe uso local confiável; não fornece sandbox contra
+  outro processo malicioso alterando symlinks em corrida.
+
+- A integração HD é um protótipo de material revisado, com Real-ESRGAN local,
+  derivada 2x e cache persistente. Não existe pacote de todas as texturas. A
+  compilação e gameplay D3D12 no Windows real ainda precisam de validação.
+
+Próximo marco: ampliar geração/análise e validar a compilação experimental
+(combate, física, áudio, campanha e outras GPUs) antes de tratar o backend como
+completo. Não simular sucesso de serviços ausentes para habilitar execução.

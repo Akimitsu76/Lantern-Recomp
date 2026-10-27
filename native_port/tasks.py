@@ -37,6 +37,10 @@ def run_process(argv, cwd, cancel, timeout=120, env=None, on_output=None):
                 nonlocal pending
                 if on_output is None:
                     return
+                # Windows CRT readers can retain EOF after the initial empty
+                # spool read. Reposition before each bounded read so later
+                # compiler output becomes visible while the process runs.
+                live.seek(live.tell())
                 chunk = live.read(65536)
                 if chunk:
                     parts = (pending + chunk).replace(b'\r', b'\n').split(b'\n')
@@ -69,6 +73,9 @@ def run_process(argv, cwd, cancel, timeout=120, env=None, on_output=None):
                 stream()
                 if on_output and pending:
                     on_output(pending.decode('utf8', errors='replace'))
+                # A quick tool can exit before its final output is delivered.
+                # Its output callback may request cancellation even then.
+                cancel.check()
                 def tail(f):
                     f.seek(0, 2)
                     f.seek(max(0, f.tell()-65536))

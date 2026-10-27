@@ -1,8 +1,73 @@
+# Revisão de FPS — 24/10/2026
+
+Candidata não aprovada como stable: ver RELEASE_READINESS.md. Hook portátil agora
+preserva callback/contador no ilimitado, mas navegação não foi validada. Linux
+60 FPS alcançou Oa; ainda há engasgos. Corrigidos streaming/cancelamento Windows
+e UTF-8 explícito. Não confundir Wine com gameplay Windows real.
+
 # Ponto de retomada — 22–23/10/2026
 
-> Documento histórico de uma etapa de desenvolvimento. Para o estado e os
-> downloads atuais, consulte [PORTABLE_BUILD.md](PORTABLE_BUILD.md) e
-> [SINGLE_FILE_RELEASE.md](SINGLE_FILE_RELEASE.md).
+## Estado atual — biblioteca da campanha (24/10/2026)
+
+- Integração 12, patches até 0014. Perfil de 253 difusos opacos revisados com
+  usos nas dez missões. Baixa/Média originais, Alta2x/Ultra4x; cache comum.
+- Descomprimidos 84 cenários/personagens e dois contêineres globais. Scanner
+  TFO conservador confrontado com145 registros GPU; revisão visual dos originais
+  e de253 pares com resultados IA. Alpha, normais, especulares e efeitos excluídos.
+- Os253 produtos2x e4x foram preparados. Alta gerou238 novos masters e reutilizou
+  15; Ultra reutilizou todos. Não distribuir esses arquivos, apenas metadados.
+- Bibliotecas ASTERHDLIB1 carregam só índice; DDS sob correspondência com
+  fingerprint original. Leituras no primeiro uso podem causar pausa. Legacy
+  batches mantêm limites antigos; cache usa referências fracas em RAM.
+- Retomada usa locks liberados pelo SO após queda do processo; saída sem recibo
+  fica preservada e não é aceita como resultado pronto.
+- 307 testes Linux e149 Windows/Wine sem falhas (1/2 skips). Wine não valida
+  D3D12 nativo. Gameplay de toda campanha e60FPS continuam não certificados.
+- Evidências privadas em .aster/reports/offline-textures/campaign. Abaixo há
+  registros históricos; não usar contagens/perfis antigos como estado atual.
+
+## Histórico — presets e preparação automática (24/10/2026)
+
+- Integração 10, patches comuns até 0011. Menu Gráficos único: Baixa/Média
+  originais, Alta 2x e Ultra 4x, FSR/FXAA/AF e saída 1080p configuráveis.
+- Pipeline extrai 15 difusos opacos revisados do dump suportado, antes de jogar,
+  com hashes de contêiner/blocos/DDS/pixels e caches persistentes. Não usa seleção
+  manual de catálogo no fluxo normal. Cobertura parcial da primeira fase.
+- Master IA 4x compartilhado por preset: Ultra reutilizou inferência preparada
+  por Alta. Mapas especulares, normais, UI e materiais desconhecidos excluídos.
+- 265 testes Linux em Xvfb e 107 Windows em Wine aprovados (um skip em cada).
+  47 contratos C++ do carregador aprovados, incluindo dimensões 8192 e limites.
+- Probe Alta de 150s alcançou tutorial/combate inicial; quatro materiais HD
+  efetivamente criados pelo renderer, sem fatal/destino não registrado.
+  Validação Ultra e evidências finais em docs/VALIDATION.md.
+- Executáveis em dist/graphics-presets-hd no workspace privado. Não publicar
+  .aster, imagens/texturas, dump, saves, código gerado nem modelos de IA.
+- D3D12 e IA em Windows real, campanha completa e 60FPS com estas mudanças
+  continuam pendentes. Registros abaixo são históricos.
+
+## Histórico — FSR/FXAA e protótipo HD (23/10/2026)
+
+- SDK espacial comum por padrão em Linux e Windows, integração 8. EASU/RCAS
+  e FXAA são reais; escala interna permanece 1x para evitar áreas pretas.
+- Preparação Real-ESRGAN local com modelo/ferramenta fixados por hash, master 4x,
+  derivada 2x BC1/BC3 e mipmaps em luz linear; cache verificado evita repetir IA.
+- Substituição experimental de um material revisado nos dois backends. Não é
+  pacote completo de texturas; veja HD_TEXTURES.md. O launcher seleciona um
+  pacote local para Alta/Ultra e mantém o save compartilhado por usuário.
+- Linux: testes completos 203/203. Dois probes de gameplay de 150 s com pacote
+  ativo alcançaram combate sem fatal/destino não registrado; correção posterior
+  do cache de seleção preserva as texturas originais sem refazer a seleção a
+  cada bind. As capturas inspecionadas não mostram as grandes áreas pretas.
+- Testes adicionais em 60 FPS permaneceram no título; a entrada automatizada
+  não avançou mesmo após Start posterior. Não revalidaram gameplay 60 FPS.
+- Windows em Wine: 61 testes de interface/processamento/cache e smoke do EXE.
+  Compilação D3D12 e gameplay no Windows real permanecem pendentes. O workflow
+  native-graphics-windows.yml compila apenas SDK público quando publicado.
+- AppImage e EXE novos estão em `dist/experimental-hd` no workspace privado,
+  com SHA256SUMS. Nenhum modelo, textura de jogo ou save entra nos pacotes.
+- Abaixo há registros históricos; não usar seus perfis isolados, flags antigas
+  ou contagens de testes como instruções do launcher atual.
+
 
 ## Atualização — gerador portátil (23/10/2026)
 
@@ -23,12 +88,12 @@ campanha. As medições atuais e os hashes dos pacotes ficam no relatório local
 - Launcher redesenhado em abas **Jogar**, **Gráficos**, **Jogo e arquivos** e
   **Diagnóstico**, com tema escuro, cards, status de build e validação antes de
   abrir. Tamanho padrão 1160×720; mínimo 1088×696.
-- Presets gráficos **Baixa**, **Padrão**, **Alta**, **Ultra** e
+- Presets gráficos **Baixa**, **Média**, **Alta**, **Ultra** e
   **Personalizada** na aba **Gráficos**. Eles traduzem valores para CVars reais
   de resolução interna, MSAA, anisotrópico, cache de texturas e dithering.
-- Alvos **30 fps** (padrão), **60 fps** (build v9, perfil isolado) e
-  **Ilimitado** (build v10, perfil isolado, VSync off, apresentação imediata).
-  60 e ilimitado são opt-in, pedem confirmação e não alteram o save de 30 fps.
+- Alvos **30 fps** (padrão), **60 fps** (build v9) e **Ilimitado** (build v10,
+  VSync off, apresentação imediata). 60 e ilimitado são opt-in, pedem confirmação
+  e compartilham o perfil/save do usuário; não há save separado por alvo.
 - Preferências do launcher em `.aster/config/settings.json`, schema 2; schema 1
   é migrado em memória e salvo como 2. Nenhum preset/alvo escreve no perfil ou
   nos saves do jogo.
@@ -39,7 +104,7 @@ campanha. As medições atuais e os hashes dos pacotes ficam no relatório local
   (428,4/s), FSI, entradas de teclado enviadas, sem fatal. `ASTER_SIM` manteve
   alvo 60 e simulação em tempo real; GPU global 95–96% / ~91–107 W nas amostras
   finais. `gameplay_verified=false` e sem captura X11 de gameplay.
-- Probe curto do build principal de 30 fps com preset Padrão
+- Probe curto do build principal de 30 fps com preset Média
   (`preset30-default-001`, 12,52 s): XEX carregado, CVars aceitas, 461
   apresentações, FSI/FIFO, perfil isolado e nenhum fatal. `ready=false` pelo
   prazo curto; confirma aceitação das flags, não gameplay.
@@ -48,7 +113,7 @@ campanha. As medições atuais e os hashes dos pacotes ficam no relatório local
   `.aster/reports/rexglue-runtime-probe-unlimited.json` (003).
 - `play_green_lantern.py --validar` passou nos três alvos. Suíte completa:
   **152 testes aprovados**, sem falhas/skips, em Xvfb 1440×900.
-- Config real restaurada para **30 fps + preset Padrão**, preservando o caminho
+- Config real restaurada para **30 fps + preset Média**, preservando o caminho
   do dump. O build duplicado `rex-rex-fps-unlimited-v10` foi auditado e
   removido; as arenas SHM não foram limpas nesta rodada.
 - Pendente do usuário: avaliar visualmente Baixa/Alta/Ultra, confirmar a sensação
@@ -217,14 +282,12 @@ Ou abrir o launcher Tk, selecionar a pasta do dump, escolher o preset/alvo na ab
 **Gráficos** e usar **Jogar agora**. Consulte
 [EXPERIMENTAL_PLAY.md](EXPERIMENTAL_PLAY.md) e
 [GRAPHICS_PRESETS.md](GRAPHICS_PRESETS.md) para os controles completos.
-Saves, cache e configurações de 30 fps ficam em
-`.aster/runtime/green-lantern/`; 60 fps usa
-`.aster/runtime/green-lantern-60fps/`; ilimitado usa
-`.aster/runtime/green-lantern-unlimited/`. Nenhum deles altera o save de 30 fps.
+Saves, cache e configurações ficam em `.aster/runtime/green-lantern/` para todos
+os alvos. Nenhum alvo cria um save separado.
 
 ## Identidade e caminhos
 
-- Jogo: `/mnt/disco/games/Jogos/xbox 360/Green_Lantern`.
+- Jogo: `/caminho/do/jogo/Green_Lantern`.
 - SHA-256 do `default.xex`:
   `3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1`.
 - Executável principal: `.aster/build/rex-green/aster_green_lantern`.
@@ -248,7 +311,7 @@ Saves, cache e configurações de 30 fps ficam em
 Concluir manualmente o tutorial de defesa, ativar o primeiro salto contextual,
 atingir um checkpoint posterior e conferir CONTINUE em uma nova sessão. Validar
 qualidade/sincronia de áudio, combate prolongado, desempenho e outras GPUs.
-Comparar visualmente Baixa/Padrão/Alta/Ultra no mesmo trecho e registrar a
+Comparar visualmente Baixa/Média/Alta/Ultra no mesmo trecho e registrar a
 sensação de 60/ilimitado (tearing, engasgos, física, animações e áudio). Para o
 alvo 60, comparar duração de golpes e comportamento no mesmo trecho antes de
 considerar integração; o passo de simulação já foi medido, mas isso não certifica

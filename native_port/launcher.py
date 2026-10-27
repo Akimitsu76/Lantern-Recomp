@@ -100,12 +100,21 @@ class Launcher:
         self.workspace = tk.StringVar(value=cfg['workspace'])
         self.build_type = tk.StringVar(value=cfg['build_type'])
         self.jobs = tk.IntVar(value=cfg['jobs'])
+        self.hd_texture_pack = tk.StringVar(value=cfg['hd_texture_pack'])
+        self.hd_texture_catalog = tk.StringVar(value=cfg['hd_texture_catalog'])
+        self.hd_status = tk.StringVar(value='Texturas originais · nenhum pacote selecionado')
+        self.hd_material_count = None
+        self.hd_running = False
         self.graphics_preset = tk.StringVar(value=cfg['graphics']['preset'])
         self.fps_target = tk.StringVar(value=cfg['graphics']['fps_target'])
         self.vsync = tk.BooleanVar(value=cfg['graphics']['vsync'])
         self.shader_mode = tk.StringVar(value=cfg['graphics']['shader_mode'])
+        self.shader_preload = tk.BooleanVar(value=cfg['graphics']['shader_preload'])
+        self.antialiasing = tk.StringVar(value=graphics.ANTIALIASING_LABELS[cfg['graphics']['antialiasing']])
         self.upscaler = tk.StringVar(value=graphics.UPSCALER_LABELS[cfg['graphics']['upscaler']])
         self.output_resolution = tk.StringVar(value=cfg['graphics']['output_resolution'])
+        self.fullscreen = tk.BooleanVar(value=cfg['graphics']['fullscreen'])
+        self.fsr_sharpness = tk.IntVar(value=cfg['graphics']['fsr_sharpness'])
         self.custom_render_scale = tk.IntVar(value=cfg['graphics']['render_scale'])
         self.custom_msaa = tk.BooleanVar(value=cfg['graphics']['msaa_2x'])
         self.custom_aniso = tk.StringVar(value=ANISO_LABELS.get(cfg['graphics']['anisotropic'],
@@ -147,6 +156,7 @@ class Launcher:
         for variable in (self.custom_render_scale, self.custom_msaa,
                          self.custom_aniso, self.custom_texture, self.custom_dither):
             variable.trace_add('write', lambda *_: self._on_custom_changed())
+        self.fsr_sharpness.trace_add('write', lambda *_: self._refresh_graphics_ui() if not self._syncing else None)
         self.fps_target.trace_add('write', lambda *_: self._on_target_changed())
         self.vsync.trace_add('write', lambda *_: self._on_vsync_changed())
         self.refresh_paths()
@@ -251,6 +261,11 @@ class Launcher:
         self.play_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
         self.build_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
         self.graphics_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
+        self.hd_tab = tk.Toplevel(self.root, bg=BG, padx=18, pady=14)
+        self.hd_tab.title('Aster · Ferramentas de texturas')
+        self.hd_tab.geometry('900x330')
+        self.hd_tab.withdraw()
+        self.hd_tab.protocol('WM_DELETE_WINDOW', self.hd_tab.withdraw)
         self.game_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
         self.diag_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
         self.tabs.add(self.play_tab, text='Biblioteca')
@@ -260,7 +275,8 @@ class Launcher:
         self.tabs.add(self.diag_tab, text='Diagnóstico')
         self.nav_buttons = {}
         for page, title in [(self.play_tab, 'Biblioteca'), (self.build_tab, 'Gerar port'),
-                            (self.graphics_tab, 'Gráficos'), (self.game_tab, 'Jogo e arquivos'),
+                            (self.graphics_tab, 'Gráficos'),
+                            (self.game_tab, 'Jogo e arquivos'),
                             (self.diag_tab, 'Diagnóstico')]:
             button = tk.Button(navigation, text=title, bg=BG, fg=MUTED, activebackground=CARD,
                                activeforeground=INK, relief='flat', bd=0, highlightthickness=0, padx=22, pady=11,
@@ -293,8 +309,9 @@ class Launcher:
                         self.stop_experimental_button, self.open_profile_button, self.play_button,
                         self.source_entry, self.work_entry, self.jobs_spin, self.save_button,
                         self.doctor_button, self.clear_button, self.export_button,
-                        self.copy_button, self.restore_graphics_button, self.build_start_button]
-        self._readonly_widgets = [self.build_combo, self.shader_combo, self.output_combo, self.upscaler_combo]
+                        self.copy_button, self.restore_graphics_button, self.build_start_button,
+                        self.hd_select_button, self.hd_original_button, self.hd_catalog_button, self.hd_prepare_button, self.hd_auto_button, self.fullscreen_check, self.sharpness_spin, self.sharpness_balanced_button, self.shader_preload_check]
+        self._readonly_widgets = [self.build_combo, self.shader_combo, self.output_combo, self.upscaler_combo, self.antialiasing_combo]
 
     # -------------------------------------------------------------- play tab
     def _build_play_tab(self):
@@ -515,121 +532,176 @@ class Launcher:
     def _build_graphics_tab(self):
         top = tk.Frame(self.graphics_tab, bg=BG)
         top.pack(fill='x')
-        tk.Label(top, text='Qualidade visual', bg=BG, fg=INK,
-                 font=(FONT, 17, 'bold')).pack(side='left')
-        self.restore_graphics_button = ttk.Button(top, text='Restaurar padrão', style='Ghost.TButton',
-                                                  command=self.restore_graphics)
+        tk.Label(top, text='Gráficos', bg=BG, fg=INK, font=(FONT, 17, 'bold')).pack(side='left')
+        self.restore_graphics_button = ttk.Button(top, text='Restaurar padrão', style='Ghost.TButton', command=self.restore_graphics)
         self.restore_graphics_button.pack(side='right')
-        tk.Label(self.graphics_tab, text='Ajuste resolução, filtragem e cache de texturas. '
-                  '60 fps e ilimitado são experimentais.',
-                 bg=BG, fg=MUTED, font=(FONT, 9), wraplength=1050,
-                 justify='left').pack(anchor='w', pady=(4, 10))
+        tk.Label(self.graphics_tab, text='Escolha um preset ou ajuste cada opção. As alterações valem para a próxima sessão.',
+                 bg=BG, fg=MUTED, font=(FONT, 9)).pack(anchor='w', pady=(4, 10))
         preset_frame = tk.Frame(self.graphics_tab, bg=BG)
         preset_frame.pack(fill='x')
-        preset_text = {
-            'low': 'BAIXA\n720p · leve',
-            'default': 'PADRÃO\n720p · equilíbrio',
-            'high': 'ALTA\nbicúbico + 8x',
-            'ultra': 'ULTRA\nnitidez + 16x',
-            'custom': 'PERSONALIZADA\najuste fino',
-        }
+        preset_text = {'low': 'BAIXA\nOriginais · leve', 'default': 'MÉDIA\nOriginais · equilíbrio',
+                       'high': 'ALTA\n1440p · HD 2x', 'ultra': 'ULTRA\n4K · HD 4x',
+                       'custom': 'PERSONALIZADA\najuste fino'}
         for index, name in enumerate(graphics.PRESETS):
             preset_frame.columnconfigure(index, weight=1, uniform='preset')
-            button = ttk.Button(preset_frame, text=preset_text[name], style='Preset.TButton',
-                                command=lambda n=name: self.choose_preset(n))
+            button = ttk.Button(preset_frame, text=preset_text[name], style='Preset.TButton', command=lambda n=name: self.choose_preset(n))
             button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 5, 0))
             self.preset_buttons[name] = button
-
-        target_head = tk.Frame(self.graphics_tab, bg=BG)
-        target_head.pack(fill='x', pady=(14, 0))
-        tk.Label(target_head, text='Alvo de quadros', bg=BG, fg=INK,
-                 font=(FONT, 13, 'bold')).pack(side='left')
-        tk.Label(target_head, text='30 fps é o padrão; 60 e ilimitado exigem opt-in.',
-                 bg=BG, fg=MUTED, font=(FONT, 9)).pack(side='left', padx=(12, 0), pady=(4, 0))
         target_frame = tk.Frame(self.graphics_tab, bg=BG)
-        target_frame.pack(fill='x', pady=(6, 0))
-        target_text = {'30': '30 fps\npadrão', '60': '60 fps\nexperimental',
-                       'unlimited': 'ILIMITADO\nexperimental'}
+        target_frame.pack(fill='x', pady=(10, 0))
         for index, target in enumerate(graphics.TARGETS):
             target_frame.columnconfigure(index, weight=1, uniform='target')
-            button = ttk.Button(target_frame, text=target_text[target], style='Preset.TButton',
-                                command=lambda t=target: self.choose_target(t))
+            button = ttk.Button(target_frame, text=graphics.TARGET_LABELS[target] + (' · experimental' if target != '30' else ' · padrão'),
+                                style='Preset.TButton', command=lambda t=target: self.choose_target(t))
             button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 5, 0))
             self.target_buttons[target] = button
+        self.target_note = tk.Label(self.graphics_tab, text='', bg=BG, fg=MUTED, font=(FONT, 8), wraplength=1000, justify='left')
+        self.target_note.pack(anchor='w', pady=(5, 6))
 
-        self.target_note = tk.Label(self.graphics_tab, text='', bg=BG, fg=MUTED,
-                                    font=(FONT, 9), wraplength=1050, justify='left')
-        self.target_note.pack(anchor='w', pady=(7, 0))
-        tk.Label(self.graphics_tab, text='Compatibilidade: escala interna 1x em todos os presets. 2x/3x causaram áreas pretas. Alta/Ultra usam ampliação espacial no Linux; texturas originais são preservadas.',
-                 bg=BG, fg=MUTED, font=(FONT, 8), wraplength=1030, justify='left').pack(anchor='w', pady=(4, 0))
-        options = self._card(self.graphics_tab, fill='x', pady=(8, 0))
-        options_left = tk.Frame(options, bg=CARD)
-        options_left.pack(side='left', fill='both', expand=True, padx=16, pady=9)
-        self._caps(options_left, 'Sessão').pack(anchor='w')
-        display_row = tk.Frame(options_left, bg=CARD)
-        display_row.pack(fill='x', pady=(8, 0))
-        tk.Label(display_row, text='Resolução da janela', bg=CARD, fg=MUTED, font=(FONT, 9)).pack(side='left')
-        self.output_combo = ttk.Combobox(display_row, textvariable=self.output_resolution,
-                                        values=['Automática', *graphics.OUTPUT_RESOLUTIONS[1:]], state='readonly', width=15)
-        self.output_combo.pack(side='left', padx=8)
-        tk.Label(options_left, text='1920x1080 = Full HD. A escala interna é independente.',
-                 bg=CARD, fg=MUTED, font=(FONT, 8)).pack(anchor='w', pady=(5, 0))
-        upscale_row = tk.Frame(options_left, bg=CARD)
-        upscale_row.pack(fill='x', pady=(6, 0))
-        tk.Label(upscale_row, text='Ampliação (Linux)', bg=CARD, fg=MUTED, font=(FONT, 9)).pack(side='left')
-        self.upscaler_combo = ttk.Combobox(upscale_row, textvariable=self.upscaler, values=[graphics.UPSCALER_LABELS[key] for key in (graphics.UPSCALERS if sys.platform == 'linux' else ('bilinear',))], state='readonly', width=20)
-        self.upscaler_combo.pack(side='left', padx=8)
-        self.upscaler_combo.bind('<<ComboboxSelected>>', lambda _: self._on_custom_changed())
-        tk.Label(options_left, text='FSR 1 EASU: saída 1080p/1440p; acima de 2x usa bilinear. Linux.',
-                 bg=CARD, fg=MUTED, font=(FONT, 8)).pack(anchor='w', pady=(4, 0))
-        self.vsync_check = ttk.Checkbutton(options_left, text='VSync', variable=self.vsync)
-        self.vsync_check.pack(anchor='w', pady=(4, 0))
-        shader_row = tk.Frame(options_left, bg=CARD)
-        shader_row.pack(fill='x', pady=(5, 0))
-        tk.Label(shader_row, text='Shaders novos', bg=CARD, fg=MUTED,
-                 font=(FONT, 9)).pack(side='left')
-        self.shader_combo = ttk.Combobox(shader_row, textvariable=self.shader_mode,
-                                         values=graphics.SHADER_MODES, state='readonly', width=10)
-        self.shader_combo.pack(side='left', padx=(8, 0))
-        tk.Label(options_left, text='async: novos shaders em segundo plano. '
-                  'O primeiro uso ainda pode causar pausas.', bg=CARD, fg=MUTED, font=(FONT, 8),
-                 wraplength=390, justify='left').pack(anchor='w', pady=(9, 0))
-        options_right = tk.Frame(options, bg=CARD)
-        options_right.pack(side='right', fill='both', expand=True, padx=16, pady=13)
-        self._caps(options_right, 'Ajustes personalizados').pack(anchor='w')
-        self.custom_grid = tk.Frame(options_right, bg=CARD)
-        self.custom_grid.pack(fill='x', pady=(8, 0))
-        tk.Label(self.custom_grid, text='Escala interna (1x)', bg=CARD, fg=MUTED,
-                 font=(FONT, 9)).grid(row=0, column=0, sticky='w', pady=3)
-        self.render_scale_spin = ttk.Spinbox(self.custom_grid, from_=1, to=3, width=4,
-                                             textvariable=self.custom_render_scale)
-        self.render_scale_spin.grid(row=0, column=1, sticky='w', padx=(10, 18))
-        tk.Label(self.custom_grid, text='MSAA do jogo', bg=CARD, fg=MUTED,
-                 font=(FONT, 9)).grid(row=0, column=2, sticky='w', pady=3)
-        self.msaa_check = ttk.Checkbutton(self.custom_grid, variable=self.custom_msaa)
-        self.msaa_check.grid(row=0, column=3, sticky='w', padx=(10, 0))
-        tk.Label(self.custom_grid, text='Anisotrópico', bg=CARD, fg=MUTED,
-                 font=(FONT, 9)).grid(row=1, column=0, sticky='w', pady=3)
-        self.aniso_combo = ttk.Combobox(self.custom_grid, textvariable=self.custom_aniso,
-                                        values=list(ANISO_LABELS.values()), state='readonly', width=17)
-        self.aniso_combo.grid(row=1, column=1, sticky='w', padx=(10, 18))
-        tk.Label(self.custom_grid, text='Cache de texturas', bg=CARD, fg=MUTED,
-                 font=(FONT, 9)).grid(row=1, column=2, sticky='w', pady=3)
-        self.texture_combo = ttk.Combobox(self.custom_grid, textvariable=self.custom_texture,
-                                          values=list(graphics.TEXTURE_QUALITY_LABELS.values()),
-                                          state='readonly', width=12)
-        self.texture_combo.grid(row=1, column=3, sticky='w', padx=(10, 0))
-        self.dither_check = ttk.Checkbutton(self.custom_grid, text='Dithering',
-                                            variable=self.custom_dither)
-        self.dither_check.grid(row=2, column=0, columnspan=2, sticky='w', pady=(5, 0))
-        tk.Label(options_right, text='Cache maior não aumenta resolução das texturas.\nFiltro espacial melhora a saída sem alterar os buffers do jogo.', bg=CARD, fg=MUTED, font=(FONT,8), wraplength=430, justify='left').pack(anchor='w', pady=(5,0))
-        tk.Label(options_right, text='Mudar um valor ativa o preset Personalizada automaticamente.',
-                 bg=CARD, fg=MUTED, font=(FONT, 8), wraplength=440,
-                 justify='left').pack(anchor='w', pady=(8, 0))
-        self.graphics_summary_label = tk.Label(self.graphics_tab, textvariable=self.graphics_summary,
-                                               bg=BG, fg=ACCENT, font=(FONT, 9),
-                                               wraplength=1050, justify='left')
-        self.graphics_summary_label.pack(anchor='w', pady=(10, 0))
+        viewport = tk.Frame(self.graphics_tab, bg=BG)
+        viewport.pack(fill='both', expand=True)
+        self.graphics_canvas = tk.Canvas(viewport, bg=BG, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(viewport, orient='vertical', command=self.graphics_canvas.yview)
+        scrollbar.pack(side='right', fill='y')
+        self.graphics_canvas.pack(side='left', fill='both', expand=True)
+        self.graphics_canvas.configure(yscrollcommand=scrollbar.set)
+        body = tk.Frame(self.graphics_canvas, bg=BG)
+        body.columnconfigure(0, weight=1, uniform='graphics')
+        body.columnconfigure(1, weight=1, uniform='graphics')
+        body_window = self.graphics_canvas.create_window((0, 0), window=body, anchor='nw')
+        body.bind('<Configure>', lambda _: self.graphics_canvas.configure(scrollregion=self.graphics_canvas.bbox('all')))
+        self.graphics_canvas.bind('<Configure>', lambda e: self.graphics_canvas.itemconfigure(body_window, width=e.width))
+        def scroll(event):
+            delta = -1 if getattr(event, 'num', None) == 4 else 1 if getattr(event, 'num', None) == 5 else -int(event.delta / 120) or (-1 if event.delta > 0 else 1)
+            self.graphics_canvas.yview_scroll(delta * 3, 'units')
+            return 'break'
+        def section(title, row, col):
+            card = tk.Frame(body, bg=CARD, padx=14, pady=12)
+            card.grid(row=row, column=col, sticky='nsew', padx=(0 if col == 0 else 8, 0), pady=(0, 8))
+            self._caps(card, title).pack(anchor='w', pady=(0, 5))
+            return card
+        def combo(parent, title, variable, values, attr, custom=False):
+            line = tk.Frame(parent, bg=CARD)
+            line.pack(fill='x', pady=4)
+            tk.Label(line, text=title, bg=CARD, fg=MUTED, font=(FONT, 9), width=19, anchor='w').pack(side='left')
+            widget = ttk.Combobox(line, textvariable=variable, values=values, state='readonly', width=25)
+            widget.pack(side='right', fill='x', expand=True)
+            if custom:
+                widget.bind('<<ComboboxSelected>>', lambda _: self._on_custom_changed())
+            setattr(self, attr, widget)
+            return widget
+        def note(parent, text):
+            tk.Label(parent, text=text, bg=CARD, fg=MUTED, font=(FONT, 8), wraplength=430, justify='left').pack(anchor='w', pady=(5, 0))
+
+        display = section('TELA', 0, 0)
+        combo(display, 'Resolução de saída', self.output_resolution, ['Automática', *graphics.OUTPUT_RESOLUTIONS[1:]], 'output_combo')
+        self.fullscreen_check = ttk.Checkbutton(display, text='Tela cheia', variable=self.fullscreen)
+        self.fullscreen_check.pack(anchor='w', pady=4)
+        self.vsync_check = ttk.Checkbutton(display, text='Sincronização vertical (VSync)', variable=self.vsync)
+        self.vsync_check.pack(anchor='w', pady=4)
+        note(display, '1920x1080 é Full HD. A resolução de saída e a resolução interna são independentes. Alta renderiza em 1440p; Ultra em 4K, inclusive quando a saída é Full HD.')
+
+        image = section('IMAGEM', 0, 1)
+        combo(image, 'Escala interna (1–3x)', self.custom_render_scale, [1, 2, 3], 'render_scale_spin', True)
+        combo(image, 'Ampliação', self.upscaler, [graphics.UPSCALER_LABELS[k] for k in graphics.COMMON_UPSCALERS], 'upscaler_combo', True)
+        combo(image, 'Antisserrilhado', self.antialiasing, list(graphics.ANTIALIASING_LABELS.values()), 'antialiasing_combo', True)
+        sharp_row = tk.Frame(image, bg=CARD)
+        sharp_row.pack(fill='x', pady=4)
+        tk.Label(sharp_row, text='Nitidez FSR (0–100)', bg=CARD, fg=MUTED, font=(FONT, 9), width=19, anchor='w').pack(side='left')
+        self.sharpness_spin = ttk.Spinbox(sharp_row, from_=0, to=100, textvariable=self.fsr_sharpness, width=7)
+        self.sharpness_spin.pack(side='left')
+        self.sharpness_balanced_button = ttk.Button(sharp_row, text='Equilibrada', style='Ghost.TButton',
+                                                   command=lambda: self.fsr_sharpness.set(graphics.DEFAULT_FSR_SHARPNESS))
+        self.sharpness_balanced_button.pack(side='left', padx=(7, 0))
+        note(image, 'FSR 1 amplia a imagem; FXAA reduz serrilhados. Nitidez recomendada: 30; valores altos podem realçar granulação e contornos. MSAA preserva o comportamento original do jogo.')
+
+        textures = section('TEXTURAS', 1, 0)
+        combo(textures, 'Qualidade', self.custom_texture, list(graphics.TEXTURE_QUALITY_LABELS.values()), 'texture_combo', True)
+        combo(textures, 'Filtro anisotrópico', self.custom_aniso, list(ANISO_LABELS.values()), 'aniso_combo', True)
+        tk.Label(textures, textvariable=self.hd_status, bg=CARD, fg=ACCENT, font=(FONT, 9), wraplength=430, justify='left').pack(anchor='w', pady=(7, 4))
+        hd_actions = tk.Frame(textures, bg=CARD)
+        hd_actions.pack(fill='x')
+        self.hd_auto_button = ttk.Button(hd_actions, text='Preparar texturas deste preset', style='Ghost.TButton', command=self.prepare_graphics_textures)
+        self.hd_auto_button.pack(side='left')
+        self.hd_cancel_button = ttk.Button(hd_actions, text='Cancelar', style='Ghost.TButton', command=lambda: self.cancel.cancel(), state='disabled')
+        self.hd_cancel_button.pack(side='left', padx=5)
+        self.hd_progress = ttk.Progressbar(textures, mode='determinate', value=0)
+        self.hd_progress.pack(fill='x', pady=(7, 0))
+        note(textures, 'Baixa/Média usam originais. Alta prepara materiais revisados em 2x; Ultra em 4x. A preparação ocorre antes de jogar e reutiliza a mesma inferência de IA. A cobertura HD é parcial; os demais materiais mantêm os originais.')
+
+        performance = section('DESEMPENHO', 1, 1)
+        self.shader_preload_check = ttk.Checkbutton(performance, text='Pré-compilar shaders conhecidos antes de jogar', variable=self.shader_preload)
+        self.shader_preload_check.pack(anchor='w', pady=4)
+        combo(performance, 'Shaders novos', self.shader_mode, graphics.SHADER_MODES, 'shader_combo')
+        self.dither_check = ttk.Checkbutton(performance, text='Dithering de apresentação', variable=self.custom_dither)
+        self.dither_check.pack(anchor='w', pady=4)
+        note(performance, 'O cache de shaders fica guardado entre aberturas. A preparação cobre o que já foi encontrado; cenas inéditas e mudanças de driver ou gráficos podem exigir novas variantes. async compila pipelines novos em segundo plano; blocking aguarda. O primeiro uso ainda pode causar pausas.')
+        note(performance, 'Escala interna: 1x = 720p; 2x = 1440p; 3x = 4K. Escalas maiores aumentam a carga da GPU e exigem atualizar o port. Validação da campanha completa ainda está em andamento.')
+        # MSAA follows guest state and is not offered as a misleading toggle.
+        self.msaa_check = ttk.Checkbutton(performance, variable=self.custom_msaa)
+        self.custom_grid = performance
+        self.graphics_summary_label = tk.Label(body, textvariable=self.graphics_summary, bg=BG, fg=ACCENT,
+                                                font=(FONT, 9), wraplength=950, justify='left')
+        self.graphics_summary_label.grid(row=2, column=0, columnspan=2, sticky='w', pady=5)
+        def bind_scroll(widget):
+            # Comboboxes and spinboxes retain native wheel selection; other
+            # descendants scroll this page without global bindings.
+            if not isinstance(widget, (ttk.Combobox, ttk.Spinbox)):
+                for event in ('<MouseWheel>', '<Button-4>', '<Button-5>'):
+                    widget.bind(event, scroll)
+            for child in widget.winfo_children():
+                bind_scroll(child)
+        bind_scroll(body)
+        self.graphics_canvas.bind('<MouseWheel>', scroll)
+        self._build_texture_tools()
+
+    def _build_texture_tools(self):
+        parent = self.hd_tab
+        tk.Label(parent, text='Ferramentas de texturas · avançado', bg=BG, fg=INK, font=(FONT, 17, 'bold')).pack(anchor='w', pady=10)
+        tk.Label(parent, text='Inspeção e seleção manual para diagnóstico. O fluxo normal usa os presets na página Gráficos.',
+                 bg=BG, fg=MUTED, wraplength=820, justify='left').pack(anchor='w')
+        row = tk.Frame(parent, bg=BG)
+        row.pack(fill='x', pady=12)
+        self.hd_select_button = ttk.Button(row, text='Selecionar pacote HD…', style='Ghost.TButton', command=self.select_hd_pack)
+        self.hd_select_button.pack(side='left')
+        self.hd_original_button = ttk.Button(row, text='Limpar seleção manual', style='Ghost.TButton', command=self.use_original_textures)
+        self.hd_original_button.pack(side='left', padx=6)
+        prepare_row = tk.Frame(parent, bg=BG)
+        prepare_row.pack(fill='x', pady=5)
+        self.hd_catalog_button = ttk.Button(prepare_row, text='Selecionar catálogo revisado…', style='Ghost.TButton', command=self.select_hd_catalog)
+        self.hd_catalog_button.pack(side='left')
+        self.hd_prepare_button = ttk.Button(prepare_row, text='Preparar catálogo com IA', style='Ghost.TButton', command=self.prepare_hd_pack)
+        self.hd_prepare_button.pack(side='left', padx=6)
+        tk.Label(parent, textvariable=self.hd_texture_catalog, bg=BG, fg=MUTED, wraplength=820, justify='left').pack(anchor='w', pady=8)
+        tk.Label(parent, textvariable=self.hd_status, bg=BG, fg=ACCENT, wraplength=820, justify='left').pack(anchor='w')
+        ttk.Button(parent, text='Voltar aos gráficos', command=lambda: (parent.withdraw(), self.tabs.select(self.graphics_tab))).pack(anchor='w', pady=12)
+
+    def show_texture_tools(self):
+        self.hd_tab.deiconify()
+        self.hd_tab.lift()
+
+    def prepare_graphics_textures(self):
+        if self.busy:
+            return
+        data = self._graphics_data()
+        if data['texture_quality'] not in ('high', 'ultra'):
+            self.status.set('Baixa e Média usam texturas originais; selecione Alta ou Ultra para preparar HD.')
+            return
+        if not self._source_ready():
+            self.status.set('Selecione a pasta do dump antes de preparar texturas.')
+            return
+        source = Path(self.source.get()).expanduser().resolve()
+        work = Workspace(self.workspace.get(), PROJECT)
+        self.hd_running = True
+        self.hd_progress.configure(mode='indeterminate', value=0)
+        self.hd_progress.start(15)
+        def action():
+            from .texture_pipeline import ensure_graphics_textures
+            return ensure_graphics_textures(source, data, PROJECT, work, cancel=self.cancel,
+                                            emit=lambda event: self.queue.put(('hd-event', '', event)), allow_download=True)
+        self.start(action, 'Preparar texturas HD')
+        self.tabs.select(self.graphics_tab)
+
 
     # --------------------------------------------------------------- game tab
     def _build_game_tab(self):
@@ -735,6 +807,7 @@ class Launcher:
         self.export_button = ttk.Button(actions, text='Salvar diagnóstico e logs', style='Secondary.TButton',
                                         command=self.export_report)
         self.export_button.pack(side='left')
+        ttk.Button(actions, text='Ferramentas de texturas…', style='Ghost.TButton', command=self.show_texture_tools).pack(side='left', padx=6)
         self.copy_button = ttk.Button(actions, text='Copiar logs', style='Ghost.TButton',
                                       command=self.copy_logs)
         self.copy_button.pack(side='left', padx=(6, 0))
@@ -749,9 +822,13 @@ class Launcher:
             self.fps_target.set(data['fps_target'])
             self.vsync.set(data['vsync'])
             self.shader_mode.set(data['shader_mode'])
+            self.shader_preload.set(data['shader_preload'])
             self.upscaler.set(graphics.UPSCALER_LABELS[data['upscaler']])
+            self.antialiasing.set(graphics.ANTIALIASING_LABELS[data['antialiasing']])
             self.output_resolution.set('Automática' if data['output_resolution'] == 'auto' else data['output_resolution'])
-            self.custom_render_scale.set(1)
+            self.fullscreen.set(data['fullscreen'])
+            self.fsr_sharpness.set(data['fsr_sharpness'])
+            self.custom_render_scale.set(data['render_scale'])
             self.custom_msaa.set(data['msaa_2x'])
             self.custom_aniso.set(ANISO_LABELS.get(data['anisotropic'], ANISO_LABELS[3]))
             self.custom_texture.set(graphics.TEXTURE_QUALITY_LABELS.get(
@@ -765,14 +842,16 @@ class Launcher:
     def _graphics_data(self):
         target = self.fps_target.get()
         preset = self.graphics_preset.get()
-        common = dict(fps_target=target, vsync=self.vsync.get(),
+        common = dict(fps_target=target, vsync=self.vsync.get(), fullscreen=self.fullscreen.get(), fsr_sharpness=self.fsr_sharpness.get(),
                       shader_mode=self.shader_mode.get(),
+                      shader_preload=self.shader_preload.get(),
                       output_resolution='auto' if self.output_resolution.get() == 'Automática' else self.output_resolution.get())
         if preset == 'custom':
             return graphics.from_options(
                 'custom',
                 upscaler={label: key for key, label in graphics.UPSCALER_LABELS.items()}.get(self.upscaler.get(), 'bilinear'),
-                render_scale=1,
+                antialiasing={label: key for key, label in graphics.ANTIALIASING_LABELS.items()}.get(self.antialiasing.get(), 'fxaa'),
+                render_scale=self.custom_render_scale.get(),
                 msaa_2x=self.custom_msaa.get(),
                 anisotropic=ANISO_BY_LABEL.get(self.custom_aniso.get(), 3),
                 texture_quality=TEXTURE_BY_LABEL.get(self.custom_texture.get(), 'default'),
@@ -820,6 +899,7 @@ class Launcher:
         self.target_note.configure(text=note, fg=WARN if target != '30' else MUTED)
         self._refresh_custom_state()
         self._refresh_engine_status()
+        self._refresh_hd_status()
 
     def _refresh_custom_state(self):
         state = 'disabled' if self.busy else 'normal'
@@ -827,7 +907,7 @@ class Launcher:
                        self.texture_combo, self.dither_check):
             widget.configure(state=state)
         self.msaa_check.configure(state='disabled')
-        self.render_scale_spin.configure(state='disabled')
+        self.render_scale_spin.configure(state='disabled' if self.busy else 'readonly')
         if not self.busy:
             self.aniso_combo.configure(state='readonly')
             self.texture_combo.configure(state='readonly')
@@ -835,6 +915,8 @@ class Launcher:
             self.vsync_check.configure(state='disabled')
         else:
             self.vsync_check.configure(state='normal')
+        self.sharpness_spin.configure(state='normal' if not self.busy and self.upscaler.get() == graphics.UPSCALER_LABELS['fsr1'] else 'disabled')
+        self.sharpness_balanced_button.configure(state=str(self.sharpness_spin['state']))
         if self.busy:
             self.shader_combo.configure(state='disabled')
         else:
@@ -934,7 +1016,8 @@ class Launcher:
             installation = read_install(PROJECT)
         except PortError:
             return False
-        return bool(installation and installation.get('platform') == 'linux-amd64' and installation.get('recipe', {}).get('integration', 0) < INTEGRATION_VERSION)
+        return bool(installation and (installation.get('recipe', {}).get('integration', 0) < INTEGRATION_VERSION
+                    or installation.get('presentation_backend') != 'sdk-spatial-fsr1'))
 
     def _engine_ready(self, target=None):
         if self._backend_update_needed():
@@ -988,12 +1071,128 @@ class Launcher:
             widget.configure(state='readonly' if enabled else 'disabled')
         self.compile_button.configure(state='normal' if enabled and self._source_ready() else 'disabled')
         self.cancel_button.configure(state='disabled' if enabled else 'normal')
+        self.hd_cancel_button.configure(state='normal' if self.hd_running and not enabled else 'disabled')
         self.build_cancel_button.configure(state='normal' if not enabled and self.build_running else 'disabled')
         self.stop_experimental_button.configure(
             state='normal' if (not enabled and self.experimental_process is not None) else 'disabled')
         self._refresh_custom_state()
 
     # --------------------------------------------------------------- actions
+    def select_hd_pack(self):
+        if self.busy:
+            return
+        directory = filedialog.askdirectory(title='Pacote HD local preparado pelo Real-ESRGAN')
+        if not directory:
+            return
+        self.hd_running = True
+        self.hd_progress.configure(mode='indeterminate', value=0)
+        self.hd_progress.start(15)
+        def action():
+            from .texture_pack import validate_texture_pack
+            self.cancel.check()
+            verified = validate_texture_pack(directory, cancel=self.cancel)
+            self.cancel.check()
+            return {'pack': str(verified), 'material_count': self._hd_count(verified), 'state': 'verified'}
+        self.start(action, 'Selecionar pacote HD')
+        self.hd_status.set('Conferindo integridade do pacote local…')
+
+    @staticmethod
+    def _hd_count(verified):
+        if isinstance(verified, (str, Path)):
+            manifest = Path(verified) / ('library.json' if (Path(verified) / 'library.json').exists() else 'pack.json')
+            try:
+                if manifest.is_file() and manifest.stat().st_size <= 4 * 1024 * 1024:
+                    verified = json.loads(manifest.read_text(encoding='utf8'))
+                elif (Path(verified) / 'texture.index').is_file():
+                    return 1
+            except (OSError, ValueError):
+                return None
+        if isinstance(verified, dict):
+            for key in ('material_count', 'count'):
+                count = verified.get(key)
+                if type(count) is int and count >= 0:
+                    return count
+            for key in ('textures', 'materials', 'entries'):
+                if isinstance(verified.get(key), list):
+                    return len(verified[key])
+        return None
+
+    def _refresh_hd_status(self):
+        if self.hd_running:
+            return
+        try:
+            active = self._graphics_data()['texture_quality'] in ('high', 'ultra')
+        except (PortError, tk.TclError):
+            return
+        self.hd_auto_button.configure(state='normal' if active and not self.busy else 'disabled')
+        if not self.hd_texture_pack.get():
+            scale = '4x' if self._graphics_data()['texture_quality'] == 'ultra' else '2x'
+            self.hd_status.set(f'HD {scale} · preparação automática antes de jogar' if active else 'Texturas originais neste preset')
+            return
+        count = self.hd_material_count
+        prepared = f'{count} materiais preparados' if count is not None else 'Pacote local selecionado'
+        self.hd_status.set(prepared + (' · habilitado neste preset' if active else ' · ative Alta/Ultra para usar'))
+
+    def use_original_textures(self):
+        if self.busy:
+            return
+        self.hd_texture_pack.set('')
+        self.hd_material_count = None
+        self._refresh_hd_status()
+        self.save_settings(quiet=True)
+
+    def select_hd_catalog(self):
+        if self.busy:
+            return
+        path = filedialog.askopenfilename(title='Catálogo local de materiais revisados',
+                                          filetypes=[('Catálogo JSON', '*.json')])
+        if path:
+            self.hd_texture_catalog.set(path)
+            self.save_settings(quiet=True)
+            self.status.set('Catálogo selecionado · revisão e integridade serão conferidas antes da IA')
+
+    def prepare_hd_pack(self):
+        if self.busy:
+            return
+        if not self.hd_texture_catalog.get():
+            self.select_hd_catalog()
+        if not self.hd_texture_catalog.get():
+            return
+        if not messagebox.askyesno('Preparar materiais HD',
+                'Preparar somente os materiais de cor opaca revisados deste catálogo?\n\n'
+                'O Real-ESRGAN e seu modelo oficial serão baixados se necessário (cerca de 50 MB). '
+                'A preparação usa a GPU fora da partida e reutiliza resultados já verificados. '
+                'Isso não constitui um pacote HD completo do jogo.'):
+            return
+        catalog = Path(self.hd_texture_catalog.get())
+        try:
+            cfg = self.config()
+            settings.save(cfg, PROJECT)
+            work = Workspace(cfg['workspace'], PROJECT)
+        except (PortError, OSError) as exc:
+            self.status.set(str(exc))
+            return
+        self.hd_running = True
+        self.hd_progress.configure(mode='indeterminate', value=0)
+        self.hd_progress.start(15)
+        def action():
+            from .texture_pack import prepare_texture_pack, validate_texture_pack
+            output = prepare_texture_pack(catalog, PROJECT, work, cancel=self.cancel,
+                                          emit=lambda e: self.queue.put(('hd-event', '', e)),
+                                          allow_download=True)
+            return {'pack': str(output), 'material_count': self._hd_count(validate_texture_pack(output, cancel=self.cancel)),
+                    'state': 'prepared', 'runtime_rendered': False}
+        self.start(action, 'Preparar texturas HD')
+
+    def _hd_event(self, event):
+        message = event.get('message') or event.get('task') or 'Preparando materiais HD…'
+        self.status.set(message)
+        self.hd_status.set(message)
+        completed, total = event.get('completed'), event.get('total')
+        if isinstance(completed, (int, float)) and isinstance(total, (int, float)) and total > 0:
+            self.hd_progress.stop()
+            self.hd_progress.configure(mode='determinate', value=max(0, min(100, completed / total * 100)))
+
     def refresh_paths(self):
         try:
             work = Workspace(self.workspace.get(), PROJECT)
@@ -1006,7 +1205,8 @@ class Launcher:
         try:
             return settings.validate({'schema': 2, 'workspace': self.workspace.get(),
                                       'source': self.source.get(), 'build_type': self.build_type.get(),
-                                      'jobs': self.jobs.get(), 'graphics': self._graphics_data()}, PROJECT)
+                                      'jobs': self.jobs.get(), 'hd_texture_pack': self.hd_texture_pack.get(),
+                                      'hd_texture_catalog': self.hd_texture_catalog.get(), 'graphics': self._graphics_data()}, PROJECT)
         except tk.TclError as exc:
             raise PortError('SETTINGS_VALUE', 'Número de tarefas inválido.') from exc
 
@@ -1077,6 +1277,8 @@ class Launcher:
             text = ('O modo ilimitado é experimental e remove a espera de pacing do motor.\n\n'
                     'Ele desliga o VSync, usa apresentação imediata e pode causar tearing, alto '
                     'consumo de GPU e velocidade de simulação incorreta.\n\n'
+                    'O ganho real acima de 60 fps e a estabilidade da campanha ainda não foram validados. '
+                    'Prefira 30 ou 60 fps para uso normal.\n\n'
                     'Usa o mesmo save deste usuário em todos os alvos de FPS.\n\n'
                     'Deseja abrir mesmo assim?')
         return messagebox.askyesno(title, text)
@@ -1089,14 +1291,20 @@ class Launcher:
                    '--vsync', 'on' if data['vsync'] else 'off',
                    '--fps-target', data['fps_target'],
                    '--output-resolution', data['output_resolution'],
-                   '--graphics-preset', data['preset'], '--upscaler', data['upscaler']]
+                   '--graphics-preset', data['preset'], '--upscaler', data['upscaler'],
+                   '--fullscreen', 'on' if data['fullscreen'] else 'off',
+                   '--fsr-sharpness', str(data['fsr_sharpness']),
+                   '--shader-preload', 'on' if data['shader_preload'] else 'off']
         if data['preset'] == 'custom':
-            command += ['--render-scale', str(data['render_scale']),
+            command += ['--antialiasing', data['antialiasing'],
+                        '--render-scale', str(data['render_scale']),
                                                 '--anisotropic', str(data['anisotropic']),
                         '--texture-quality', data['texture_quality'],
                         '--dither', 'on' if data['present_dither'] else 'off']
         if data['fps_target'] == 'unlimited':
             command += ['--present-mode', 'immediate']
+        if self.hd_texture_pack.get() and data['texture_quality'] in ('high', 'ultra'):
+            command += ['--hd-texture-pack', self.hd_texture_pack.get()]
         command.append(str(folder))
         return command
 
@@ -1126,7 +1334,17 @@ class Launcher:
             self.status.set(str(exc))
             return
         command = self.play_command(folder)
+        texture_work = Workspace(self.workspace.get(), PROJECT)
         def action():
+            from .texture_pipeline import ensure_graphics_textures
+            prepared = ensure_graphics_textures(folder, graphics_data, PROJECT, texture_work,
+                cancel=self.cancel, emit=lambda e: self.queue.put(('hd-event', '', e)), allow_download=True)
+            self.queue.put(('hd-selection', '', prepared))
+            # Rebuild only the HD argument from worker-owned plain values.
+            if '--hd-texture-pack' in command:
+                pos = command.index('--hd-texture-pack'); del command[pos:pos + 2]
+            if prepared['pack']:
+                command[-1:-1] = ['--hd-texture-pack', prepared['pack']]
             checked = subprocess.run(command + ['--dry-run'], capture_output=True, text=True,
                                      timeout=30, cwd=PROJECT, env=external_env())
             self.cancel.check()
@@ -1296,15 +1514,26 @@ class Launcher:
             return
         consent = messagebox.askyesno('Gerar port local',
             'O XEX será verificado e recompilado neste PC. Os arquivos originais não serão alterados.\n\n'
-            'Se faltar o SDK ReXGlue 0.10.0, baixar o pacote oficial e conferir seu SHA-256? '
-            'Linux: até 172 MB com fontes públicas do cache; Windows: cerca de 43 MB.\n\n'
-            'É necessária uma toolchain C++23 instalada. Nenhuma ferramenta será instalada globalmente.')
+            'Se faltarem fontes do SDK ReXGlue 0.10.0 e dependências, baixá-las nas revisões fixadas? '
+            'A primeira geração compila o SDK gráfico completo no Linux e no Windows e pode demorar.\n\n'
+            'Preparar também as dependências ausentes pelo gerenciador oficial do sistema? '
+            'A instalação de ferramentas e bibliotecas pode pedir autorização de administrador '
+            'e ocupar vários GB na primeira geração. O launcher verificará os requisitos novamente ao concluir.')
         if not consent:
             return
         source, jobs = cfg['source'], cfg['jobs']
-        self.start(lambda: build_native(source, Workspace(PROJECT / '.aster', PROJECT),
-                    self.cancel, emit=lambda e: self.queue.put(('event', '', e)),
-                    jobs=jobs, allow_download=True), 'Gerar port')
+        graphics_data = self._graphics_data()
+        texture_work = Workspace(cfg['workspace'], PROJECT)
+        def generate():
+            result = build_native(source, Workspace(PROJECT / '.aster', PROJECT), self.cancel,
+                                  emit=lambda e: self.queue.put(('event', '', e)), jobs=jobs, allow_download=True,
+                                  install_dependencies=True)
+            from .texture_pipeline import ensure_graphics_textures
+            textures = ensure_graphics_textures(source, graphics_data, PROJECT, texture_work,
+                cancel=self.cancel, emit=lambda e: self.queue.put(('hd-event', '', e)), allow_download=True)
+            self.queue.put(('hd-selection', '', textures))
+            return result
+        self.start(generate, 'Gerar port')
         self.tabs.select(self.build_tab)
 
     def doctor(self):
@@ -1376,12 +1605,26 @@ class Launcher:
                 state, kind, value = self.queue.get_nowait()
             except queue.Empty:
                 break
+            if state == 'hd-selection':
+                self.hd_texture_pack.set(value.get('pack') or '')
+                self.hd_material_count = value.get('material_count', 0)
+                self._refresh_hd_status()
+                self.save_settings(quiet=True)
+                continue
+            if state == 'hd-event':
+                self.log(value)
+                self._hd_event(value)
+                continue
             if state == 'event':
                 self.log(value)
                 self._build_event(value)
                 self.status.set(value.get('message') or value.get('task') or self.build_heading.get())
                 continue
             self.busy = False
+            if kind in ('Preparar texturas HD', 'Selecionar pacote HD'):
+                self.hd_running = False
+                self.hd_progress.stop()
+                self.hd_progress.configure(mode='determinate', value=100 if state == 'done' else 0)
             self.progress.stop()
             if kind == 'Gerar port':
                 self.build_running = False
@@ -1411,10 +1654,20 @@ class Launcher:
                       'seconds': time.monotonic() - self.task_started,
                       **({'error': value} if state == 'error' else {})})
             if state == 'error':
+                if kind in ('Preparar texturas HD', 'Selecionar pacote HD'):
+                    self._refresh_hd_status()
                 self.status.set(f"{value['code']} • {value['message']}")
                 self.set_summary(json.dumps(value, indent=2, ensure_ascii=False))
                 if kind == 'Inspecionar':
                     self.source_status.set('Jogo / entrada inválida ou não suportada')
+            elif kind in ('Preparar texturas HD', 'Selecionar pacote HD'):
+                self.hd_texture_pack.set(value['pack'] or '')
+                self.hd_material_count = value.get('material_count')
+                self._refresh_hd_status()
+                self.save_settings(quiet=True)
+                self.status.set('Materiais HD preparados e selecionados · uso habilitado em Alta/Ultra'
+                                if kind == 'Preparar texturas HD' else
+                                'Pacote HD verificado e selecionado · uso habilitado em Alta/Ultra')
             elif kind == 'Diagnóstico':
                 self.last_environment = value
                 missing = [n for n in GreenLantern().dependencies()

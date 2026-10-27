@@ -1,0 +1,206 @@
+diff --git a/include/rex/graphics/pipeline/texture/hd_override.h b/include/rex/graphics/pipeline/texture/hd_override.h
+--- a/include/rex/graphics/pipeline/texture/hd_override.h
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -10,8 +10,10 @@
+ #include <filesystem>
+ #include <fstream>
+ #include <memory>
++#include <mutex>
+ #include <sstream>
+ #include <unordered_map>
++#include <unordered_set>
+ #include <span>
+ #include <string>
+ #include <vector>
+@@ -84,7 +86,8 @@
+   return true;
+ }
+ inline std::shared_ptr<const HDTextureReplacement> HDReadReplacement(
+-    const std::filesystem::path& path, size_t& remaining_bytes) {
++    const std::filesystem::path& path, size_t& remaining_bytes,
++    const std::string* library_dds_hash = nullptr, uint64_t library_dds_size = 0) {
+       std::string index_text;
+       if (!HDReadSmallFile(path / "texture.index", 512, index_text)) return {};
+       std::istringstream index(index_text);
+@@ -100,12 +103,14 @@
+           (result->source_width & (result->source_width - 1)) ||
+           (result->source_height & (result->source_height - 1)) ||
+           !IsHDFingerprint(result->canonical_bc_xxh3_128) ||
+-          !IsHDFingerprint(expected_dds_hash)) return {};
++          !IsHDFingerprint(expected_dds_hash) ||
++          (library_dds_hash && expected_dds_hash != *library_dds_hash)) return {};
+       if (!HDPathWithoutSymlinks(path / "texture.dds") ||
+           !std::filesystem::is_regular_file(path / "texture.dds")) return {};
+       std::ifstream file(path / "texture.dds", std::ios::binary | std::ios::ate);
+       const auto length = file.tellg();
+-      if (!file || length < 128 || length > (128 << 20) || uint64_t(length) > remaining_bytes) return {};
++      if (!file || length < 128 || length > (128 << 20) || uint64_t(length) > remaining_bytes ||
++          (library_dds_hash && uint64_t(length) != library_dds_size)) return {};
+       std::vector<uint8_t> dds(static_cast<size_t>(length));
+       file.seekg(0); file.read(reinterpret_cast<char*>(dds.data()), dds.size());
+       if (!file || rex::hash_bytes(std::string_view(
+@@ -140,16 +145,111 @@
+       return result;
+ }
+ struct HDTexturePack {
++  // Legacy batches keep their existing eager, bounded lifetime contract.
+   std::unordered_map<std::string, std::shared_ptr<const HDTextureReplacement>> entries;
++  struct LibraryEntry {
++    std::filesystem::path directory;
++    uint32_t source_format = 0, source_width = 0, source_height = 0;
++    std::string dds_hash;
++    uint64_t dds_size = 0;
++    mutable std::weak_ptr<const HDTextureReplacement> resident;
++    mutable bool failed = false;
++  };
++  std::unordered_map<std::string, LibraryEntry> library_entries;
++  std::unordered_set<uint64_t> geometries;
++  mutable std::mutex library_mutex;
++  static uint64_t Geometry(uint32_t format, uint32_t width, uint32_t height) {
++    return (uint64_t(format) << 32) | (uint64_t(width) << 16) | height;
++  }
+   bool HasGeometry(uint32_t format, uint32_t width, uint32_t height) const {
+-    for (const auto& entry : entries) {
+-      const auto& replacement = *entry.second;
+-      if (replacement.source_format == format && replacement.source_width == width &&
+-          replacement.source_height == height) return true;
++    return geometries.contains(Geometry(format, width, height));
++  }
++  std::shared_ptr<const HDTextureReplacement> Find(
++      const std::string& fingerprint, uint32_t format, uint32_t width, uint32_t height) const {
++    const auto old = entries.find(fingerprint);
++    if (old != entries.end()) {
++      const auto& replacement = old->second;
++      return replacement->source_format == format && replacement->source_width == width &&
++          replacement->source_height == height ? replacement : nullptr;
+     }
+-    return false;
++    const auto found = library_entries.find(fingerprint);
++    if (found == library_entries.end()) return {};
++    const auto& entry = found->second;
++    if (entry.source_format != format || entry.source_width != width || entry.source_height != height)
++      return {};
++    // TextureCache commands normally run on one GPU thread. A mutex also makes
++    // immutable-library lookup safe for independent consumers without duplicate IO.
++    std::lock_guard lock(library_mutex);
++    if (entry.failed) return {};
++    if (auto resident = entry.resident.lock()) return resident;
++    // First match (or a match after GPU eviction) performs bounded synchronous IO.
++    // Never do inference here. Do not retry a corrupt/changed file every draw.
++    entry.failed = true;
++    try {
++      size_t remaining = 128u << 20;
++      auto replacement = HDReadReplacement(entry.directory, remaining, &entry.dds_hash, entry.dds_size);
++      if (!replacement || replacement->canonical_bc_xxh3_128 != fingerprint ||
++          replacement->source_format != format || replacement->source_width != width ||
++          replacement->source_height != height) return {};
++      entry.resident = replacement;
++      entry.failed = false;
++      return replacement;
++    } catch (const std::exception&) { return {}; }
+   }
+ };
++inline uint64_t HDExpectedDDSSize(uint32_t format, uint32_t width, uint32_t height,
++                                uint32_t scale) {
++  uint64_t size = 128;
++  width *= scale; height *= scale;
++  do {
++    size += uint64_t((width + 3) / 4) * ((height + 3) / 4) * (format == 18 ? 8 : 16);
++    if (width == 1 && height == 1) return size;
++    width = std::max(1u, width >> 1); height = std::max(1u, height >> 1);
++  } while (true);
++}
++inline std::shared_ptr<const HDTexturePack> HDReadCampaignLibrary(
++    const std::filesystem::path& root, const std::string& text) {
++  if (text.size() > (4u << 20)) return {};
++  std::istringstream stream(text);
++  std::string line, magic, trailing;
++  uint32_t count = 0;
++  if (!std::getline(stream, line)) return {};
++  std::istringstream header(line);
++  if (!(header >> magic >> count) || (header >> trailing) || magic != "ASTERHDLIB1" ||
++      !count || count > 16384) return {};
++  auto result = std::make_shared<HDTexturePack>();
++  result->library_entries.reserve(count);
++  uint64_t total_bytes = 0;
++  std::unordered_set<std::string> directories;
++  for (uint32_t i = 0; i < count; ++i) {
++    if (!std::getline(stream, line)) return {};
++    std::istringstream row(line);
++    std::string fingerprint, relative;
++    HDTexturePack::LibraryEntry entry;
++    if (!(row >> fingerprint >> relative >> entry.source_format >> entry.source_width >>
++          entry.source_height >> entry.dds_hash >> entry.dds_size) || (row >> trailing) ||
++        !IsHDFingerprint(fingerprint) || !IsHDFingerprint(entry.dds_hash) ||
++        !HDRelativeDirectory(relative) || result->library_entries.contains(fingerprint) ||
++        !directories.insert(relative).second ||
++        (entry.source_format != 18 && entry.source_format != 20) ||
++        entry.source_width < 64 || entry.source_height < 64 ||
++        entry.source_width > 2048 || entry.source_height > 2048 ||
++        (entry.source_width & (entry.source_width - 1)) ||
++        (entry.source_height & (entry.source_height - 1)) ||
++        entry.dds_size < 128 || entry.dds_size > (128u << 20) ||
++        (entry.dds_size != HDExpectedDDSSize(entry.source_format, entry.source_width, entry.source_height, 2) &&
++         entry.dds_size != HDExpectedDDSSize(entry.source_format, entry.source_width, entry.source_height, 4)) ||
++        entry.dds_size > (uint64_t(64) << 30) - total_bytes) return {};
++    total_bytes += entry.dds_size;
++    entry.directory = root / std::filesystem::u8path(relative);
++    result->geometries.insert(HDTexturePack::Geometry(entry.source_format,
++        entry.source_width, entry.source_height));
++    result->library_entries.emplace(fingerprint, std::move(entry));
++  }
++  // Exactly count records; additional blank records are rejected too.
++  if (std::getline(stream, line)) return {};
++  return result;
++}
+ inline std::shared_ptr<const HDTexturePack> LoadHDTexturePack() {
+   // Validate the entire bounded pack before enabling any replacement. Bad entries
+   // reject the whole pack; changing files requires restarting this process.
+@@ -160,10 +260,20 @@
+       const auto root = std::filesystem::u8path(directory);
+       if (!HDPathWithoutSymlinks(root) || !std::filesystem::is_directory(root)) return {};
+       auto result = std::make_shared<HDTexturePack>();
++      // Library startup parses metadata only. DDS/index files are opened only
++      // when a reviewed fingerprint is actually needed by a compatible draw.
++      if (std::filesystem::exists(std::filesystem::symlink_status(root / "texture-library.index"))) {
++        if (std::filesystem::exists(std::filesystem::symlink_status(root / "texture-pack.index"))) return {};
++        std::string library_text;
++        if (!HDReadSmallFile(root / "texture-library.index", 4u << 20, library_text)) return {};
++        return HDReadCampaignLibrary(root, library_text);
++      }
+       size_t remaining = 256u << 20;
+       if (!std::filesystem::exists(std::filesystem::symlink_status(root / "texture-pack.index"))) {
+         auto entry = HDReadReplacement(root, remaining);
+         if (!entry) return {};
++        result->geometries.insert(HDTexturePack::Geometry(entry->source_format,
++            entry->source_width, entry->source_height));
+         result->entries.emplace(entry->canonical_bc_xxh3_128, std::move(entry));
+         return result;
+       }
+@@ -185,6 +295,8 @@
+             result->entries.contains(fingerprint)) return {};
+         auto entry = HDReadReplacement(root / std::filesystem::u8path(relative), remaining);
+         if (!entry || entry->canonical_bc_xxh3_128 != fingerprint) return {};
++        result->geometries.insert(HDTexturePack::Geometry(entry->source_format,
++            entry->source_width, entry->source_height));
+         result->entries.emplace(fingerprint, std::move(entry));
+       }
+       // No extra records, including blank records, after the declared count.
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -939,13 +939,7 @@
+     }
+     const auto fingerprint = rex::hash_bytes(std::string_view(
+         reinterpret_cast<const char*>(linear.data()), linear.size()));
+-    const auto found = pack->entries.find(fingerprint);
+-    if (found == pack->entries.end()) return {};
+-    const auto& replacement = found->second;
+-    if (replacement->source_format != uint32_t(key.format) ||
+-        replacement->source_width != key.GetWidth() ||
+-        replacement->source_height != key.GetHeight()) return {};
+-    return replacement;
++    return pack->Find(fingerprint, uint32_t(key.format), key.GetWidth(), key.GetHeight());
+   } catch (const std::exception&) { return {}; }
+ }
+ 

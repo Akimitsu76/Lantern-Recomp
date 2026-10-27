@@ -1,0 +1,30 @@
+diff --git a/include/rex/graphics/pipeline/texture/cache.h b/include/rex/graphics/pipeline/texture/cache.h
+--- a/include/rex/graphics/pipeline/texture/cache.h
++++ b/include/rex/graphics/pipeline/texture/cache.h
+@@ -478,6 +478,8 @@
+     // Packed TextureSign values, 2 bit per each component, with guest-side
+     // destination swizzle from the fetch constant applied to them.
+     uint8_t swizzled_signs;
++    // Cache the selection decision even when a candidate uses its original.
++    bool hd_selection_allowed;
+     // Unsigned version of the texture (or signed if they have the same data).
+     Texture* texture;
+     // Signed version of the texture if the data in the signed version is
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -643,11 +643,12 @@
+         fetch.lod_bias == 0 && hd_mip_min == 0;
+     // Fetch bias/min-LOD and signedness may change without changing TextureKey.
+     // Re-select the host resource on those fetch-constant updates as well.
+-    if (binding.texture &&
+-        bool(binding.texture->hd_replacement()) != allow_hd_binding) {
++    if (binding.hd_selection_allowed != allow_hd_binding ||
++        (allow_hd_binding && binding.texture && binding.texture->outdated_mask())) {
+       key_changed = true;
+       bindings_changed |= index_bit;
+     }
++    binding.hd_selection_allowed = allow_hd_binding;
+     bool load_unsigned_data = false, load_signed_data = false;
+     if (IsSignedVersionSeparateForFormat(binding.key)) {
+       // Can reuse previously loaded unsigned/signed versions if the key is the

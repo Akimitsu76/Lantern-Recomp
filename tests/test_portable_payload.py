@@ -58,7 +58,7 @@ class PortablePayloadTests(unittest.TestCase):
         with patch.dict(os.environ, {'ASTER_DATA_HOME': '/tmp/aster-test-data',
                                      'ASTER_LAUNCHER_ROOT': '/tmp/aster-test-data/app',
                                      'APPIMAGE': '/tmp/Launcher.AppImage'}), patch('sys.frozen', True, create=True):
-            self.assertEqual(user_data_root(), Path('/tmp/aster-test-data'))
-            self.assertEqual(project_root(__file__), Path('/tmp/aster-test-data/app'))
+            self.assertEqual(user_data_root(), Path('/tmp/aster-test-data').resolve())
+            self.assertEqual(project_root(__file__), Path('/tmp/aster-test-data/app').resolve())
             self.assertEqual(python_command('/tmp/script.py', '--help')[0], '/tmp/Launcher.AppImage')
             self.assertEqual(python_command('/tmp/script.py')[1], '--appimage-extract-and-run')

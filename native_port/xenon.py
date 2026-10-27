@@ -27,7 +27,7 @@ def resolve_imports(xex_bytes, memory, info, xenon_root):
         pos = 12+((end+1-12+3)//4)*4
     maps = {}
     for library, table in [('xam.xex','xam_table.inc'),('xboxkrnl.exe','xboxkrnl_table.inc')]:
-        text = (xenon_root/'XenonUtils/xbox'/table).read_text()
+        text = (xenon_root/'XenonUtils/xbox'/table).read_text(encoding='utf8')
         maps[library] = {int(ordinal,16): {'name': name, 'export_kind': kind} for ordinal,name,kind in
                         re.findall(r'XE_EXPORT\(\w+,\s*(0x[\da-fA-F]+),\s*(\w+),\s*(\w+)\)', text)}
     pos, result = 12+strings_size, []
@@ -111,7 +111,7 @@ def analyze(source, workspace, allow_decode=False, probe=False, cancel=None, emi
             analysis_file = out/'ghidra-analysis.json'
             if not analysis_file.is_file():
                 raise PortError('NEEDS_ANALYSIS','Execute o Ghidra antes do experimento de função.')
-            ghidra = json.loads(analysis_file.read_text())
+            ghidra = json.loads(analysis_file.read_text(encoding='utf8'))
             fn = next((f for f in ghidra['functions'] if f['address'].lower()==spec['address'][2:].lower()), None)
             if ghidra['language']!='PowerPC:BE:64:A2ALT-32addr' or not fn or fn['body_bytes']!=spec['size']:
                 raise PortError('PROBE_BOUNDARY','Fronteira da função não confirmada pelo Ghidra.')

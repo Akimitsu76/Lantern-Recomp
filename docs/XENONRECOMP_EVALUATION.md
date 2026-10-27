@@ -8,7 +8,7 @@ resultados atuais e limitações. A avaliação inicial abaixo permanece histór
 ## Resultado da inspeção local
 
 Fonte selecionada pelo usuário:
-`/mnt/disco/games/Jogos/xbox 360/Green_Lantern`.
+`/caminho/do/jogo/Green_Lantern`.
 
 | Campo | Observado no cabeçalho / inventário |
 |---|---|

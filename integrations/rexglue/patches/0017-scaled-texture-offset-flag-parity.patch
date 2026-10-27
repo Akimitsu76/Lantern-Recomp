@@ -1,0 +1,45 @@
+--- a/src/graphics/flags.cpp
++++ b/src/graphics/flags.cpp
+@@ -12,6 +12,9 @@
+ #include <rex/graphics/flags.h>
+ #include <rex/logging.h>
+ #include <rex/ui/renderdoc_api.h>
++
++REXCVAR_DEFINE_BOOL(draw_resolution_scaled_texture_offsets, true, "GPU/Shader",
++                    "Scale texture offsets with draw resolution");
+ 
+ REXCVAR_DEFINE_BOOL(gpu_allow_invalid_fetch_constants, false, "GPU",
+                     "Allow invalid fetch constants");
+--- a/src/graphics/pipeline/shader/dxbc_translator_fetch.cpp
++++ b/src/graphics/pipeline/shader/dxbc_translator_fetch.cpp
+@@ -23,9 +23,6 @@
+ #include <rex/graphics/pipeline/shader/dxbc_translator.h>
+ #include <rex/math.h>
+ #include <rex/string.h>
+-
+-REXCVAR_DEFINE_BOOL(draw_resolution_scaled_texture_offsets, true, "GPU/Shader",
+-                    "Scale texture offsets with draw resolution");
+ 
+ namespace rex::graphics {
+ using namespace ucode;
+--- a/src/graphics/pipeline/shader/spirv_translator_fetch.cpp
++++ b/src/graphics/pipeline/shader/spirv_translator_fetch.cpp
+@@ -19,6 +19,7 @@
+ #include <fmt/format.h>
+ 
+ #include <rex/assert.h>
++#include <rex/graphics/flags.h>
+ #include <rex/graphics/pipeline/shader/spirv_translator.h>
+ #include <rex/math.h>
+ 
+@@ -975,7 +976,9 @@
+     }
+     spv::Id texture_resolution_scaled = spv::NoResult;
+     uint32_t revert_resolution_scale_axes =
+-        uint32_t(draw_resolution_scale_x_ > 1) | (uint32_t(draw_resolution_scale_y_ > 1) << 1);
++        REXCVAR_GET(draw_resolution_scaled_texture_offsets)
++            ? uint32_t(draw_resolution_scale_x_ > 1) | (uint32_t(draw_resolution_scale_y_ > 1) << 1)
++            : 0;
+     spv::Id const_texture_resolution_scale[] = {spv::NoResult, spv::NoResult};
+     spv::Id const_texture_resolution_scale_reciprocal[] = {spv::NoResult, spv::NoResult};
+     if (revert_resolution_scale_axes) {

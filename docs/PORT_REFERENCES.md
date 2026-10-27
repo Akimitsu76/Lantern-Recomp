@@ -1,5 +1,9 @@
 # Referências de ports Xbox 360 → PC
 
+Complemento de 25/10/2026: [qualidade gráfica e distribuição](GRAPHICS_REFERENCE_STUDY.md).
+A investigação inicial de boot abaixo registra o estado de 22/10; seus próximos
+passos não descrevem a fase atual do projeto.
+
 Consulta: 22/10/2026. Repositórios indicados pelo usuário. Foram lidos READMEs,
 manifestos, CMake e arquivos de inicialização/diagnóstico selecionados pela API do
 GitHub. Não compilamos nem executamos esses ports. Alegações de jogabilidade e

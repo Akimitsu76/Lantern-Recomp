@@ -12,10 +12,3 @@ __pycache__/
 build/
 
 dist/
-
-*.zip
-*.tar.gz
-*.AppImage
-*.exe
-.env
-.env.*

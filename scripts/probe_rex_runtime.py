@@ -20,6 +20,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from native_port import graphics
 from native_port.runtime_evidence import read_runtime_logs, summarize_runtime_log
+from native_port.native_build import read_install, verify_install
 
 
 SUPPORTED_XEX = "3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1"
@@ -96,13 +97,88 @@ def capture_own_x11_window(pid: int, output: Path) -> dict:
                                    capture_output=True, text=True, timeout=3)
             if image.returncode == 0 and output.is_file():
                 return {"pid": pid, "window_id": window_id, "path": str(output)}
+            try:
+                from rex_x11_capture import capture_verified_x11_window
+                return capture_verified_x11_window(pid, window_id, output)
+            except (OSError, ValueError, ImportError, subprocess.TimeoutExpired) as exc:
+                fallback_error = str(exc)
             # Screenshot tools can fail on Xwayland while the window is still
             # valid for keyboard input. Keep the verified window identity.
             return {"pid": pid, "window_id": window_id, "path": str(output),
-                    "error": "Selected-window capture failed", "returncode": image.returncode}
+                    "error": "Selected-window capture failed", "returncode": image.returncode,
+                    "fallback_error": fallback_error}
         return {"error": "No X11 client window matched the child PID"}
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"error": str(exc)}
+
+
+def verified_spatial_install(root, binary, parser):
+    """Bind spatial probes to the exact executable and all hashed staged files."""
+    try:
+        installation = read_install(root)
+        if (not installation or installation.get('presentation_backend') != 'sdk-spatial-fsr1'
+                or not installation.get('recipe', {}).get('sdk_spatial')):
+            parser.error('--spatial-sdk requires a built spatial SDK installation.')
+        if (root / installation['binary']).resolve() != binary.resolve():
+            parser.error('--spatial-sdk executable differs from the installed manifest.')
+        verify_install(root, installation)
+    except Exception as exc:
+        parser.error(str(exc))
+    return installation
+
+
+def texture_capture_environment(env, attempt, start_at=None, limit=128):
+    env = dict(env)
+    env.pop('ASTER_UI_TEXTURE_PACK_DIR', None)
+    env.pop('ASTER_EFFECTS_DIAGNOSTICS', None)
+    env.pop('ASTER_EFFECTS_SOURCE_INDEX', None)
+    for key in ('ASTER_TEXTURE_CAPTURE_DIR', 'ASTER_TEXTURE_CAPTURE_START_FILE',
+                'ASTER_TEXTURE_CAPTURE_MAX_COUNT', 'ASTER_TEXTURE_CAPTURE_MAX_MIB'):
+        env.pop(key, None)
+    if start_at is not None:
+        if not 1 <= limit <= 256:
+            raise ValueError('Capture count must be between 1 and 256')
+        env.update(ASTER_TEXTURE_CAPTURE_DIR=str(attempt / 'textures'),
+                   ASTER_TEXTURE_CAPTURE_START_FILE=str(attempt / 'texture-capture.armed'),
+                   ASTER_TEXTURE_CAPTURE_MAX_COUNT=str(limit), ASTER_TEXTURE_CAPTURE_MAX_MIB='256')
+    return env
+
+
+def diagnostic_backend_arguments(args):
+    """Only explicit readback requests change the SDK's readback default."""
+    arguments = [f'--render_target_path_vulkan={args.render_target_path}']
+    if args.readback_resolve is not None:
+        arguments.append(f'--vulkan_readback_resolve={str(args.readback_resolve == "on").lower()}')
+    if args.resolve_half_pixel_fill is not None:
+        arguments.append('--resolve_resolution_scale_fill_half_pixel_offset=' +
+                         str(args.resolve_half_pixel_fill == 'on').lower())
+    if args.scaled_texture_offsets is not None:
+        arguments.append('--draw_resolution_scaled_texture_offsets=' +
+                         str(args.scaled_texture_offsets == 'on').lower())
+    axes = (args.render_scale_x, args.render_scale_y)
+    if any(value is not None for value in axes):
+        if any(value is None for value in axes):
+            raise ValueError('Specify both --render-scale-x and --render-scale-y.')
+        arguments.extend([f'--draw_resolution_scale_x={axes[0]}',
+                          f'--draw_resolution_scale_y={axes[1]}'])
+    return arguments
+
+
+def add_graphics_diagnostics(parser):
+    parser.add_argument('--fsr-sharpness', type=int, choices=range(101),
+                        default=graphics.DEFAULT_FSR_SHARPNESS, metavar='0..100')
+    parser.add_argument('--antialiasing', choices=graphics.ANTIALIASING)
+    parser.add_argument('--render-target-path', choices=('fsi', 'fbo'), default='fsi',
+                        help='Diagnostic render target backend for this isolated probe.')
+    parser.add_argument('--readback-resolve', choices=('on', 'off'),
+                        help='Diagnostic resolve readback override; omitted preserves the SDK default.')
+    parser.add_argument('--render-scale-x', type=int, choices=(1, 2, 3),
+                        help='Diagnostic asymmetric scaling; specify both axes and --render-scale 1.')
+    parser.add_argument('--render-scale-y', type=int, choices=(1, 2, 3))
+    parser.add_argument('--resolve-half-pixel-fill', choices=('on', 'off'),
+                        help='Diagnostic scaled resolve edge-fill override; omitted keeps SDK default.')
+    parser.add_argument('--scaled-texture-offsets', choices=('on', 'off'),
+                        help='Diagnostic texture offset parity control; requires patch0017.')
 
 
 def main() -> int:
@@ -121,6 +197,7 @@ def main() -> int:
     parser.add_argument('--runtime-root', type=Path, help='Isolated profile/cache directory under .aster/runtime.')
     parser.add_argument('--vsync', choices=('on', 'off'))
     parser.add_argument('--shader-mode', choices=('async', 'blocking'), default='async')
+    parser.add_argument('--shader-preload', choices=('on', 'off'), default='on')
     parser.add_argument('--fps-target', choices=graphics.TARGETS,
                         help='30 (default), 60 or unlimited. The latter two require an isolated hook build.')
     parser.add_argument('--experimental-unlimited-fps', action='store_true',
@@ -128,6 +205,7 @@ def main() -> int:
     parser.add_argument('--graphics-preset', choices=graphics.PRESETS,
                         help='Apply a real graphics preset to this isolated probe.')
     parser.add_argument('--upscaler', choices=graphics.UPSCALERS, default=None)
+    add_graphics_diagnostics(parser)
     parser.add_argument('--output-resolution', choices=graphics.OUTPUT_RESOLUTIONS, default='auto')
     parser.add_argument('--render-scale', type=int, choices=(1, 2, 3))
     parser.add_argument('--msaa', choices=('on', 'off'))
@@ -153,11 +231,43 @@ def main() -> int:
                         help='Measure only this process playback streams at the given elapsed seconds.')
     parser.add_argument('--allow-invalid-fetch', action='store_true',
                         help='Test SDK compatibility mode for invalid-type GPU fetch descriptors.')
+    parser.add_argument('--capture-textures-at', type=float, help='Arm bounded original texture capture at this elapsed second, before a level loads; diagnostic I/O, not a performance sample.')
+    parser.add_argument('--capture-texture-limit', type=int, default=128, choices=range(1,257))
+    parser.add_argument('--hd-texture-pack', type=Path, help='Validated local reviewed Real-ESRGAN pack for this probe only.')
+    parser.add_argument('--ui-texture-pack', type=Path, help='Validated separate monochrome UI atlas for this probe only.')
+    parser.add_argument('--scaled-resolve-diagnostics', action='store_true', help='Bounded metadata-only scale diagnostics; requires SDK patch0015.')
+    parser.add_argument('--effects-diagnostics', action='store_true', help='Bounded exact-atlas sampling/transparency metadata; requires patch0018.')
+    parser.add_argument('--effects-source-index', type=Path,
+                        help='Optional local source index, armed after reviewing uploads from this session; requires patch0019.')
+    parser.add_argument('--gpu-trace', action='store_true', help='Bounded texture inspection only; verbose GPU log, not a performance measurement.')
+    parser.add_argument('--log-level', choices=('info', 'debug'), default='debug',
+                        help='Use info for performance controls matching normal play; debug retains diagnostic detail. GPU trace overrides this.')
+    parser.add_argument('--spatial-sdk', action='store_true',
+                        help='Use the verified source SDK installation and embedded FSR1 presentation.')
     parser.add_argument('--presenter-compat', type=Path,
                         help='Load the pinned local presenter compatibility library for this child only.')
     parser.add_argument('--press', action='append', default=[], metavar='SECONDS:KEY[:HOLD]',
                         help='Send controller-mapped keys (Return, space, WASD, arrows) to this window only.')
     args = parser.parse_args()
+    if args.effects_source_index and not args.effects_diagnostics:
+        parser.error('--effects-source-index requires --effects-diagnostics.')
+    if args.render_scale_x is not None or args.render_scale_y is not None:
+        if args.render_scale != 1:
+            parser.error('Axis diagnostics require --render-scale 1 to keep the uniform and per-axis controls unambiguous.')
+        try:
+            diagnostic_backend_arguments(args)
+        except ValueError as exc:
+            parser.error(str(exc))
+    if args.capture_textures_at is not None and (not args.spatial_sdk or not 0 <= args.capture_textures_at < args.seconds):
+        parser.error('Texture capture requires --spatial-sdk and arming time before the deadline.')
+    if args.hd_texture_pack and not args.spatial_sdk:
+        parser.error('--hd-texture-pack requires --spatial-sdk.')
+    if (args.ui_texture_pack or args.scaled_resolve_diagnostics or args.effects_diagnostics or args.scaled_texture_offsets is not None) and not args.spatial_sdk:
+        parser.error('UI atlases and scale diagnostics require --spatial-sdk.')
+    if args.gpu_trace and args.seconds > 60:
+        parser.error('Verbose GPU trace is limited to 60 seconds; use ordinary logs for gameplay probes.')
+    if args.spatial_sdk and args.presenter_compat:
+        parser.error('--spatial-sdk cannot load the older presenter compatibility ABI.')
     if args.experimental_60fps and args.experimental_unlimited_fps:
         parser.error('Choose either 60 fps or unlimited, not both.')
     if args.fps_target and (
@@ -243,6 +353,19 @@ def main() -> int:
         binary = directory / 'aster_green_lantern'
     if not binary.is_file():
         parser.error("Build the local ReXGlue host first.")
+    installation = verified_spatial_install(root, binary, parser) if args.spatial_sdk else None
+    if args.scaled_resolve_diagnostics:
+        if '0015-scaled-resolve-diagnostics.patch' not in installation.get('recipe', {}).get('sdk_spatial', {}).get('patches', {}):
+            parser.error('Rebuild the SDK with patch0015 before requesting scale diagnostics.')
+    if args.effects_diagnostics:
+        if '0018-effects-sampling-diagnostics.patch' not in installation.get('recipe', {}).get('sdk_spatial', {}).get('patches', {}):
+            parser.error('Rebuild the SDK with patch0018 before requesting effects diagnostics.')
+    for requested, patch_name in ((args.effects_source_index, '0019-armed-effects-source-index.patch'),
+                                  (args.scaled_texture_offsets is not None, '0017-scaled-texture-offset-flag-parity.patch')):
+        if requested and patch_name not in installation.get('recipe', {}).get('sdk_spatial', {}).get('patches', {}):
+            parser.error('Rebuild the SDK with ' + patch_name + ' before requesting this diagnostic.')
+    if args.capture_textures_at is not None and '0010-gameplay-texture-capture-arm.patch' not in installation.get('recipe', {}).get('sdk_spatial', {}).get('patches', {}):
+        parser.error('Rebuild the native runtime with the bounded capture arming patch before using this option.')
     # Check staging before attempting to create a window.
     libraries = subprocess.run(["ldd", str(binary)], capture_output=True, text=True, check=True)
     if "not found" in libraries.stdout:
@@ -268,7 +391,8 @@ def main() -> int:
         attempt.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
         parser.error("Attempt label already exists; evidence will not be overwritten.")
-    env = os.environ.copy()
+    env = texture_capture_environment(os.environ, attempt, args.capture_textures_at, args.capture_texture_limit)
+    capture_armed = False
     if args.presenter_compat:
         compatibility = args.presenter_compat.resolve(strict=True)
         if not any(compatibility.is_relative_to((root / allowed).resolve()) for allowed in ('.aster/build', '.aster/native')) or compatibility.suffix != '.so':
@@ -281,16 +405,18 @@ def main() -> int:
         directory = run / name
         directory.mkdir(exist_ok=True)
         env[key] = str(directory)
-    command = [str(binary), "--gpu_plugin=xenos", "--render_target_path_vulkan=fsi",
+    command = [str(binary), "--gpu_plugin=xenos", *diagnostic_backend_arguments(args),
                f"--game_data_root={game}",
                f"--user_data_root={run / 'user'}", f"--cache_root={run / 'cache'}",
-               f"--log_file={attempt / 'runtime.log'}", "--log_level=debug",
+               f"--log_file={attempt / 'runtime.log'}", "--log_level=trace" if args.gpu_trace else f"--log_level={args.log_level}",
                "--allow_game_relative_writes=false"]
     command.extend(['--store_shaders=true', f'--async_shader_compilation={str(args.shader_mode == "async").lower()}',
-                    f'--vsync={str(fps_target != "unlimited").lower()}'])
+                    f'--vsync={str(args.vsync == "on").lower()}'])
     command.append(f'--vulkan_submit_on_primary_buffer_end={str(args.primary_submit == "on").lower()}')
     if args.gpu_timing:
         command.append('--vulkan_submission_timing=true')
+    if args.scaled_resolve_diagnostics:
+        command.append('--aster_scaled_resolve_diagnostics=true')
     if args.frame_diagnostics:
         command.append('--aster_frame_diagnostics=true')
     if fps_target == '60':
@@ -298,8 +424,9 @@ def main() -> int:
     elif fps_target == 'unlimited':
         command.append('--aster_experimental_unlimited_fps=true')
     graphics_data = None
-    if (args.graphics_preset or args.render_scale is not None or args.msaa is not None or
-            args.anisotropic is not None or args.texture_quality is not None or args.dither is not None):
+    if (args.spatial_sdk or args.graphics_preset or args.upscaler or args.render_scale is not None or args.msaa is not None or
+            args.anisotropic is not None or args.texture_quality is not None or args.dither is not None or
+            args.antialiasing is not None or args.fsr_sharpness != graphics.DEFAULT_FSR_SHARPNESS):
         try:
             graphics_data = graphics.from_options(
                 args.graphics_preset or 'default',
@@ -309,10 +436,23 @@ def main() -> int:
                 texture_quality=args.texture_quality,
                 present_dither=None if args.dither is None else args.dither == 'on',
                 fps_target=fps_target, vsync=args.vsync == 'on', shader_mode=args.shader_mode,
-                upscaler=args.upscaler or env.get('ASTER_PRESENT_FILTER'), output_resolution=args.output_resolution)
+                shader_preload=args.shader_preload == 'on',
+                upscaler=args.upscaler or env.get('ASTER_PRESENT_FILTER'), output_resolution=args.output_resolution,
+                antialiasing=args.antialiasing, fsr_sharpness=args.fsr_sharpness)
         except Exception as exc:
             parser.error(str(exc))
         command.extend(graphics.cvar_arguments(graphics_data))
+    if args.spatial_sdk:
+        from play_green_lantern import presentation_arguments, presentation_environment
+        command.extend(presentation_arguments(graphics_data, installation, parser))
+        env = presentation_environment(binary, graphics_data, env, parser, installation)
+        from play_green_lantern import hd_texture_environment, ui_texture_environment
+        env = hd_texture_environment(args.hd_texture_pack, installation, env, parser)
+        env = ui_texture_environment(args.ui_texture_pack, installation, env, parser)
+        if args.effects_diagnostics:
+            env['ASTER_EFFECTS_DIAGNOSTICS'] = '1'
+            if args.effects_source_index:
+                env['ASTER_EFFECTS_SOURCE_INDEX'] = str(args.effects_source_index.resolve())
     if args.present_mode != 'auto':
         command.extend([
             f'--vulkan_allow_present_mode_immediate={str(args.present_mode == "immediate").lower()}',
@@ -356,6 +496,11 @@ def main() -> int:
                 now = time.monotonic()
                 if deadline is not None and now >= deadline:
                     raise subprocess.TimeoutExpired(command, args.seconds)
+                if args.capture_textures_at is not None and not capture_armed and now - start >= args.capture_textures_at:
+                    marker = attempt / 'texture-capture.armed'
+                    with marker.open('x') as armed:
+                        armed.write(str(round(now - start, 3)))
+                    capture_armed = True
                 if args.gpu_metrics and now - start >= next_gpu_sample:
                     try:
                         sample = subprocess.run(['nvidia-smi', '--query-gpu=utilization.gpu,power.draw,clocks.current.graphics,memory.used',
@@ -465,7 +610,28 @@ def main() -> int:
               "gpu_plugin_sha256": sha256(loaded_plugin) if loaded_plugin and loaded_plugin.exists() else None,
               "runtime_root": str(run),
               "fps_target": fps_target,
+              "diagnostic_draw_scale_axes": ([args.render_scale_x, args.render_scale_y]
+                                             if args.render_scale_x is not None else None),
+              "render_target_path": args.render_target_path,
+              "readback_resolve": args.readback_resolve,
+              "resolve_half_pixel_fill": args.resolve_half_pixel_fill,
+              "fsr_sharpness": args.fsr_sharpness,
+              "antialiasing": graphics_data['antialiasing'] if graphics_data else None,
               "graphics": graphics_data,
+              "hd_pack_directory": env.get("ASTER_HD_TEXTURE_PACK_DIR"),
+              "ui_pack_directory": env.get("ASTER_UI_TEXTURE_PACK_DIR"),
+              "scaled_resolve_diagnostics": args.scaled_resolve_diagnostics,
+              "effects_diagnostics": args.effects_diagnostics,
+              "effects_source_index": str(args.effects_source_index.resolve()) if args.effects_source_index else None,
+              "scaled_texture_offsets": args.scaled_texture_offsets,
+              "hd_host_resources_created": log_text.count("Created reviewed HD host resource") if args.gpu_trace else None,
+              "verbose_gpu_trace": args.gpu_trace,
+              "texture_capture_at": args.capture_textures_at,
+              "texture_capture_armed": capture_armed,
+              "texture_capture_directory": env.get("ASTER_TEXTURE_CAPTURE_DIR"),
+              "capture_diagnostic_not_performance": args.capture_textures_at is not None,
+              "presentation_backend": installation.get("presentation_backend") if installation else None,
+              "child_ld_preload": env.get("LD_PRELOAD"),
               "presenter_filter_environment": env.get("ASTER_PRESENT_FILTER", "bilinear"),
               "presenter_compat_path": str(compatibility) if args.presenter_compat else None,
               "presenter_compat_sha256": sha256(compatibility) if args.presenter_compat else None,

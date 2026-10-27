@@ -24,7 +24,7 @@ from .workspace import Workspace
 
 XEX_SHA256 = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 SDK_VERSION = '0.10.0'
-INTEGRATION_VERSION = 6
+INTEGRATION_VERSION = 20
 SDK_ASSETS = {
     'linux-amd64': '0388edb3f8fb1444f1b0ad5d440cb02d9690ac20a76b04fd6b7dcc19f59328a6',
     'win-amd64': 'ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b',
@@ -108,11 +108,23 @@ def ensure_sdk(work, cancel, emit, allow_download=False):
     return prefix
 
 
+def companion_c_compiler(compiler):
+    path = Path(compiler)
+    if path.name in ('clang-cl', 'clang-cl.exe'):
+        return str(path)
+    name = path.name.replace('clang++', 'clang', 1) if path.name.startswith('clang++') else 'clang'
+    return str(path.with_name(name))
+
+
 def toolchain(root, work):
     suffix = '.exe' if os.name == 'nt' else ''
     env = external_env()
     if os.name == 'nt':
         env = {key.upper(): value for key, value in env.items()}
+        # Newly installed tools may not be in this launcher's inherited PATH.
+        program_files = Path(env.get('PROGRAMFILES', 'C:/Program Files'))
+        additions = [program_files / 'Git/cmd', program_files / 'CMake/bin']
+        env['PATH'] = os.pathsep.join(str(p) for p in additions if p.is_dir()) + os.pathsep + env.get('PATH', '')
     if os.name == 'nt' and not env.get('VCTOOLSINSTALLDIR'):
         finder = Path(env.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft Visual Studio/Installer/vswhere.exe'
         if finder.is_file():
@@ -126,7 +138,8 @@ def toolchain(root, work):
                                      root, Cancellation(), env=env)
                 env.update((line.split('=', 1)[0].upper(), line.split('=', 1)[1]) for line in result['stdout'].splitlines() if '=' in line and not line.startswith('='))
                 llvm = Path(installation) / 'VC/Tools/Llvm/x64/bin'
-                env['PATH'] = str(llvm) + os.pathsep + env.get('PATH', '')
+                cmake_tools = Path(installation) / 'Common7/IDE/CommonExtensions/Microsoft/CMake'
+                env['PATH'] = os.pathsep.join(map(str, [llvm, cmake_tools/'CMake/bin', cmake_tools/'Ninja'])) + os.pathsep + env.get('PATH', '')
     def find(name):
         candidates = [root / f'tools/{name}/bin/{name}{suffix}',
                       root / f'tools/{name}/{name}{suffix}']
@@ -134,7 +147,20 @@ def toolchain(root, work):
             candidates.append(work.path(f'tools/cmake-runtime/cmake/data/bin/cmake{suffix}'))
         return next((str(p) for p in candidates if p.is_file()), None) or shutil.which(name, path=env.get('PATH'))
     cmake, ninja = find('cmake'), find('ninja')
-    compiler = shutil.which('clang-cl' if os.name == 'nt' else 'clang++', path=env.get('PATH'))
+    compiler_names = ['clang-cl'] if os.name == 'nt' else ['clang++', *('clang++-'+str(v) for v in range(22, 17, -1))]
+    candidates = []
+    for name in compiler_names:
+        path = shutil.which(name, path=env.get('PATH'))
+        if not path:
+            continue
+        try:
+            probe = run_process([path, '--version'], root, Cancellation(), env=env, timeout=10)
+            match = re.search(r'clang version (\d+)', probe['stdout'] + probe['stderr'])
+            if match and int(match[1]) >= 18:
+                candidates.append((int(match[1]), path))
+        except PortError:
+            continue
+    compiler = max(candidates, default=(0, None), key=lambda item: item[0])[1]
     missing = [name for name, value in [('CMake >=3.25', cmake), ('Ninja', ninja), ('Clang >=18 + C++23', compiler)] if not value]
     if os.name == 'nt' and not env.get('VCTOOLSINSTALLDIR'):
         missing.append('Visual Studio Build Tools: C++ x64 + Windows SDK + Clang')
@@ -151,7 +177,7 @@ def read_install(root):
     try:
         if path.stat().st_size > 1024 * 1024:
             raise ValueError('manifest too large')
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding='utf8'))
         if data.get('schema') != 1 or data.get('xex_sha256') != XEX_SHA256 or data.get('state') != 'built':
             raise ValueError('invalid manifest')
         if (not isinstance(data.get('files'), dict) or not isinstance(data.get('binary'), str)
@@ -178,7 +204,35 @@ def verify_install(root, data):
             raise PortError('BUILD_CHANGED', f'Arquivo do port ausente ou alterado: {relative}. Gere-o novamente.')
 
 
-def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_download=False):
+def cpu_sdk_identity(recipe):
+    """Exclude audited implementation-only changes from CPU host reuse.
+
+    Patches 0023/0024 change no public type or layout. Patch 0025 adds one CVar
+    declaration and GPU-only selection branches, with no existing ABI change.
+    Patch 0026 only stores an existing presenter's pipeline format after creation;
+    no header, public type or layout changes. Presenter/UI patches 0004 and 0022
+    remain ABI-sensitive. Unknown future patches force a
+    new host; guest hints, hook, platform and binary hashes are checked separately.
+    """
+    if recipe is None:
+        return None
+    result = dict(recipe)
+    gpu_only = {'0005-texture-inspection-capture.patch', '0006-reviewed-hd-texture-override.patch',
+                '0007-isolated-sdk-install.patch', '0008-hd-selection-cache.patch',
+                '0009-multi-material-hd-pack.patch', '0010-gameplay-texture-capture-arm.patch', '0011-hd-texture-scales.patch', '0012-campaign-texture-library.patch', '0013-windows-hd-library-path.patch', '0014-portable-mspack-source-path.patch',
+                '0015-scaled-resolve-diagnostics.patch', '0016-reviewed-ui-alpha-atlas.patch',
+                '0017-scaled-texture-offset-flag-parity.patch', '0018-effects-sampling-diagnostics.patch',
+                '0019-armed-effects-source-index.patch', '0020-effects-decision-diagnostics.patch',
+                '0021-d3d12-blocking-shader-prewarm.patch',
+                '0023-guest-vblank-video-mode-clock.patch',
+                '0024-scaled-pixel-parameter-centers.patch',
+                '0025-known-shader-preload-selection.patch',
+                '0026-presenter-pipeline-format-cache.patch'}
+    result['patches'] = {name: digest for name, digest in recipe.get('patches', {}).items() if name not in gpu_only}
+    return result
+
+
+def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_download=False, install_dependencies=False):
     cancel, emit = cancel or Cancellation(), emit or (lambda event: None)
     root = workspace.project
     if workspace.root != root / '.aster':
@@ -196,11 +250,18 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
         raise PortError('BUILD_REVISION', 'Revisão do XEX ainda não suportada. O original não foi alterado.')
     hints = root / 'games/green_lantern_rex_hints.toml'
     hook = root / 'integrations/rexglue/portable_timing.cpp'
-    recipe = {'sdk': SDK_VERSION, 'platform': host_platform(), 'xex': XEX_SHA256,
+    # Both platforms use the same complete spatial SDK; only developers may
+    # explicitly select the old Linux ABI for regression comparisons.
+    use_spatial_sdk = os.name == 'nt' or os.environ.get('ASTER_USE_LEGACY_SDK') != '1'
+    from .spatial_sdk import spatial_sdk_recipe, build_spatial_sdk
+    spatial_recipe = spatial_sdk_recipe(root, host_platform()) if use_spatial_sdk else None
+    recipe = {'sdk': SDK_VERSION, 'sdk_spatial': spatial_recipe, 'platform': host_platform(), 'xex': XEX_SHA256,
               'hints': file_hash(hints), 'hook': file_hash(hook), 'integration': INTEGRATION_VERSION,
               'cache_project': file_hash(root / 'integrations/rexglue/plugin-only/CMakeLists.txt') if os.name != 'nt' else None,
               'driver_cache_patch': file_hash(root / 'integrations/rexglue/patches/0001-vulkan-driver-pipeline-cache.patch') if os.name != 'nt' else None,
               'deferred_pipeline_patch': file_hash(root / 'integrations/rexglue/patches/0003-vulkan-deferred-pipelines.patch') if os.name != 'nt' else None,
+              'texture_inspection_patch': file_hash(root / 'integrations/rexglue/patches/0005-texture-inspection-capture.patch'),
+              'hd_texture_patch': file_hash(root / 'integrations/rexglue/patches/0006-reviewed-hd-texture-override.patch'),
               'presenter_filter': {p.name: file_hash(p) for p in sorted((root / 'integrations/rexglue/presenter-filter').iterdir()) if p.is_file()} if os.name != 'nt' else None}
     key = hashlib.sha256(json.dumps(recipe, sort_keys=True).encode()).hexdigest()[:20]
     try:
@@ -221,21 +282,27 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
             return current
         except PortError:
             pass
-    # Renderer-only updates reuse the verified CPU host when SDK, hints and
-    # timing hook are unchanged. A modified/missing host is never reused.
+    # Implementation-only SDK updates reuse the compiled CPU host when the
+    # public ABI, hints and timing hook match. Runtime libraries are restaged
+    # and hashed for the new SDK. A modified/missing host is never reused.
     reusable_host = None
     if current:
         previous = current.get('recipe', {})
         host_fields = ('sdk', 'platform', 'xex', 'hints', 'hook')
         candidate = root / current['binary']
         if (all(previous.get(key) == recipe[key] for key in host_fields)
-                and previous.get('integration') in (4, 5, 6)
+                and cpu_sdk_identity(previous.get('sdk_spatial')) == cpu_sdk_identity(recipe.get('sdk_spatial'))
+                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
                 and candidate.is_file()
                 and current.get('files', {}).get(current['binary']) == file_hash(candidate)):
             reusable_host = candidate
     emit({'stage': 'tools', 'state': 'running', 'message': 'Verificando ferramentas e SDK'})
+    if install_dependencies:
+        from .prerequisites import ensure_build_dependencies
+        ensure_build_dependencies(root, workspace, cancel, emit, allowed=True)
     cmake, ninja, compiler, env = toolchain(root, workspace)
-    prefix = ensure_sdk(workspace, cancel, emit, allow_download)
+    prefix = (build_spatial_sdk(root, workspace, (cmake, ninja, compiler, env), cancel, emit, allow_download, jobs)
+              if use_spatial_sdk else ensure_sdk(workspace, cancel, emit, allow_download))
     emit({'stage': 'tools', 'state': 'completed'})
     generator = prefix / 'bin' / ('rexglue.exe' if os.name == 'nt' else 'rexglue')
     project = workspace.path(f'native/{key}/project')
@@ -256,16 +323,20 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
         except PortError as exc:
             workspace.write_json(f'native/{key}/logs/failure.json', exc.as_dict())
             raise
-        (logs / (re.sub(r'[^a-zA-Z0-9]+', '-', name) + '.log')).write_text(result['stdout'] + result['stderr'])
+        (logs / (re.sub(r'[^a-zA-Z0-9]+', '-', name) + '.log')).write_text(result['stdout'] + result['stderr'], encoding='utf8')
         emit({'task': name, 'state': 'completed'})
     cache_plugin = None
     presenter_filter = None
+    arena_lifetime = None
     emit({'stage': 'cache', 'state': 'running', 'message': 'Preparando cache gráfico'})
     if os.name != 'nt':
-        from .native_cache import build_cache_plugin, build_presenter_filter
+        from .native_cache import build_cache_plugin, build_presenter_filter, build_arena_lifetime
         cache_plugin = build_cache_plugin(root, workspace, prefix, (cmake, ninja, compiler, env),
                                           cancel, emit, run, allow_download)
-        presenter_filter = build_presenter_filter(root, workspace, prefix, (cmake, ninja, compiler, env), cancel, run)
+        if use_spatial_sdk:
+            arena_lifetime = build_arena_lifetime(root, workspace, (cmake, ninja, compiler, env), cancel, run)
+        else:
+            presenter_filter = build_presenter_filter(root, workspace, prefix, (cmake, ninja, compiler, env), cancel, run)
     emit({'stage': 'cache', 'state': 'completed', 'message': 'Cache pronto' if cache_plugin else 'Etapa dispensada nesta plataforma'})
     emit({'stage': 'codegen', 'state': 'running', 'message': 'Gerando o código nativo'})
     if reusable_host:
@@ -291,19 +362,19 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
             manifest.write_text('[project]\nname = "aster_green_lantern"\nsdk_version = "0.10.0"\n'
                                 + 'game_root = ' + json.dumps(relative(game), ensure_ascii=False) + '\n\n'
                                 + '[entrypoint]\nfile_path = ' + json.dumps(relative(xex), ensure_ascii=False)
-                                + '\nout_directory_path = "generated/default"\nincludes = ["hints.toml"]\n')
+                                + '\nout_directory_path = "generated/default"\nincludes = ["hints.toml"]\n', encoding='utf8')
             shutil.copy2(hook, project / 'aster_timing.cpp')
             cmake_file = project / 'CMakeLists.txt'
-            content = cmake_file.read_text()
+            content = cmake_file.read_text(encoding='utf8')
             content = content.replace('rexglue_setup_target(aster_green_lantern)',
                                       'rexglue_setup_target(aster_green_lantern GPU_PLUGINS xenos)')
             content += '\ntarget_sources(aster_green_lantern PRIVATE aster_timing.cpp)\n'
-            cmake_file.write_text(content)
+            cmake_file.write_text(content, encoding='utf8')
         stamp = project / 'aster-codegen.json'
         valid_codegen = False
         if stamp.is_file():
             try:
-                recorded = json.loads(stamp.read_text())
+                recorded = json.loads(stamp.read_text(encoding='utf8'))
                 valid_codegen = bool(recorded) and all(
                     (project / name).resolve().is_relative_to((project / 'generated').resolve())
                     and (project / name).is_file() and file_hash(project / name) == sha
@@ -315,7 +386,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
             generated = [p for p in (project / 'generated').rglob('*') if p.is_file()]
             if not generated:
                 raise PortError('BUILD_CODEGEN', 'O gerador não produziu arquivos C++.')
-            stamp.write_text(json.dumps({str(p.relative_to(project)): file_hash(p) for p in generated}))
+            stamp.write_text(json.dumps({str(p.relative_to(project)): file_hash(p) for p in generated}), encoding='utf8')
         else:
             emit({'task': 'Reutilizar C++ já gerado', 'state': 'completed'})
         emit({'stage': 'codegen', 'state': 'completed'})
@@ -339,6 +410,8 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
         shutil.copy2(cache_plugin, build / cache_plugin.name)
     if presenter_filter:
         shutil.copy2(presenter_filter, build / presenter_filter.name)
+    if arena_lifetime:
+        shutil.copy2(arena_lifetime, build / arena_lifetime.name)
     if os.name != 'nt':
         run('Verificar bibliotecas', ['ldd', binary], timeout=30)
         result = run_process(['ldd', str(binary)], root, cancel, timeout=30, env=env)
@@ -353,6 +426,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
             'game_root': str(game), 'binary': str(binary.relative_to(root)),
             'files': {str(p.relative_to(root)): file_hash(p) for p in artifacts},
             'renderer': 'd3d12-rov' if os.name == 'nt' else 'vulkan-fsi',
+            'presentation_backend': 'sdk-spatial-fsr1' if use_spatial_sdk else 'linux-spatial-shim',
             'message': 'Port compilado localmente; execução e campanha ainda precisam de validação.'}
     workspace.write_json(INSTALL, data)
     emit({'stage': 'verify', 'state': 'completed'})
@@ -360,7 +434,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
     return data
 
 
-def build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_download=False):
+def build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_download=False, install_dependencies=False):
     # Validate the input before creating even a lock in the workspace.
     cancel = cancel or Cancellation()
     emit = emit or (lambda event: None)
@@ -383,7 +457,7 @@ def build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downlo
         raise PortError('BUILD_BUSY', 'Já existe uma geração do port neste workspace.') from exc
     try:
         try:
-            return _build_native(source, workspace, cancel, emit, jobs, allow_download)
+            return _build_native(source, workspace, cancel, emit, jobs, allow_download, install_dependencies)
         except (OSError, zipfile.BadZipFile) as exc:
             raise PortError('BUILD_IO', 'Falha de leitura/download/extração: ' + str(exc)) from exc
     finally:

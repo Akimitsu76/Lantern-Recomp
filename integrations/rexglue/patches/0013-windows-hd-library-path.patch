@@ -1,0 +1,19 @@
+diff --git a/include/rex/graphics/pipeline/texture/hd_override.h b/include/rex/graphics/pipeline/texture/hd_override.h
+--- a/include/rex/graphics/pipeline/texture/hd_override.h
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -255,9 +255,15 @@
+   // reject the whole pack; changing files requires restarting this process.
+   static const auto pack = []() -> std::shared_ptr<const HDTexturePack> {
+     try {
++#ifdef _WIN32
++      const wchar_t* directory = ::_wgetenv(L"ASTER_HD_TEXTURE_PACK_DIR");
++      if (!directory || !*directory) return {};
++      const auto root = std::filesystem::path(directory);
++#else
+       const char* directory = std::getenv("ASTER_HD_TEXTURE_PACK_DIR");
+       if (!directory || !*directory) return {};
+       const auto root = std::filesystem::u8path(directory);
++#endif
+       if (!HDPathWithoutSymlinks(root) || !std::filesystem::is_directory(root)) return {};
+       auto result = std::make_shared<HDTexturePack>();
+       // Library startup parses metadata only. DDS/index files are opened only

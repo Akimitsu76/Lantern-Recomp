@@ -22,6 +22,7 @@ class ExperimentBuildTests(unittest.TestCase):
             with self.subTest(command=command), self.assertRaises(ValueError):
                 builder.compiler_segment(command)
 
+    @unittest.skipUnless(sys.platform == 'linux', 'CLI under test is the Linux research probe requiring resource and /proc.')
     def test_frame_experiments_reject_default_or_human_profile_before_launch(self):
         root = SOURCE.parents[1]
         for options in [[], ['--executable-dir', str(root / '.aster/build/rex-green'),
@@ -37,6 +38,7 @@ class ExperimentBuildTests(unittest.TestCase):
                     self.assertIn('Frame experiments', result.stderr)
                     self.assertNotIn('Traceback', result.stderr)
 
+    @unittest.skipUnless(sys.platform == 'linux', 'CLI under test is the Linux research probe requiring resource and /proc.')
     def test_probe_rejects_conflicting_or_unsafe_fps_options(self):
         root = SOURCE.parents[1]
         for options in (['--fps-target', 'unlimited', '--vsync', 'on'],

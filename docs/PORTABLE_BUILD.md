@@ -6,17 +6,23 @@ do jogo. O port é gerado **localmente a partir do seu dump**.
 
 ## Compatibilidade
 
-- Linux x86-64 com glibc >=2.34, driver Vulkan e fragment shader interlock.
+- Linux x86-64 com glibc >=2.34, driver Vulkan e fragment shader interlock, CPU x86-64-v2.
   O launcher usa Python portátil; o SDK oficial tem requisitos adicionais de
   C++23/libstdc++. Outras distribuições e GPUs ainda precisam de validação.
 - Windows 10/11 x64: o launcher é um `.exe` com Python/Tk embutidos. O gerador
   usa o SDK Windows e D3D12/ROV. A interface foi testada via Wine; a compilação
   e execução **do jogo no Windows real ainda não foram validadas**.
-- Uma toolchain Clang >=18 com biblioteca padrão C++23 é necessária para gerar
-  o jogo. No Linux, instale Clang e headers/bibliotecas de desenvolvimento C/C++
-  da distribuição. No Windows, instale Visual Studio Build Tools 2022 com
-  desenvolvimento C++ x64, Windows SDK e Clang. O launcher procura `vswhere`
-  e carrega o ambiente x64 automaticamente quando disponível.
+- A geração exige Clang >=18 e biblioteca padrão C++23. O código atual do
+  launcher oferece preparação automática dos requisitos ausentes ao confirmar
+  **Gerar port**. Windows usa WinGet e os instaladores oficiais de Build Tools,
+  SDK/Clang e runtime C++; Linux usa pacotes da distribuição e autorização
+  gráfica PolicyKit. A preparação pode exigir administrador e vários GB.
+  WinGet/PolicyKit ausentes e distribuições sem plano conhecido produzem erro
+  explicativo. Drivers de GPU não são instalados por esse procedimento.
+  Os planos e a detecção têm testes automatizados; instalações em máquinas
+  limpas Windows/Linux ainda precisam de validação. A pré-release v0.1.3 inclui
+  essa função nos launchers; pacotes anteriores não a recebem sem uma nova
+  distribuição.
 - O único XEX validado atualmente tem SHA-256
   `3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1`.
   Outra revisão é rejeitada antes de baixar ferramentas ou gerar código.
@@ -48,10 +54,12 @@ Os requisitos de Clang/C++23 e do dump continuam os mesmos.
 3. Selecione a pasta extraída que contém `default.xex` e os demais arquivos do
    jogo. ISO e XEX isolado não são suficientes para esta geração.
 4. Clique **GERAR PORT NATIVO**, ou abra a página **Gerar port**.
-5. Confirme o download das ferramentas oficiais fixadas. Windows: SDK de cerca
-   de 43 MB; Linux: SDK de 116 MB e até 55 MB de fontes públicas adicionais
-   para reproduzir o patch de cache persistente. Os downloads são verificados
-   por SHA-256. Nenhuma ferramenta é instalada globalmente.
+5. Confirme a preparação das dependências e o download das fontes públicas do
+   SDK ReXGlue nas revisões fixadas. A primeira geração compila o SDK gráfico
+   completo nos dois sistemas. Fontes/builds ficam na pasta do usuário;
+   compilador e bibliotecas ausentes podem ser instalados no sistema pelo seu
+   gerenciador oficial, com autorização administrativa. Artefatos verificados
+   são reutilizados; jogar um port já gerado não reinstala a toolchain.
 6. Acompanhe **Gerar port**. As seis etapas mostram downloads em bytes, compilação
    em alvos Ninja e atividade indeterminada quando não existe um total conhecido.
    O launcher verifica o dump, gera C++ pelo ReXGlue,
@@ -93,26 +101,32 @@ nativo. O MSAA é controlado pelo jogo/backend: o launcher não anuncia um falso
 botão para desligá-lo. “Cache de texturas” altera orçamento de memória, não a
 resolução dos arquivos de textura.
 
-A opção **Resolução da janela** inclui **1920x1080 (Full HD)**. Ela controla
-a saída; a renderização interna permanece em 1x (720p). Os testes reproduziram
-áreas pretas com escala interna 2x tanto em 30 quanto em 60 FPS. Por segurança,
-o launcher e o comando de jogo usam 1x, inclusive ao carregar preferências antigas.
-Isso contorna o defeito; a renderização interna em 2x/3x ainda precisa de correção.
+A opção **Resolução da janela** inclui **1920x1080 (Full HD)** e controla a saída.
+Com SDK atualizado pelo patch 0024, Baixa/Média usam 720p interno, Alta 1440p e
+Ultra 4K. **Personalizada** permite escolher escala interna, saída, texturas,
+filtragem, antisserrilhado e FPS separadamente. Por exemplo: saída1080p com
+texturas Ultra e escala1×. Ainda não existe escala interna exata de1080p (1,5×).
+O patch corrigiu a cópia de profundidade nas primeiras cenas testadas em2×/3×;
+desempenho e campanha nessas escalas permanecem em validação. As fontes dos
+dois sistemas recebem a correção; GPU Windows nativa ainda não foi validada.
 
-No backend Linux atualizado, Alta usa reconstrução bicúbica e Ultra acrescenta
-nitidez limitada ao contraste local. Baixa/Padrão usam bilinear. Esse filtro
-espacial é aplicado na saída, sem escalar os buffers internos que causaram áreas
-pretas; ele não substitui as texturas originais por assets HD. O SDK Windows
-atual ainda não recebe esse módulo Linux.
+FSR1 espacial e FXAA são opções do SDK compartilhado. Filtrar a imagem de saída
+não acrescenta detalhes aos arquivos originais. As texturas HD usam recursos
+preparados localmente do próprio dump; seu custo é independente da resolução.
 
 Após atualizar o AppImage, use **Atualizar port** para gerar o backend novo.
 Saves e o cache do usuário são preservados; o build anterior permanece em outra
 pasta. A biblioteca de apresentação é compilada localmente contra o SDK Linux
 0.10.0 fixado e carregada somente no processo do jogo.
 
-Shaders e pipelines já conhecidos são preparados na inicialização. Novos shaders
-compilam em segundo plano no modo `async`; o primeiro encontro ainda pode causar
-engasgos. O backend Linux evita compilar um pipeline provisório na thread de
+**Pré-compilar shaders conhecidos antes de jogar** fica ligada por padrão e
+pode ser desmarcada. Desmarcar preserva o cache; não impede a preparação sob
+demanda. O cache comum aos FPS guarda microcódigo, receitas de pipeline e, no
+Vulkan, dados do driver. Novos pipelines são preparados por workers no modo
+`async`, mas tradução/análise de shaders inéditos ainda pode bloquear e causar
+engasgos. Mudanças de driver, resolução ou versão podem exigir novas variantes.
+Não existe promessa de compilar uma única vez todas as cenas futuras.
+O backend Linux evita compilar um pipeline provisório na thread de
 desenho; os pipelines definitivos são preparados por workers. Shaders com
 efeitos sobre a memória guest preservam o caminho síncrono. Quadros incompletos
 continuam retidos para evitar objetos e sombras desaparecendo. Por isso a
@@ -123,7 +137,7 @@ travadas. O cache persistente é comum a todos os alvos de FPS.
 
 ```sh
 # No código-fonte:
-python3 -m native_port build /caminho/Green_Lantern --download-sdk --jobs 2
+python3 -m native_port build /caminho/Green_Lantern --download-sdk --install-dependencies --jobs 2
 python3 scripts/play_green_lantern.py /caminho/Green_Lantern --validar
 
 # No pacote Linux:
@@ -147,3 +161,7 @@ isso testa o launcher, não substitui testes do jogo em um PC Windows.
 A distribuição usa uma lista explícita de fontes/recursos públicos. `.aster`,
 dumps e gamecode gerado nunca entram no pacote. `PACKAGE.json` contém os hashes
 dos arquivos distribuídos. Consulte `LICENSES` e `THIRD_PARTY_NOTICES.md`.
+
+FSR 1 (EASU + RCAS) e FXAA são compartilhados entre Linux/Windows. Alta prepara automaticamente 253 materiais revisados usados nas dez missões em 2x;
+Ultra em 4x, com o mesmo master Real-ESRGAN em cache. Isso acontece antes da partida;
+veja `HD_TEXTURES.md`. Não é um pacote de texturas completo do jogo.

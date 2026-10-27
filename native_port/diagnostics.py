@@ -51,7 +51,7 @@ def diagnostics(cancel=None):
                         'rea_status': 'not-probed-by-launcher'}
     try:
         if props.is_file() and props.stat().st_size < 65536:
-            values = dict(line.split('=', 1) for line in props.read_text().splitlines()
+            values = dict(line.split('=', 1) for line in props.read_text(encoding='utf8').splitlines()
                           if '=' in line and not line.lstrip().startswith('#'))
             result['ghidra'].update(available=(ghidra_root / 'support/analyzeHeadless').is_file(),
                                     version=values.get('application.version'))

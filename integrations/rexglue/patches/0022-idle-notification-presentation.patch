@@ -1,0 +1,264 @@
+diff --git a/include/rex/ui/imgui_dialog.h b/include/rex/ui/imgui_dialog.h
+--- a/include/rex/ui/imgui_dialog.h
++++ b/include/rex/ui/imgui_dialog.h
+@@ -37,10 +37,14 @@
+   // A fence to signal when the dialog is closed.
+   void Then(rex::thread::Fence* fence);
+ 
+   void Draw();
+ 
++  // Most dialogs animate or poll input continuously. Passive dialogs may
++  // return false while idle, provided new work requests a paint explicitly.
++  virtual bool NeedsContinuousPaint() const { return true; }
++
+  protected:
+   ImGuiDialog(ImGuiDrawer* imgui_drawer);
+ 
+   ImGuiDrawer* imgui_drawer() const { return imgui_drawer_; }
+   ImGuiIO& GetIO();
+diff --git a/include/rex/ui/imgui_drawer.h b/include/rex/ui/imgui_drawer.h
+--- a/include/rex/ui/imgui_drawer.h
++++ b/include/rex/ui/imgui_drawer.h
+@@ -46,10 +46,16 @@
+   const Style& style() const { return style_; }
+ 
+   void AddDialog(ImGuiDialog* dialog);
+   void RemoveDialog(ImGuiDialog* dialog);
+ 
++  // Create on the UI thread; the returned callback may run on any thread.
++  // Requests are marshaled to the UI thread and become no-ops after teardown.
++  // Supported by the SDL context's nonblocking event queue. Returns an empty
++  // function for other contexts; callers must retain their legacy repaint path.
++  std::function<void()> MakeThreadSafePaintRequest() const;
++
+   // Whether Draw would render anything, so a caller that has to marshal to the
+   // UI thread can skip the round trip entirely.
+   bool HasDialogs() const { return !dialogs_.empty(); }
+ 
+   // SetPresenter may be called from the destructor.
+@@ -79,19 +85,24 @@
+ 
+   void SetupFontTexture();
+ 
+   void RenderDrawLists(ImDrawData* data, UIDrawContext& ui_draw_context);
+ 
++  bool NeedsContinuousPaint() const;
++
+   void ClearInput();
+   void OnKey(KeyEvent& e, bool is_down);
+   void UpdateMousePosition(float x, float y);
+   void SwitchToPhysicalMouseAndUpdateMousePosition(const MouseEvent& e);
+ 
+   bool IsDrawingDialogs() const { return dialog_loop_next_index_ != SIZE_MAX; }
+   void DetachIfLastDialogRemoved();
+ 
+   std::optional<ImGuiKey> VirtualKeyToImGuiKey(VirtualKey vkey);
++
++  struct PaintRequestState;
++  std::shared_ptr<PaintRequestState> paint_request_state_;
+ 
+   Window* window_;
+   size_t z_order_;
+   FontSetupCallback font_setup_;
+   StyleSetupCallback style_setup_;
+diff --git a/src/ui/imgui_drawer.cpp b/src/ui/imgui_drawer.cpp
+--- a/src/ui/imgui_drawer.cpp
++++ b/src/ui/imgui_drawer.cpp
+@@ -19,12 +19,16 @@
+ #include <rex/logging.h>
+ #include <rex/ui/imgui_dialog.h>
+ #include <rex/ui/imgui_drawer.h>
+ #include <rex/ui/ui_event.h>
+ #include <rex/ui/window.h>
++#include <rex/ui/windowed_app_context_sdl.h>
+ 
+ #include <imgui.h>
++
++#include <algorithm>
++#include <mutex>
+ 
+ namespace rex {
+ namespace ui {
+ 
+ // File: 'ProggyTiny.ttf' (35656 bytes)
+@@ -86,20 +90,39 @@
+   style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
+ }
+ 
+ }  // namespace
+ 
++struct ImGuiDrawer::PaintRequestState {
++  explicit PaintRequestState(Window* target)
++      : window(target), context(&target->app_context()) {}
++  // Serializes enqueue calls with invalidation. The context can be destroyed
++  // after the drawer even when a producer still retains this state object.
++  std::mutex mutex;
++  Window* window;
++  WindowedAppContext* context;
++};
++
+ ImGuiDrawer::ImGuiDrawer(rex::ui::Window* window, size_t z_order, FontSetupCallback font_setup,
+                          StyleSetupCallback style_setup)
+-    : window_(window),
++    : paint_request_state_(std::make_shared<PaintRequestState>(window)),
++      window_(window),
+       z_order_(z_order),
+       font_setup_(std::move(font_setup)),
+       style_setup_(std::move(style_setup)) {
+   Initialize();
+ }
+ 
+ ImGuiDrawer::~ImGuiDrawer() {
++  // Callbacks may already be queued or held by a notification delivered from
++  // a guest thread. Invalidate before touching window/presenter ownership.
++  {
++    std::lock_guard<std::mutex> lock(paint_request_state_->mutex);
++    paint_request_state_->window = nullptr;
++    paint_request_state_->context = nullptr;
++  }
++  paint_request_state_.reset();
+   SetPresenter(nullptr);
+   SetWindowTextInputActive(false);
+   if (!dialogs_.empty()) {
+     window_->RemoveInputListener(this);
+     if (internal_state_) {
+@@ -111,10 +134,38 @@
+   }
+   if (internal_state_) {
+     ImGui::DestroyContext(internal_state_);
+     internal_state_ = nullptr;
+   }
++}
++
++std::function<void()> ImGuiDrawer::MakeThreadSafePaintRequest() const {
++  // Generic contexts may implement a blocking wakeup pipe. Never hold the
++  // lifetime gate across such an enqueue while UI teardown could be waiting.
++  // SDL's final context posts SDL_PushEvent and does not wait for UI dequeue.
++  if (!dynamic_cast<SDLWindowedAppContext*>(&window_->app_context())) return {};
++  std::weak_ptr<PaintRequestState> weak_state = paint_request_state_;
++  return [weak_state]() {
++    auto state = weak_state.lock();
++    if (!state) return;
++    // Keep the gate through enqueue: teardown cannot leave an in-flight caller
++    // accessing the app context after invalidation has returned.
++    std::lock_guard<std::mutex> lock(state->mutex);
++    if (!state->context) return;
++    // Never capture the dialog/drawer/context itself in the deferred callback.
++    state->context->CallInUIThreadDeferred([weak_state]() {
++      auto state = weak_state.lock();
++      if (!state) return;
++      std::lock_guard<std::mutex> lock(state->mutex);
++      if (state->window) state->window->RequestPaint();
++    });
++  };
++}
++
++bool ImGuiDrawer::NeedsContinuousPaint() const {
++  return std::any_of(dialogs_.cbegin(), dialogs_.cend(),
++                     [](const ImGuiDialog* dialog) { return dialog->NeedsContinuousPaint(); });
+ }
+ 
+ void ImGuiDrawer::AddDialog(ImGuiDialog* dialog) {
+   assert_not_null(dialog);
+   // Check if already added.
+@@ -434,11 +485,11 @@
+ 
+   // Detaching is deferred if the last dialog is removed during drawing, perform
+   // it now if needed.
+   DetachIfLastDialogRemoved();
+ 
+-  if (!dialogs_.empty()) {
++  if (NeedsContinuousPaint()) {
+     // Repaint (and handle input) continuously if still active. In detached mode
+     // there is no presenter; the app drives repaint via its own present loop.
+     if (presenter_) {
+       presenter_->RequestUIPaintFromUIThread();
+     }
+diff --git a/include/rex/ui/overlay/achievement_toast.h b/include/rex/ui/overlay/achievement_toast.h
+--- a/include/rex/ui/overlay/achievement_toast.h
++++ b/include/rex/ui/overlay/achievement_toast.h
+@@ -11,10 +11,11 @@
+  */
+ #pragma once
+ 
+ #include <chrono>
+ #include <deque>
++#include <functional>
+ #include <mutex>
+ #include <optional>
+ #include <rex/ui/overlay/achievement_notification.h>
+ #include <rex/ui/overlay/achievement_icon_cache.h>
+ 
+@@ -33,10 +34,12 @@
+   ~AchievementToastDialog() override;
+ 
+   // Thread-safe: safe to call from any thread, including guest threads.
+   void Push(const rex::system::AchievementEvent& event) override;
+ 
++  bool NeedsContinuousPaint() const override;
++
+  protected:
+   void OnDraw(ImGuiIO& io) override;
+ 
+  private:
+   static constexpr float kDisplaySeconds = 4.5f;
+@@ -45,11 +48,13 @@
+     rex::system::AchievementEvent event;
+     std::chrono::steady_clock::time_point arrived;
+     std::optional<std::chrono::steady_clock::time_point> visible_since;
+   };
+ 
+-  std::mutex mutex_;
++  // Immutable callback only keeps a weak dispatcher token, not the drawer.
++  const std::function<void()> request_paint_;
++  mutable std::mutex mutex_;
+   std::deque<PendingToast> queue_;
+   AchievementIconCache icon_cache_;
+ };
+ 
+ }  // namespace rex::ui
+diff --git a/src/ui/overlay/achievement_toast.cpp b/src/ui/overlay/achievement_toast.cpp
+--- a/src/ui/overlay/achievement_toast.cpp
++++ b/src/ui/overlay/achievement_toast.cpp
+@@ -12,23 +12,39 @@
+ #include <imgui.h>
+ 
+ #include <algorithm>
+ 
+ #include <rex/ui/immediate_drawer.h>
++#include <rex/ui/imgui_drawer.h>
+ 
+ namespace rex::ui {
+ 
+ AchievementToastDialog::AchievementToastDialog(ImGuiDrawer* drawer,
+                                                ImmediateDrawer* immediate_drawer,
+                                                rex::Runtime* runtime)
+-    : AchievementNotificationDialog(drawer), icon_cache_(immediate_drawer, runtime) {}
++    : AchievementNotificationDialog(drawer),
++      request_paint_(drawer->MakeThreadSafePaintRequest()),
++      icon_cache_(immediate_drawer, runtime) {}
+ 
+ AchievementToastDialog::~AchievementToastDialog() {}
+ 
+ void AchievementToastDialog::Push(const rex::system::AchievementEvent& event) {
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    queue_.push_back({event, std::chrono::steady_clock::now()});
++  }
++  // Wake an idle presenter even if no new guest frame is produced. Schedule
++  // outside the queue lock; delivery never mutates UI objects on a guest thread.
++  if (request_paint_) request_paint_();
++}
++
++bool AchievementToastDialog::NeedsContinuousPaint() const {
++  // Keep the previous continuous repaint behavior if the context cannot
++  // provide the lifetime-safe nonblocking wakeup contract.
++  if (!request_paint_) return true;
+   std::lock_guard<std::mutex> lock(mutex_);
+-  queue_.push_back({event, std::chrono::steady_clock::now()});
++  return !queue_.empty();
+ }
+ 
+ void AchievementToastDialog::OnDraw(ImGuiIO& io) {
+   auto now = std::chrono::steady_clock::now();
+ 

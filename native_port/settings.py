@@ -11,7 +11,7 @@ SCHEMA = 2
 
 def defaults(project):
     return {'schema': SCHEMA, 'workspace': str(Path(project) / '.aster'),
-            'source': '', 'build_type': 'Release', 'jobs': 1,
+            'source': '', 'build_type': 'Release', 'jobs': 1, 'hd_texture_pack': '', 'hd_texture_catalog': '',
             'graphics': graphics.defaults()}
 
 
@@ -30,6 +30,9 @@ def validate(data, project):
     result['schema'] = SCHEMA
     if not isinstance(result['workspace'], str) or not isinstance(result['source'], str):
         raise PortError('SETTINGS_VALUE', 'Caminhos de configuração inválidos.')
+    for field in ('hd_texture_pack', 'hd_texture_catalog'):
+        if not isinstance(result[field], str) or len(result[field]) > 4096:
+            raise PortError('SETTINGS_VALUE', 'Caminho de texturas HD inválido.')
     work = Workspace(result['workspace'], project)
     source = Path(result['source']).expanduser().resolve() if result['source'] else None
     if source and (source == Path(project).resolve() or work.root.is_relative_to(source)
@@ -40,17 +43,14 @@ def validate(data, project):
     if type(result['jobs']) is not int or not 1 <= result['jobs'] <= 64:
         raise PortError('SETTINGS_VALUE', 'Número de tarefas deve ficar entre 1 e 64.')
     previous_graphics = result['graphics']
-    if (sys.platform == 'linux' and isinstance(previous_graphics, dict)
-            and 'upscaler' not in previous_graphics and previous_graphics.get('preset') == 'custom'):
-        # Preserve the intent of legacy High/Ultra custom configurations, while
-        # keeping any explicitly chosen filter unchanged on later updates.
+    if isinstance(previous_graphics, dict):
         previous_graphics = dict(previous_graphics)
-        quality = previous_graphics.get('texture_quality')
-        previous_graphics['upscaler'] = {'high': 'cubic', 'ultra': 'sharp'}.get(quality, 'bilinear')
-    if sys.platform != 'linux' and isinstance(previous_graphics, dict):
-        previous_graphics = dict(previous_graphics, upscaler='bilinear')
+        # Upgrade legacy Linux-only filters to the shared spatial backend.
+        if previous_graphics.get('upscaler') in ('cubic', 'sharp'):
+            previous_graphics['upscaler'] = 'fsr1'
+        elif 'upscaler' not in previous_graphics and previous_graphics.get('preset') == 'custom':
+            previous_graphics['upscaler'] = ('fsr1' if previous_graphics.get('texture_quality') in ('high', 'ultra') else 'bilinear')
     result['graphics'] = graphics.validate(previous_graphics)
-    result['graphics']['render_scale'] = 1  # Supersampling is visually broken for this title.
     return result
 
 

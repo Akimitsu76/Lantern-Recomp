@@ -1,0 +1,17 @@
+diff --git a/cmake/rexglue_install.cmake b/cmake/rexglue_install.cmake
+--- a/cmake/rexglue_install.cmake
++++ b/cmake/rexglue_install.cmake
+@@ -191,6 +191,8 @@
+ #
+ # Windows: HKCU\Software\Kitware\CMake\Packages\rexglue  (REG_SZ, value name = MD5 hash)
+ # Unix:    ~/.cmake/packages/rexglue/<hash>               (file containing prefix path)
++option(ASTER_SKIP_USER_PACKAGE_REGISTRY "Keep isolated SDK installation out of the user registry" OFF)
++if(NOT ASTER_SKIP_USER_PACKAGE_REGISTRY)
+ install(CODE [[
+     # Normalize path casing on Windows before hashing to avoid duplicate entries
+     if(CMAKE_HOST_WIN32)
+@@ -215,3 +217,4 @@
+     message(STATUS "Registered rexglue in CMake user package registry")
+     message(STATUS "  -> ${CMAKE_INSTALL_PREFIX}")
+ ]])
++endif()

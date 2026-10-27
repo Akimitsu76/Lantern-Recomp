@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import struct
 import tempfile
@@ -76,6 +77,7 @@ class PETests(unittest.TestCase):
                 source_sha256='known',normalized_path=str(p),normalized_sha256=hashlib.sha256(b'example').hexdigest()))
             self.assertIsNone(verified_analysis(work,'known'))
 
+    @unittest.skipIf(os.name == 'nt', 'Optional local decoder fixture is built for Linux; portable parser tests still run.')
     def test_real_decoder_on_original_synthetic_fixture(self):
         decoder=PROJECT/'.aster/build/xenon/aster-xex-inspect'
         if not decoder.exists():self.skipTest('Local decoder not built')
@@ -87,6 +89,7 @@ class PETests(unittest.TestCase):
             self.assertEqual(output.read_bytes(),expected)
             self.assertEqual(p.read_bytes(),x)
 
+    @unittest.skipIf(os.name == 'nt', 'Optional local native leaf experiment is a Linux ELF executable.')
     def test_native_leaf_artifact_semantics(self):
         binary=PROJECT/'.aster/analysis/green-lantern/leaf-native-probe'
         if not binary.exists():self.skipTest('Native leaf experiment not built')

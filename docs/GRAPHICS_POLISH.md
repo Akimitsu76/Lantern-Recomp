@@ -2,10 +2,10 @@
 
 ## Atualização: presets, launcher e GPU
 
-O launcher agora expõe presets **Baixa/Padrão/Alta/Ultra/Personalizada** e os
+O launcher agora expõe presets **Baixa/Média/Alta/Ultra/Personalizada** e os
 alvos **30/60/ilimitado** na aba **Gráficos**. Os presets usam CVars reais de
 resolução interna, MSAA, anisotrópico, cache de texturas e dithering; o guia e a
-tabela estão em [GRAPHICS_PRESETS.md](GRAPHICS_PRESETS.md). O preset **Padrão**
+tabela estão em [GRAPHICS_PRESETS.md](GRAPHICS_PRESETS.md). O preset **Média**
 preserva a configuração principal anterior. **Alta/Ultra** e o alvo ilimitado
 ainda precisam de avaliação humana pareada; não são otimizações certificadas.
 

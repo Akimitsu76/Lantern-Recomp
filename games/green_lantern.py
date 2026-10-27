@@ -22,7 +22,7 @@ class GreenLantern:
                 'known_revision': False}
 
     def dependencies(self):
-        return ('clang', 'cmake', 'ninja')
+        return ('clang', 'cmake', 'ninja', 'git')
 
     def plan(self, source):
         return [

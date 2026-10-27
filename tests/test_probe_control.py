@@ -9,6 +9,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+if sys.platform != 'linux':
+    raise unittest.SkipTest('Linux research input probe requires fcntl and verified X11 window controls.')
+
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
 import rex_x11_input as x11_input

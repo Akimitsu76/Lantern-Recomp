@@ -8,19 +8,18 @@ em **Jogar agora**. A validação roda em segundo plano; se falhar, o motivo
 aparece no status e em **Diagnóstico**. Os botões normais de compilar e iniciar
 continuam indisponíveis enquanto o backend integral não for validado.
 
-Na aba **Gráficos**, escolha o preset (**Baixa**, **Padrão**, **Alta**, **Ultra**
+Na aba **Gráficos**, escolha o preset (**Baixa**, **Média**, **Alta**, **Ultra**
 ou **Personalizada**) e o alvo (**30 fps**, **60 fps** ou **ILIMITADO**). A tabela
 completa está em [GRAPHICS_PRESETS.md](GRAPHICS_PRESETS.md).
 
-- **30 fps** é o padrão e usa o perfil principal.
-- **60 fps** é opt-in, usa o build v9 e o perfil isolado
-  `.aster/runtime/green-lantern-60fps/`.
-- **Ilimitado** é opt-in, usa o build v10, VSync desligado, apresentação imediata
-  e o perfil `.aster/runtime/green-lantern-unlimited/`.
+- **30 fps** é o padrão e usa o perfil do usuário.
+- **60 fps** é opt-in e usa o build v9; compartilha o perfil do usuário.
+- **Ilimitado** é opt-in, usa o build v10 com VSync desligado e apresentação
+  imediata; compartilha o mesmo perfil do usuário.
 
-Os dois modos experimentais pedem confirmação e mostram aviso. Eles não alteram
-o save de 30 fps. O launcher nunca troca de alvo sozinho; as opções valem para a
-próxima sessão.
+Os dois modos experimentais pedem confirmação e mostram aviso. Eles usam o mesmo
+save do usuário; não criam um save separado. O launcher nunca troca de alvo
+sozinho; as opções valem para a próxima sessão.
 
 **Jogar agora** só habilita quando a pasta tem `default.xex` e o build/referência
 FSI do alvo selecionado existem. **Jogo e arquivos** mostra os caminhos, os
@@ -43,7 +42,7 @@ VSync ligado:
 python3 scripts/play_green_lantern.py --shader-mode async --vsync on
 ```
 
-Para o alvo 60 opt-in, use o build experimental v9 e o perfil isolado:
+Para o alvo 60 opt-in, use o build experimental v9; o perfil é compartilhado:
 
 ```sh
 python3 scripts/play_green_lantern.py --fps-target 60 --validar
@@ -51,9 +50,9 @@ python3 scripts/play_green_lantern.py --fps-target 60
 ```
 
 A validação do modo 60 usa `.aster/reports/rexglue-runtime-probe-60fps.json`
-(probe 057, FSI) e não substitui a referência principal 047. Os saves, cache e
-configurações do modo 60 ficam em `.aster/runtime/green-lantern-60fps/`; os do
-modo 30 continuam em `.aster/runtime/green-lantern/`.
+(probe 057, FSI) e não substitui a referência principal 047. Saves, cache e
+configurações ficam no perfil compartilhado `.aster/runtime/green-lantern/`
+para todos os alvos.
 
 Para o alvo ilimitado opt-in:
 
@@ -63,9 +62,9 @@ python3 scripts/play_green_lantern.py --fps-target unlimited
 ```
 
 O modo ilimitado usa o build v10
-`.aster/build/rex-fps-unlimited-v10/aster_green_lantern` e o perfil
-`.aster/runtime/green-lantern-unlimited/`. Ele exige VSync desligado e
-apresentação imediata; o script rejeita combinações contrárias. A referência é
+`.aster/build/rex-fps-unlimited-v10/aster_green_lantern` e o perfil compartilhado
+`.aster/runtime/green-lantern/`. Ele exige VSync desligado e apresentação
+imediata; o script rejeita combinações contrárias. A referência é
 `.aster/reports/rexglue-runtime-probe-unlimited.json`, gerada em FSI com
 38.627 apresentações em 90,16 s, sem fatal. O probe ainda registra
 `gameplay_verified=false`; a captura X11 de gameplay no Xwayland não funciona
@@ -141,11 +140,9 @@ python3 scripts/play_green_lantern.py "/caminho/para/Green_Lantern"
 ```
 
 Informe a pasta que contém `default.xex`. A pasta original permanece protegida
-contra escritas relativas do runtime. Saves, cache e configurações do modo 30
-ficam em `.aster/runtime/green-lantern/`; o modo 60 usa
-`.aster/runtime/green-lantern-60fps/`; o ilimitado usa
-`.aster/runtime/green-lantern-unlimited/`. O launcher mostra o caminho do log de
-cada sessão.
+contra escritas relativas do runtime. Saves, cache e configurações ficam em
+`.aster/runtime/green-lantern/` para todos os alvos. O launcher mostra o caminho
+do log de cada sessão.
 
 O launcher e os novos probes compartilham um bloqueio para impedir duas sessões
 usando os mesmos saves ao mesmo tempo. O bloqueio é liberado quando o processo

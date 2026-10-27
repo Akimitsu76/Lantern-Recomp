@@ -75,9 +75,9 @@ cena/atividade não foi pareada com 30 fps. Veja
 
 ## Presets gráficos e alvo ilimitado
 
-Os presets **Baixa/Padrão/Alta/Ultra** mudam a resolução interna (1x/2x/3x), MSAA,
+Os presets **Baixa/Média/Alta/Ultra** mudam a resolução interna (1x/2x/3x), MSAA,
 filtragem anisotrópica, limites do cache de texturas e dithering por CVars reais.
-**Padrão** conserva os valores anteriores (720p interno, MSAA 2x, aniso 4x,
+**Média** conserva os valores anteriores (720p interno, MSAA 2x, aniso 4x,
 cache 384/768/24 MB). **Alta** e **Ultra** renderizam em 1440p/2160p internos e
 aumentam o cache de texturas; ainda não há medição pareada de GPU/VRAM nem
 avaliação humana desses presets. O guia completo está em

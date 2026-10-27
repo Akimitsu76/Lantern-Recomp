@@ -1,0 +1,95 @@
+--- a/include/rex/graphics/flags.h
++++ b/include/rex/graphics/flags.h
+@@ -22,10 +22,11 @@
+ // GPU Resolution / Readback / Queries
+ REXCVAR_DECLARE(int32_t, resolution_scale);
+ REXCVAR_DECLARE(int32_t, draw_resolution_scale_x);
+ REXCVAR_DECLARE(int32_t, draw_resolution_scale_y);
+ REXCVAR_DECLARE(bool, resolve_resolution_scale_fill_half_pixel_offset);
++REXCVAR_DECLARE(bool, shader_preload);
+ REXCVAR_DECLARE(bool, draw_resolution_scaled_texture_offsets);
+ REXCVAR_DECLARE(std::string, readback_resolve);
+ REXCVAR_DECLARE(bool, readback_resolve_half_pixel_offset);
+ REXCVAR_DECLARE(bool, readback_memexport);
+ REXCVAR_DECLARE(bool, readback_memexport_fast);
+--- a/src/graphics/flags.cpp
++++ b/src/graphics/flags.cpp
+@@ -10,10 +10,14 @@
+  */
+ 
+ #include <rex/graphics/flags.h>
+ #include <rex/logging.h>
+ #include <rex/ui/renderdoc_api.h>
++
++REXCVAR_DEFINE_BOOL(shader_preload, true, "GPU/Shader",
++                    "Precompile known shader and pipeline variants before starting the game")
++    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+ 
+ REXCVAR_DEFINE_BOOL(draw_resolution_scaled_texture_offsets, true, "GPU/Shader",
+                     "Scale texture offsets with draw resolution");
+ 
+ REXCVAR_DEFINE_BOOL(gpu_allow_invalid_fetch_constants, false, "GPU",
+--- a/src/graphics/d3d12/pipeline_cache.cpp
++++ b/src/graphics/d3d12/pipeline_cache.cpp
+@@ -464,10 +464,15 @@
+         // condition will be caused by translating twice in parallel.
+         continue;
+       }
+       // Loaded from the current storage - don't write again.
+       shader->set_ucode_storage_index(shader_storage_index_);
++      // Keep persistent storage/index bookkeeping even when startup prewarm
++      // is disabled. Runtime draws still compile and record new variants.
++      if (!REXCVAR_GET(shader_preload)) {
++        continue;
++      }
+       // Create new threads if the currently existing threads can't keep up
+       // with file reading, but not more than the number of logical processors
+       // minus one.
+       size_t shader_translation_threads_needed;
+       {
+@@ -542,10 +547,13 @@
+     }
+ 
+     size_t pipelines_created = 0;
+     for (const PipelineStoredDescription& pipeline_stored_description :
+          pipeline_stored_descriptions) {
++      if (!REXCVAR_GET(shader_preload)) {
++        break;
++      }
+       const PipelineDescription& pipeline_description = pipeline_stored_description.description;
+       // TODO(Triang3l): On Vulkan, skip pipelines requiring unsupported device
+       // features (to keep the cache files mostly shareable across devices).
+       // Skip already known pipelines - those have already been enqueued.
+       auto found_range = pipelines_.equal_range(pipeline_stored_description.description_hash);
+--- a/src/graphics/vulkan/pipeline_cache.cpp
++++ b/src/graphics/vulkan/pipeline_cache.cpp
+@@ -564,10 +564,13 @@
+            shader_storage_file_);
+   }
+ 
+   // Translate shader modifications needed for stored pipelines.
+   for (const std::pair<uint64_t, uint64_t>& translation_needed : shader_translations_needed) {
++    if (!REXCVAR_GET(shader_preload)) {
++      break;
++    }
+     auto shader_it = shaders_.find(translation_needed.first);
+     if (shader_it == shaders_.end()) {
+       continue;
+     }
+     auto* shader = shader_it->second;
+@@ -588,10 +591,15 @@
+   // Create the pipelines.
+   std::vector<PipelineCreationArguments> pipeline_creations;
+   pipeline_creations.reserve(pipeline_stored_descriptions.size());
+   for (const PipelineStoredDescription& pipeline_stored_description :
+        pipeline_stored_descriptions) {
++    // Do not clear the descriptions vector: its valid size is also used to
++    // retain the cache file. Skipping prewarm must never erase known work.
++    if (!REXCVAR_GET(shader_preload)) {
++      break;
++    }
+     const PipelineDescription& pipeline_description = pipeline_stored_description.description;
+ 
+     auto find_it = pipelines_.find(pipeline_description);
+     if (find_it != pipelines_.end()) {
+       continue;

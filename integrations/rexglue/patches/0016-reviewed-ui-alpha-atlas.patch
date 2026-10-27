@@ -1,0 +1,218 @@
+--- a/include/rex/graphics/pipeline/texture/hd_override.h
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -85,18 +85,68 @@
+   }
+   return true;
+ }
++// Preserve the observed base-only UI sampling contract even though the
++// prepared DDS carries a complete validated chain. No higher host mip is visible.
++inline uint32_t HDVisibleMipCount(uint32_t source_max_level, uint32_t host_count) {
++  return source_max_level == 0 ? 1u : host_count;
++}
++inline bool IsUIBaseOnlySourceEligible(bool has_ui_geometry, uint32_t format,
++    uint32_t mip_max_level, uint32_t mip_page, bool packed_mips) {
++  return has_ui_geometry && format == 20 && mip_max_level == 0 && !mip_page && !packed_mips;
++}
++// Separate verified monochrome UI atlas contract; never accepted by legacy packs.
++inline bool HDValidateUIGlyphs(const std::filesystem::path& path, uint32_t width,
++    uint32_t height, const std::string& expected_hash) {
++  std::string text;
++  if (!IsHDFingerprint(expected_hash) ||
++      !HDReadSmallFile(path / "ui-glyphs.index", 256u << 10, text) ||
++      rex::hash_bytes(text) != expected_hash) return false;
++  std::istringstream stream(text);
++  std::string line, magic, extra;
++  uint32_t count = 0;
++  if (!std::getline(stream, line)) return false;
++  std::istringstream header(line);
++  if (!(header >> magic >> count) || (header >> extra) ||
++      magic != "ASTERUIGLYPHS1" || !count || count > 4096) return false;
++  struct Rect { uint32_t x, y, w, h; };
++  std::vector<Rect> rectangles;
++  std::unordered_set<uint32_t> codepoints;
++  for (uint32_t i = 0; i < count; ++i) {
++    if (!std::getline(stream, line)) return false;
++    std::istringstream row(line);
++    uint32_t cp, page, x, y, w, h, advance;
++    int32_t xo, yo;
++    if (!(row >> cp >> page >> x >> y >> w >> h >> xo >> yo >> advance) ||
++        (row >> extra) || cp > 0x10ffff || !codepoints.insert(cp).second || page ||
++        x > width || y > height || w > width - x || h > height - y ||
++        (!w != !h) || xo < -128 || xo > 127 || yo < -128 || yo > 127 ||
++        advance > 255) return false;
++    if (w && h) {
++      for (const auto& r : rectangles)
++        if (x < r.x + r.w && r.x < x + w && y < r.y + r.h && r.y < y + h)
++          return false;
++      rectangles.push_back({x, y, w, h});
++    }
++  }
++  return !std::getline(stream, line);
++}
+ inline std::shared_ptr<const HDTextureReplacement> HDReadReplacement(
+     const std::filesystem::path& path, size_t& remaining_bytes,
+-    const std::string* library_dds_hash = nullptr, uint64_t library_dds_size = 0) {
++    const std::string* library_dds_hash = nullptr, uint64_t library_dds_size = 0,
++    bool ui_atlas = false) {
+       std::string index_text;
+       if (!HDReadSmallFile(path / "texture.index", 512, index_text)) return {};
+       std::istringstream index(index_text);
+-      std::string magic, expected_dds_hash, classification, trailing;
++      std::string magic, expected_dds_hash, classification, trailing, glyphs_hash;
+       auto result = std::make_shared<HDTextureReplacement>();
+       if (!(index >> magic >> result->source_format >> result->source_width >>
+             result->source_height >> result->canonical_bc_xxh3_128 >>
+-            expected_dds_hash >> classification) || (index >> trailing) ||
+-          magic != "ASTERHD1" || classification != "reviewed-color-opaque" ||
++            expected_dds_hash >> classification)) return {};
++      if (ui_atlas && !(index >> glyphs_hash)) return {};
++      if ((index >> trailing) ||
++          (ui_atlas ? (magic != "ASTERUI1" || classification != "reviewed-ui-straight" ||
++                       result->source_format != 20) :
++                      (magic != "ASTERHD1" || classification != "reviewed-color-opaque")) ||
+           (result->source_format != 18 && result->source_format != 20) ||
+           result->source_width < 64 || result->source_height < 64 ||
+           result->source_width > 2048 || result->source_height > 2048 ||
+@@ -105,6 +155,8 @@
+           !IsHDFingerprint(result->canonical_bc_xxh3_128) ||
+           !IsHDFingerprint(expected_dds_hash) ||
+           (library_dds_hash && expected_dds_hash != *library_dds_hash)) return {};
++      if (ui_atlas && (result->source_width > 1024 || result->source_height > 1024 ||
++          !HDValidateUIGlyphs(path, result->source_width, result->source_height, glyphs_hash))) return {};
+       if (!HDPathWithoutSymlinks(path / "texture.dds") ||
+           !std::filesystem::is_regular_file(path / "texture.dds")) return {};
+       std::ifstream file(path / "texture.dds", std::ios::binary | std::ios::ate);
+@@ -140,6 +192,32 @@
+       } while (count < 14);
+       if (HDReadWord(dds, 28) != count || offset + 128 != dds.size() ||
+           result->mips.back().width != 1 || result->mips.back().height != 1) return {};
++      if (ui_atlas) {
++        // First UI contract is a monochrome white coverage atlas only. All BC3
++        // color endpoints stay white, including hidden RGB, preventing fringes.
++        bool transparent = false, covered = false;
++        for (size_t block = 128; block < dds.size(); block += 16)
++          for (size_t component = 8; component < 12; ++component)
++            if (dds[block + component] != 255) return {};
++        for (size_t block = 128; block < 128 + result->mips.front().size; block += 16) {
++          uint32_t alpha[8] = {dds[block], dds[block + 1]};
++          if (alpha[0] > alpha[1]) {
++            for (uint32_t i = 2; i < 8; ++i)
++              alpha[i] = ((8 - i) * alpha[0] + (i - 1) * alpha[1]) / 7;
++          } else {
++            for (uint32_t i = 2; i < 6; ++i)
++              alpha[i] = ((6 - i) * alpha[0] + (i - 1) * alpha[1]) / 5;
++            alpha[6] = 0; alpha[7] = 255;
++          }
++          uint64_t indices = 0;
++          for (uint32_t i = 0; i < 6; ++i) indices |= uint64_t(dds[block + 2 + i]) << (8 * i);
++          for (uint32_t i = 0; i < 16; ++i) {
++            const auto value = alpha[(indices >> (3 * i)) & 7];
++            transparent |= value < 255; covered |= value > 0;
++          }
++        }
++        if (!transparent || !covered) return {};
++      }
+       remaining_bytes -= size_t(length);
+       result->bytes.assign(dds.begin() + 128, dds.end());
+       return result;
+@@ -249,6 +327,33 @@
+   // Exactly count records; additional blank records are rejected too.
+   if (std::getline(stream, line)) return {};
+   return result;
++}
++inline std::shared_ptr<const HDTexturePack> LoadUITexturePack() {
++  // Explicit experimental UI channel. Legacy material classification and shader,
++  // LOD, normalized-coordinate and CPU-authored-memory gates remain unchanged.
++  static const auto pack = []() -> std::shared_ptr<const HDTexturePack> {
++    try {
++#ifdef _WIN32
++      const wchar_t* directory = ::_wgetenv(L"ASTER_UI_TEXTURE_PACK_DIR");
++      if (!directory || !*directory) return {};
++      const auto root = std::filesystem::path(directory);
++#else
++      const char* directory = std::getenv("ASTER_UI_TEXTURE_PACK_DIR");
++      if (!directory || !*directory) return {};
++      const auto root = std::filesystem::u8path(directory);
++#endif
++      if (!HDPathWithoutSymlinks(root) || !std::filesystem::is_directory(root)) return {};
++      size_t remaining = 32u << 20;
++      auto entry = HDReadReplacement(root, remaining, nullptr, 0, true);
++      if (!entry) return {};
++      auto result = std::make_shared<HDTexturePack>();
++      result->geometries.insert(HDTexturePack::Geometry(entry->source_format,
++          entry->source_width, entry->source_height));
++      result->entries.emplace(entry->canonical_bc_xxh3_128, std::move(entry));
++      return result;
++    } catch (const std::exception&) { return {}; }
++  }();
++  return pack;
+ }
+ inline std::shared_ptr<const HDTexturePack> LoadHDTexturePack() {
+   // Validate the entire bounded pack before enabling any replacement. Bad entries
+--- a/include/rex/graphics/pipeline/texture/cache.h
++++ b/include/rex/graphics/pipeline/texture/cache.h
+@@ -114,7 +114,7 @@
+   virtual void RequestTextures(uint32_t used_texture_mask);
+   void SetHDTextureDrawEligible(bool eligible) {
+     // Off and rejected packs retain the native binding-cache behavior.
+-    eligible = eligible && bool(LoadHDTexturePack());
++    eligible = eligible && (bool(LoadHDTexturePack()) || bool(LoadUITexturePack()));
+     if (hd_draw_eligible_ != eligible) {
+       hd_draw_eligible_ = eligible;
+       ResetTextureBindings();
+@@ -217,7 +217,7 @@
+     void SetHDReplacement(std::shared_ptr<const HDTextureReplacement> replacement) {
+       hd_replacement_ = std::move(replacement);
+     }
+-    uint32_t host_mip_count() const { return hd_replacement_ ? uint32_t(hd_replacement_->mips.size()) : key_.mip_max_level + 1; }
++    uint32_t host_mip_count() const { return hd_replacement_ ? HDVisibleMipCount(key_.mip_max_level, uint32_t(hd_replacement_->mips.size())) : key_.mip_max_level + 1; }
+     void DetachForRetirement();
+     bool hd_failed() const { return hd_failed_; }
+     void SetHDFailed() { hd_failed_ = true; }
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -916,12 +916,18 @@
+ std::shared_ptr<const HDTextureReplacement> TextureCache::FindHDReplacement(TextureKey key, bool request_ranges) {
+   try {
+     auto pack = LoadHDTexturePack();
+-    if (!pack || key.scaled_resolve || key.signed_separate || !key.base_page ||
++    auto ui_pack = LoadUITexturePack();
++    if ((!pack && !ui_pack) || key.scaled_resolve || key.signed_separate || !key.base_page ||
+         key.dimension != xenos::DataDimension::k2DOrStacked || key.GetDepthOrArraySize() != 1 ||
+-        !pack->HasGeometry(uint32_t(key.format), key.GetWidth(), key.GetHeight())) return {};
++        ((!pack || !pack->HasGeometry(uint32_t(key.format), key.GetWidth(), key.GetHeight())) &&
++         (!ui_pack || !ui_pack->HasGeometry(uint32_t(key.format), key.GetWidth(), key.GetHeight())))) return {};
+     uint32_t max_level = 0;
+     for (uint32_t size = std::max(key.GetWidth(), key.GetHeight()); size > 1; size >>= 1) ++max_level;
+-    if (key.mip_max_level != max_level) return {};
++    const bool opaque_full_chain = key.mip_max_level == max_level;
++    const bool ui_base_only = IsUIBaseOnlySourceEligible(
++        ui_pack && ui_pack->HasGeometry(uint32_t(key.format), key.GetWidth(), key.GetHeight()),
++        uint32_t(key.format), key.mip_max_level, key.mip_page, key.packed_mips);
++    if (!opaque_full_chain && !ui_base_only) return {};
+     const auto layout = key.GetGuestLayout();
+     if (layout.packed_level == 0 || !layout.base.level_data_extent_bytes ||
+         layout.base.level_data_extent_bytes > (16u << 20)) return {};
+@@ -939,7 +945,11 @@
+     }
+     const auto fingerprint = rex::hash_bytes(std::string_view(
+         reinterpret_cast<const char*>(linear.data()), linear.size()));
+-    return pack->Find(fingerprint, uint32_t(key.format), key.GetWidth(), key.GetHeight());
++    if (pack && opaque_full_chain) {
++      auto replacement = pack->Find(fingerprint, uint32_t(key.format), key.GetWidth(), key.GetHeight());
++      if (replacement) return replacement;
++    }
++    return ui_base_only ? ui_pack->Find(fingerprint, uint32_t(key.format), key.GetWidth(), key.GetHeight()) : nullptr;
+   } catch (const std::exception&) { return {}; }
+ }
+ 
+--- a/src/graphics/vulkan/texture_cache.cpp
++++ b/src/graphics/vulkan/texture_cache.cpp
+@@ -2012,6 +2012,7 @@
+   view_create_info.components.b = GetComponentSwizzle(host_swizzle, 2);
+   view_create_info.components.a = GetComponentSwizzle(host_swizzle, 3);
+   view_create_info.subresourceRange = ui::vulkan::util::InitializeSubresourceRange();
++  view_create_info.subresourceRange.levelCount = host_mip_count();
+   switch (dimension) {
+     case xenos::DataDimension::k3D:
+       view_create_info.viewType = VK_IMAGE_VIEW_TYPE_3D;

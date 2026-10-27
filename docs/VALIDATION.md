@@ -1,26 +1,64 @@
-# Validação EASU experimental (posterior à preparação v0.1.2)
+# Validação executada — atualização em 24/10/2026
 
-- 177 testes passaram em Xvfb, sem falhas ou skips no ambiente local.
-- Seis variantes de shaders compiladas e verificadas por spirv-val; os dois novos shaders usam EASU da AMD com licença MIT.
-- Sessão isolada 075: 150,4 segundos em 1920x1080/30 FPS, EASU e dithering, movimento e combate no início da missão 1. Foram observadas 5.089 chamadas de apresentação, sem mensagens fatais ou destinos não registrados. O teste terminou por prazo, com código de saída do jogo 0; o wrapper mantém ready=false porque não certifica jogabilidade completa.
-- Foram inspecionadas capturas da janela do processo de teste. Nenhuma área preta semelhante à regressão de supersampling foi vista nessa amostra; isso não certifica todas as cenas.
-- XEX manteve SHA-256 3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1 antes/depois.
-- Não foi medido ganho comparativo de qualidade ou desempenho contra um trajeto idêntico com bilinear. 1440p e a queda para bilinear acima de 2x não tiveram teste de gameplay nesta etapa.
-- AppImage experimental abriu em perfil isolado; Windows não recebeu um backend EASU.
+## Revisão de FPS e portabilidade
 
-# Validação da atualização v0.1.2
+Ver [RELEASE_READINESS.md](RELEASE_READINESS.md) para os testes atuais de 60 FPS,
+ilimitado, reutilização do cache, correções Windows e critérios pendentes.
+A candidata continua experimental; registros históricos abaixo não a certificam.
 
-- Regressão em display virtual: 176 testes, sem falhas e sem skips no ambiente local com artefatos de integração.
-- Linux: geração pelo AppImage e validação do worker; ABI do presenter fixada no SDK 0.10.0; quatro variantes SPIR-V validadas.
-- Sessão 073: 120 segundos, Ultra/nitidez, saída 1080p/60 FPS, movimento e ataques; sem fatal ou destino não registrado.
-- Sessão 074: 180 segundos, Alta/bicúbico com dithering, saída 1080p/30 FPS, movimento e combate; sem fatal ou destino não registrado. Após 80 segundos, 2.908 intervalos de log PRESENT: mediana 33 ms, p99 35 ms, máximo 50 ms. São intervalos do backend, não medições de scanout nem garantia para outras cenas.
-- Os comparativos anteriores não repetiram o mesmo trajeto; não sustentam uma porcentagem de ganho de desempenho.
-- Saves principais preservados por conferência de hashes. Atualizações de GPU podem reutilizar CPU previamente validada quando as entradas de geração não mudaram.
-- Windows: launcher empacotado e smoke test via Wine; jogo em Windows real continua sem validação.
+## Biblioteca da campanha — 24/10/2026
 
-## Histórico anterior (não representa todos os recursos atuais)
+- 253 materiais difusos opacos revisados, com usos registrados nas dez missões,
+  preparados em2x e4x. Alta criou238 masters novos e reutilizou15; Ultra reutilizou
+  todos, sem nova inferência. A primeira preparação local Alta levou2097,9s nesta
+  máquina; o tempo não deve ser tratado como previsão para outros PCs.
+- O carregador C++ real aceitou todos253 DDS em cada escala, com mipmaps completos
+  e liberação das referências fracas. Payload DDS total:272.764.600 bytes emAlta
+  e1.091.047.096 emUltra. Isso não significa que253materiais apareceram na tela.
+- Revisão visual de oito folhas comparou todos253 atlas originais/resultados2x;
+  não houve perda grosseira de layout/cor observada. Não certifica cada texel,
+  costuraUV ou amostragem do jogo. Ultra usa os mesmos masters4x.
+- Probes com biblioteca: Alta/Ultra180s em1080p chegaram ao combate inicial;
+  respectivamente5800/5762 apresentações, saída0, semfatal/destino não registrado.
+  Renderer registrou quatro/cinco recursosHD. Não são benchmarks deFPS nem
+  certificação da campanha completa. XEX e seis saves originais mantiveramSHA256.
+- 307 testes Linux aprovados (1skip) e149 Windows/Wine (2skips). Incluem cache,
+  retomada após interrupção, bibliotecas, Unicode, hashes, presets e controles.
+- A revisão final0014 aponta o LZX às fontes regulares canônicas de libmspack,
+  idênticas aos antigos alvos symlink. SDK recompilado; essa mudança de caminho
+  não altera lógica de gráficos. Windows nativo/D3D12, outrasGPUs, campanha
+  completa e60FPS com esta revisão continuam pendentes.
 
-# Validação executada — 22–23/10/2026
+
+## Presets e texturas locais — 24/10/2026
+
+- 265 testes Linux em Xvfb aprovados, um skip de fixture privada; 107 testes
+  de presets, interface, cache e pipeline Windows em Wine aprovados, um skip.
+- 47 contratos C++ reais do carregador aprovados: 19 de escala/limites,
+  oito de pacote legado e 20 de lote. Incluem 2x/4x BC1/BC3, dimensões 8192,
+  eixos incompatíveis, escalas inválidas, orçamento e caminhos inseguros.
+- Pipeline executado no dump suportado: 15 difusos opacos extraídos por hashes
+  exatos e preparados em Alta2x/Ultra4x. Ultra reutilizou os masters de IA;
+  os dois lotes têm cadeia completa de mipmaps e validação de integridade.
+- Linux, 30FPS e saída 1920x1080: probe Alta150s (4.880 apresentações) e
+  Ultra180s (5.774 apresentações) alcançaram o início da fase de Oa. Ambos
+  terminaram com código0, sem fatal ou destino não registrado. Essas contagens
+  não são benchmark de FPS, pois incluem menus, carregamento e captura.
+- O renderer registrou quatro materiais HD distintos em cada sessão; tamanhos
+  host eram exatamente2x em Alta e4x em Ultra. Isso não prova que todos os15
+  materiais passaram pelos caminhos de amostragem elegíveis ou apareceram na tela.
+- Capturas inspecionadas mostram personagem, cenário e efeitos sem as grandes
+  áreas pretas anteriores. Não certificam todos os materiais, sombras ou emendas.
+  XEX e seis arquivos de saves originais permaneceram com os mesmos SHA256.
+- AppImage e EXE foram empacotados a partir das mesmas fontes. Smokes de
+  interface usam dados e telas virtuais isolados; Windows real/D3D12, IA Vulkan
+  em Windows real, outras GPUs, 60FPS e campanha completa continuam pendentes.
+- Evidências privadas: hd-presets-{high,ultra}-gameplay-validation.json,
+  hd-scales-contract-validation.json e testes/empacotamento em .aster/reports.
+  Não publicar esses logs ou capturas junto das fontes.
+
+Os registros abaixo são históricos e não substituem esta validação limitada.
+
 
 ## Arquivos únicos — 23/10/2026
 
@@ -31,8 +69,10 @@ Não é necessário extrair ZIP nem manter diretórios ao lado do arquivo baixad
 
 163 testes passaram sem falhas/skips em Xvfb. Os testes novos verificam atualização
 de recursos preservando dados do usuário, extração segura, permissões de ferramentas
-e caminhos persistentes de workers. A validação Windows continua limitada ao
-launcher sob Wine, sem certificar a compilação ou o jogo em Windows real.
+e caminhos persistentes de workers. Os resultados dos artefatos finais ficam em
+`.aster/reports/single-file-release-validation.json`. A validação Windows continua
+limitada ao launcher sob Wine, sem certificar a compilação ou o jogo em Windows real.
+
 
 ## Atualização — gerador portátil (23/10/2026)
 
@@ -67,7 +107,7 @@ sincronização ou FPS de toda a campanha.
   fez 461 apresentações sem fatal, em FSI/FIFO e perfil isolado. `ready=false`
   porque o prazo curto não completa a inicialização; isso confirma aceitação das
   flags, não jogabilidade.
-- A configuração real foi restaurada para 30 fps + preset Padrão, preservando o
+- A configuração real foi restaurada para 30 fps + preset Média, preservando o
   caminho do dump. As preferências ficam em `.aster/config/settings.json`
   (schema 2); nenhum preset/alvo cria ou altera saves/perfil do jogo.
 - O snapshot do teste é `.aster/reports/launcher.png`, capturado em Xvfb
@@ -193,8 +233,8 @@ python3 scripts/host_probe.py
 xvfb-run -a -s '-screen 0 1440x900x24' python3 -m unittest discover -s tests -v
 python3 -m compileall -q native_port games scripts tests
 python3 -m native_port doctor
-python3 scripts/survey_image.py '/home/usuario/Downloads/jogos/Green Lantern.iso'
-python3 -m native_port prepare '/home/usuario/Downloads/jogos/Green Lantern.iso'
+python3 scripts/survey_image.py '/caminho/do/jogo/Green Lantern.iso'
+python3 -m native_port prepare '/caminho/do/jogo/Green Lantern.iso'
 ```
 
 - Host probe: compilado com C++17, validado como ELF64 x86_64 e executado com retorno 0.

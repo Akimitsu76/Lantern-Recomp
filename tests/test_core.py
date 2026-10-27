@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from fixtures import iso, xex
 from games.green_lantern import GreenLantern
 from native_port.artifacts import verify_host_elf
@@ -71,11 +71,17 @@ class CoreTests(unittest.TestCase):
     def test_directory(self):
         self.assert_code('MISSING_XEX', lambda: inspect_source(self.project))
 
+    @unittest.skipIf(os.name == 'nt', 'POSIX mode bits do not remove Windows read access; Windows ACLs require a separate fixture.')
     def test_unreadable(self):
         p = self.source(xex())
         p.chmod(0)
         self.addCleanup(p.chmod, 0o600)
         self.assert_code('UNREADABLE', lambda: inspect_source(p))
+
+    def test_access_denied_is_rejected_on_each_platform(self):
+        p = self.source(xex())
+        with patch('native_port.sources.os.access', return_value=False):
+            self.assert_code('UNREADABLE', lambda: inspect_source(p))
 
     def test_truncated_inputs(self):
         self.assert_code('TRUNCATED', lambda: inspect_source(self.source(b'XEX2')))
@@ -205,6 +211,27 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(seen, ['[1/12] compiling'])
         self.assertLess(time.monotonic() - start, 3)
 
+    def test_final_output_cancellation_is_not_reported_as_success(self):
+        # A fast tool may already have exited when its last output is delivered.
+        # Cancellation requested by that callback must still stop its caller.
+        cancel = Cancellation()
+        seen = []
+        def output(line):
+            seen.append(line)
+            cancel.cancel()
+        def exited_process(argv, **options):
+            options['stdout'].write(b'completed target\n')
+            options['stdout'].flush()
+            process = Mock(returncode=0)
+            process.poll.return_value = 0
+            process.__enter__ = Mock(return_value=process)
+            process.__exit__ = Mock(return_value=False)
+            return process
+        with patch('native_port.tasks.subprocess.Popen', side_effect=exited_process):
+            self.assert_code('CANCELLED', lambda: run_process(
+                ['synthetic-completed-tool'], self.project, cancel, on_output=output))
+        self.assertEqual(seen, ['completed target'])
+
     def test_process_timeout(self):
         self.assert_code('TIMEOUT', lambda: run_process(
             [sys.executable, '-c', 'import time; time.sleep(30)'], self.project, Cancellation(), timeout=.1))
@@ -221,6 +248,7 @@ class CoreTests(unittest.TestCase):
         self.assert_code('BAD_ARTIFACT', lambda: verify_host_elf(p, self.project))
         self.assert_code('ARTIFACT_PATH', lambda: verify_host_elf(p, self.work.root))
 
+    @unittest.skipIf(os.name == 'nt', 'Optional local artifact is a Linux ELF host probe, not a Windows executable.')
     def test_generated_host_artifact_hash(self):
         # Actual artifact test runs after scripts/host_probe.py; skip explicitly if unavailable.
         project = Path(__file__).resolve().parents[1]

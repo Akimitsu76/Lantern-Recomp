@@ -1,0 +1,26 @@
+diff --git a/include/rex/graphics/pipeline/texture/hd_override.h b/include/rex/graphics/pipeline/texture/hd_override.h
+--- a/include/rex/graphics/pipeline/texture/hd_override.h
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -105,7 +105,7 @@
+           !std::filesystem::is_regular_file(path / "texture.dds")) return {};
+       std::ifstream file(path / "texture.dds", std::ios::binary | std::ios::ate);
+       const auto length = file.tellg();
+-      if (!file || length < 128 || length > (64 << 20) || uint64_t(length) > remaining_bytes) return {};
++      if (!file || length < 128 || length > (128 << 20) || uint64_t(length) > remaining_bytes) return {};
+       std::vector<uint8_t> dds(static_cast<size_t>(length));
+       file.seekg(0); file.read(reinterpret_cast<char*>(dds.data()), dds.size());
+       if (!file || rex::hash_bytes(std::string_view(
+@@ -116,8 +116,11 @@
+           HDReadWord(dds, 112) != 0) return {};  // No cubes/volume/DX10 extensions.
+       result->width = HDReadWord(dds, 16); result->height = HDReadWord(dds, 12);
+       const uint32_t format = HDReadWord(dds, 84);
+-      if (result->width != result->source_width * 2 ||
+-          result->height != result->source_height * 2 ||
++      const uint32_t scale = result->width / result->source_width;
++      if ((scale != 2 && scale != 4) ||
++          result->width != result->source_width * scale ||
++          result->height != result->source_height * scale ||
++          result->width > 8192 || result->height > 8192 ||
+           format != (result->source_format == 18 ? 0x31545844u : 0x35545844u)) return {};
+       uint32_t w = result->width, h = result->height, count = 0;
+       size_t offset = 0;

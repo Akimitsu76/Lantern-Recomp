@@ -34,7 +34,7 @@ GCC, Clang, Ninja e Python disponíveis. CMake, XenonRecomp e rexglue ausentes d
 PATH. O teste C++ compilou e executou um programa próprio, sem código do jogo.
 Veja ENVIRONMENT.md para versões.
 
-A busca limitada encontrou `/home/usuario/Downloads/jogos/Green Lantern.iso`,
+A busca limitada encontrou `/caminho/do/jogo/Green Lantern.iso`,
 7.838.695.424 bytes. O usuário confirmou ter apenas a ISO. A leitura dos cinco
 offsets usados como candidatos pelo Xenia não encontrou XDVDFS; uma busca
 somente de leitura por toda a imagem também não encontrou `MICROSOFT*XBOX*MEDIA`

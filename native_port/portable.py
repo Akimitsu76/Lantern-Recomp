@@ -29,7 +29,7 @@ def install_payload(archive, destination):
         marker = destination / '.resources.json'
         if marker.is_file():
             try:
-                previous = json.loads(marker.read_text())
+                previous = json.loads(marker.read_text(encoding='utf8'))
                 if (previous.get('sha256') == fingerprint and
                         (destination / 'games/green_lantern_rex_hints.toml').is_file() and
                         (destination / 'scripts/play_green_lantern.py').is_file()):

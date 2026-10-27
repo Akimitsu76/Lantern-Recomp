@@ -1,0 +1,79 @@
+--- a/src/graphics/pipeline/shader/spirv_translator.cpp
++++ b/src/graphics/pipeline/shader/spirv_translator.cpp
+@@ -3209,16 +3209,22 @@
+         builder_->createLoad(
+             builder_->createAccessChain(spv::StorageClassInput, input_fragment_coordinates_,
+                                         id_vector_temp_),
+             spv::NoPrecision));
+     if (draw_resolution_scale_x_ > 1) {
+       param_gen_x = builder_->createNoContractionBinOp(
+           spv::OpFMul, type_float_, param_gen_x,
+           builder_->makeFloatConstant(1.0f / float(draw_resolution_scale_x_)));
++      // Map host pixel centers back to guest pixel centers. Dividing only
++      // the integer address shifts scaled screen-space depth copies toward
++      // the next texel, making the following geometry fail depth testing.
++      param_gen_x = builder_->createNoContractionBinOp(
++          spv::OpFAdd, type_float_, param_gen_x,
++          builder_->makeFloatConstant(0.5f / float(draw_resolution_scale_x_) - 0.5f));
+     }
+     param_gen_x = builder_->createUnaryBuiltinCall(type_float_, ext_inst_glsl_std_450_,
+                                                    GLSLstd450FAbs, param_gen_x);
+     if (!modification.pixel.param_gen_point) {
+       assert_true(input_front_facing_ != spv::NoResult);
+       param_gen_x = builder_->createTriOp(
+           spv::OpSelect, type_float_,
+           builder_->createBinOp(
+@@ -3245,16 +3251,22 @@
+         builder_->createLoad(
+             builder_->createAccessChain(spv::StorageClassInput, input_fragment_coordinates_,
+                                         id_vector_temp_),
+             spv::NoPrecision));
+     if (draw_resolution_scale_y_ > 1) {
+       param_gen_y = builder_->createNoContractionBinOp(
+           spv::OpFMul, type_float_, param_gen_y,
+           builder_->makeFloatConstant(1.0f / float(draw_resolution_scale_y_)));
++      // Map host pixel centers back to guest pixel centers. Dividing only
++      // the integer address shifts scaled screen-space depth copies toward
++      // the next texel, making the following geometry fail depth testing.
++      param_gen_y = builder_->createNoContractionBinOp(
++          spv::OpFAdd, type_float_, param_gen_y,
++          builder_->makeFloatConstant(0.5f / float(draw_resolution_scale_y_) - 0.5f));
+     }
+     param_gen_y = builder_->createUnaryBuiltinCall(type_float_, ext_inst_glsl_std_450_,
+                                                    GLSLstd450FAbs, param_gen_y);
+     if (modification.pixel.param_gen_point) {
+       param_gen_y = builder_->createUnaryOp(
+           spv::OpBitcast, type_float_,
+           builder_->createBinOp(spv::OpBitwiseXor, type_uint_,
+                                 builder_->createUnaryOp(spv::OpBitcast, type_uint_, param_gen_y),
+--- a/src/graphics/pipeline/shader/dxbc_translator.cpp
++++ b/src/graphics/pipeline/shader/dxbc_translator.cpp
+@@ -655,22 +655,25 @@
+     // faceness), so in case the host GPU for some reason has quads used for
+     // derivative calculation at odd locations, the left and top edges will have
+     // correct derivative magnitude and LODs.
+     in_position_used_ |= 0b0011;
+     a_.OpRoundNI(dxbc::Dest::R(param_gen_temp, 0b0011), dxbc::Src::V1D(in_reg_ps_position_));
+     uint32_t resolution_scaled_axes =
+         uint32_t(draw_resolution_scale_x_ > 1) | (uint32_t(draw_resolution_scale_y_ > 1) << 1);
+     if (resolution_scaled_axes) {
+-      // Revert resolution scale - after truncating, so if the pixel position
+-      // is passed to tfetch (assuming the game doesn't round it by itself),
+-      // it will be sampled with higher resolution too.
++      // Revert scale after truncating to the host pixel address, then map
++      // its center to the guest pixel-center convention. Keep unscaled axes
++      // unchanged, including the original 1x path.
+       a_.OpMul(dxbc::Dest::R(param_gen_temp, resolution_scaled_axes), dxbc::Src::R(param_gen_temp),
+                dxbc::Src::LF(1.0f / draw_resolution_scale_x_, 1.0f / draw_resolution_scale_y_, 1.0f,
+                              1.0f));
++      a_.OpAdd(dxbc::Dest::R(param_gen_temp, resolution_scaled_axes), dxbc::Src::R(param_gen_temp),
++               dxbc::Src::LF(0.5f / draw_resolution_scale_x_ - 0.5f,
++                             0.5f / draw_resolution_scale_y_ - 0.5f, 0.0f, 0.0f));
+     }
+     if (shader_modification.pixel.param_gen_point) {
+       // A point - always front-facing (the upper bit of X is 0), not a line
+       // (the upper bit of Z is 0).
+       // Take the absolute value of the position and apply the point flag.
+       a_.OpMov(dxbc::Dest::R(param_gen_temp, 0b0001),
+                dxbc::Src::R(param_gen_temp, dxbc::Src::kXXXX).Abs());
+       a_.OpMov(dxbc::Dest::R(param_gen_temp, 0b0010),

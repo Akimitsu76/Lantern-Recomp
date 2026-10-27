@@ -17,9 +17,8 @@ específicos do jogo. `pipeline.py` encadeia inspeção, identidade, hash, depen
 e relatórios. Dados de arquivos não são carregados como plugins ou comandos.
 
 `launcher.py` usa uma thread de trabalho e uma fila consumida pelo event loop Tk.
-Os botões executam operações concretas. Nenhum worker acessa widgets. O botão
-**Jogar agora** só abre um build ReXGlue local depois de validar dump, artefatos,
-plugin e referência FSI; o backend nativo próprio do Aster continua incompleto.
+Os botões executam operações concretas. Nenhum worker acessa widgets; iniciar fica
+desabilitado porque não existe backend nativo validado.
 
 `diagnostics.py` consulta somente ferramentas enumeradas internamente.
 `artifacts.py` valida ELF do utilitário hospedeiro, sem aprovar um jogo. O script

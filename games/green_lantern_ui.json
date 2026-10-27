@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "classification": "reviewed-ui-straight",
+  "source_xex_sha256": "3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1",
+  "coverage": "One shared original Domyouji36 monochrome font atlas; exact blocks and metrics equal in eight language resources. Does not claim all HUD or dynamic fonts.",
+  "runtime_default_enabled": false,
+  "source_relative": "gl/x360/levels/gui.lvl_760",
+  "compressed_size": 10121390,
+  "compressed_sha256": "943874e12f12110caecf184979a52c881a6b1cd67e67aed33fe2a03b214acb65",
+  "decoded_size": 68315008,
+  "decoded_sha256": "3a6be3cca546a6aa81f4c0f0048794fc57dc4f1d1c62e618f9d2008c3520283b",
+  "raw_offset": 62691564,
+  "raw_size": 262144,
+  "raw_sha256": "5031e4fe051bd028ef66b1a566e83acc6bdbef641492798212591c123eb7990d",
+  "original_dds_sha256": "18f9b457c34fc8300bf73a457c45b839ba029fa8312013975a572a26af755fc0",
+  "metrics_offset": 62343348,
+  "metrics_size": 3040,
+  "metrics_sha256": "f95b296e0eabc11e99ebdc940c0ba17c23612a533bdfe523a6110eb0f2b2fdbf",
+  "width": 512,
+  "height": 512,
+  "format": 20,
+  "endian": 1,
+  "tiled": true,
+  "row_pitch_bytes": 2048,
+  "limitations": [
+    "Runtime shader/LOD compatibility must be observed; retain fallback when unsupported.",
+    "Interpolation preserves original glyph shape and metrics; it does not create new typographic detail.",
+    "Original low alpha=1 BC3 residue outside glyph rectangles retained; no visible glyph pixels discarded."
+  ],
+  "glyph_count": 190,
+  "metrics_stride": 16,
+  "metrics_schema": "domyouji-be16-records-v1"
+}

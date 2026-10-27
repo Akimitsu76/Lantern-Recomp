@@ -88,7 +88,7 @@ def copy_public(root, destination):
         shutil.copy2(root / 'scripts' / name, destination / 'scripts' / name)
         copied.append('scripts/' + name)
     (destination / 'docs').mkdir(exist_ok=True)
-    for name in ['PORTABLE_BUILD.md', 'THIRD_PARTY_NOTICES.md']:
+    for name in ['PORTABLE_BUILD.md', 'THIRD_PARTY_NOTICES.md', 'HD_TEXTURES.md', 'WINDOWS_SPATIAL_SDK.md']:
         shutil.copy2(root / 'docs' / name, destination / 'docs' / name)
         copied.append('docs/' + name)
     for name in ['pyproject.toml']:
@@ -97,6 +97,23 @@ def copy_public(root, destination):
     shutil.copy2(root / 'docs/PORTABLE_BUILD.md', destination / 'README.md')
     copied.append('README.md')
     return copied
+
+
+def prune_optional_linux_avif(bundle):
+    """Remove Pillow's unused AVIF plugin and host C++ runtime from Linux.
+
+    PyInstaller may copy the build host's libstdc++, which can require a newer
+    glibc than the portable Python runtime. The launcher only needs Pillow for
+    DDS/PNG/JPEG texture work; AVIF is not part of the supported release path.
+    """
+    if os.name == 'nt':
+        return
+    internal = bundle / '_internal'
+    for path in [*internal.glob('PIL/_avif*.so'), *internal.glob('pillow.libs/libavif*'),
+                 *internal.glob('libavif*')]:
+        path.unlink(missing_ok=True)
+    for name in ('libstdc++.so.6', 'libgcc_s.so.1'):
+        (internal / name).unlink(missing_ok=True)
 
 
 def main():
@@ -130,6 +147,7 @@ def main():
     env['PYINSTALLER_CONFIG_DIR'] = str(work / 'cache')
     subprocess.run(command, check=True, cwd=root, env=env)
     bundle = output / target / 'AsterNative'
+    prune_optional_linux_avif(bundle)
     sources = copy_public(root, bundle / 'app')
     if args.cmake_data:
         cmake = bundle / 'app/tools/cmake'
@@ -153,6 +171,15 @@ def main():
             source = Path(distribution.locate_file(relative))
             if source.is_file():
                 shutil.copy2(source, licenses / ('PyInstaller-' + source.name))
+    for dependency in ('Pillow', 'xxhash', 'capstone'):
+        distribution = importlib.metadata.distribution(dependency)
+        for relative in distribution.files or []:
+            if '.dist-info' in str(relative) and ('license' in relative.name.lower() or relative.name in ('COPYING', 'COPYING.txt')):
+                source = Path(distribution.locate_file(relative))
+                if source.is_file():
+                    destination = licenses / dependency / relative.name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
     if args.cmake_data and (args.cmake_data / 'doc').is_dir():
         shutil.copytree(args.cmake_data / 'doc', licenses / 'CMake', dirs_exist_ok=True)
     if args.ninja:
@@ -175,8 +202,10 @@ def main():
     notice.write_text('Aster Native - launcher experimental\n\n'
         'Extraia TODA a pasta. Abra AsterNative.exe (Windows) ou AsterNative (Linux).\n'
         'Selecione seu dump extraido, abra Jogo e arquivos e clique Gerar port nativo.\n'
-        'O primeiro uso requer Clang >=18 / C++23. Windows: VS Build Tools C++ x64,\n'
-        'Windows SDK e Clang. Linux: toolchain Clang e headers C/C++ do sistema.\n'
+        'A geracao requer Clang >=18 / C++23. Ao confirmar Gerar port, o launcher\n'
+        'prepara requisitos ausentes pelos instaladores oficiais conhecidos.\n'
+        'Pode exigir administrador e varios GB. Windows requer WinGet; Linux\n'
+        'requer distribuicao suportada e PolicyKit. Drivers nao sao instalados.\n'
         'O SDK ReXGlue fixado e baixado com verificacao de hash. Nenhum arquivo do\n'
         'jogo ou codigo recompilado e distribuido neste pacote.\n'
         'Revisao suportada: SHA256 do default.xex\n'

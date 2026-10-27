@@ -10,7 +10,7 @@ def verified_analysis(workspace, source_sha):
     if not p.is_file() or p.stat().st_size > 2*1024*1024:
         return None
     try:
-        report = json.loads(p.read_text())
+        report = json.loads(p.read_text(encoding='utf8'))
         if report.get('schema')!=1 or report.get('state')!='decoded-and-validated' or report.get('source_sha256')!=source_sha:
             return None
         artifact = Path(report['normalized_path']).resolve()

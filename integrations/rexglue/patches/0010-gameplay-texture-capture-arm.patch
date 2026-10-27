@@ -1,0 +1,67 @@
+diff --git a/include/rex/graphics/pipeline/texture/capture_policy.h b/include/rex/graphics/pipeline/texture/capture_policy.h
+new file mode 100644
+--- /dev/null
++++ b/include/rex/graphics/pipeline/texture/capture_policy.h
+@@ -0,0 +1,31 @@
++#pragma once
++#include <charconv>
++#include <cstdlib>
++#include <filesystem>
++#include <string_view>
++
++namespace rex::graphics {
++struct TextureCapturePolicy {
++  size_t max_count = 16, max_bytes = 64u << 20;
++  static size_t Bounded(const char* text, size_t fallback, size_t maximum) {
++    if (!text || !*text) return fallback;
++    const std::string_view value(text);
++    size_t parsed = 0;
++    const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed);
++    return result.ec == std::errc{} && result.ptr == value.data() + value.size() &&
++        parsed > 0 && parsed <= maximum ? parsed : fallback;
++  }
++  static TextureCapturePolicy FromEnvironment() {
++    return {Bounded(std::getenv("ASTER_TEXTURE_CAPTURE_MAX_COUNT"), 16, 256),
++            Bounded(std::getenv("ASTER_TEXTURE_CAPTURE_MAX_MIB"), 64, 256) << 20};
++  }
++  static bool IsArmed() {
++    const char* arm = std::getenv("ASTER_TEXTURE_CAPTURE_START_FILE");
++    if (!arm || !*arm) return true;  // Legacy explicit capture remains supported.
++    std::error_code error;
++    const auto path = std::filesystem::u8path(arm);
++    return !std::filesystem::is_symlink(path, error) &&
++        std::filesystem::is_regular_file(path, error) && !error;
++  }
++};
++}  // namespace rex::graphics
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -25,6 +25,7 @@
+ #include <rex/dbg.h>
+ #include <rex/graphics/flags.h>
+ #include <rex/graphics/pipeline/texture/cache.h>
++#include <rex/graphics/pipeline/texture/capture_policy.h>
+ #include <rex/graphics/pipeline/texture/info.h>
+ #include <rex/graphics/pipeline/texture/util.h>
+ #include <rex/graphics/register_file.h>
+@@ -142,15 +143,16 @@
+     uint32_t format, uint32_t endian, bool tiled, bool packed_mips,
+     uint32_t mip_max, const texture_util::TextureGuestLayout& layout) {
+   const char* directory = std::getenv("ASTER_TEXTURE_CAPTURE_DIR");
+-  if (!directory || !*directory) return;
++  if (!directory || !*directory || !TextureCapturePolicy::IsArmed()) return;
++  static const auto policy = TextureCapturePolicy::FromEnvironment();
+   static std::mutex mutex;
+   static std::unordered_set<std::string> seen;
+   static size_t count = 0, total = 0;
+   std::lock_guard<std::mutex> lock(mutex);
+-  constexpr size_t kMaxCount = 16, kMaxBytes = 64u << 20;
++  const size_t kMaxCount = policy.max_count, kMaxBytes = policy.max_bytes;
+   const uint32_t base_size = layout.base.level_data_extent_bytes;
+   const uint32_t mip_size = mip_page ? layout.mips_total_extent_bytes : 0;
+-  if (count >= kMaxCount || seen.size() >= 64 || !base_size || base_size > (16u << 20) ||
++  if (count >= kMaxCount || seen.size() >= kMaxCount * 4 || !base_size || base_size > (16u << 20) ||
+       mip_size > (16u << 20) || base_size + size_t(mip_size) > kMaxBytes - total)
+     return;
+   std::vector<uint8_t> base, mips;

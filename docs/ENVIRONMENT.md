@@ -22,7 +22,7 @@ instalação, arquitetura, Java e decompilador. Isso não demonstra importação
 de XEX nem compatibilidade de um jogo. Hopper, IDA e Kuna indisponíveis.
 
 Busca limitada a Documentos, Downloads e Games, até quatro níveis.
-Encontrado: /home/usuario/Downloads/jogos/Green Lantern.iso, 7.838.695.424 bytes.
+Encontrado: `/caminho/do/jogo/Green Lantern.iso`, 7.838.695.424 bytes.
 Nenhum XEX encontrado nessa busca. Fontes abertas somente para leitura.
 Nenhum pacote instalado e nenhuma configuração do sistema alterada.
 

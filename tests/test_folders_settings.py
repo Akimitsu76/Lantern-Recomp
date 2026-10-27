@@ -142,6 +142,6 @@ class SpatialSettingsMigrationTests(unittest.TestCase):
             data['graphics'].pop('upscaler')
             with patch('native_port.settings.sys.platform','linux'):
                 migrated=settings.validate(data,folder)
-                self.assertEqual(migrated['graphics']['upscaler'],'sharp')
+                self.assertEqual(migrated['graphics']['upscaler'],'fsr1')
                 data['graphics']['upscaler']='bilinear'
                 self.assertEqual(settings.validate(data,folder)['graphics']['upscaler'],'bilinear')

@@ -64,21 +64,29 @@ def parse_arguments(argv=None):
                         help='Atalho antigo para --fps-target 60.')
     parser.add_argument('--graphics-preset', choices=graphics.PRESETS, default='default',
                         help='Preset gráfico. Padrão: default (mesmos valores do build principal).')
+    parser.add_argument('--antialiasing', choices=graphics.ANTIALIASING,
+                        help='Antisserrilhado antes da ampliação, Linux/Windows: none, fxaa ou fxaa_extreme.')
     parser.add_argument('--upscaler', choices=graphics.UPSCALERS, help='Filtro espacial de saída (Linux com backend atualizado).')
     parser.add_argument('--output-resolution', choices=graphics.OUTPUT_RESOLUTIONS, default='auto',
                         help='Tamanho da janela, incluindo 1920x1080; independente da escala interna.')
+    parser.add_argument('--fullscreen', choices=('on', 'off'), default='off', help='Tela cheia ou janela (Linux/Windows).')
+    parser.add_argument('--fsr-sharpness', type=int, default=graphics.DEFAULT_FSR_SHARPNESS, help='Nitidez FSR 1: 0 a 100; padrão equilibrado 30. Sem efeito em bilinear.')
     parser.add_argument('--render-scale', type=int, choices=(1, 2, 3),
-                        help='Escala interna: compatibilidade força 1x neste jogo. Use --output-resolution para a janela.')
+                        help='Escala interna: 1x=720p, 2x=1440p, 3x=4K. Requer backend atualizado para 2x/3x.')
     parser.add_argument('--msaa', choices=('on', 'off'),
                         help='Compatibilidade: FSI mantém o MSAA do jogo; off não é suportado.')
     parser.add_argument('--anisotropic', type=int, choices=tuple(graphics.ANISOTROPIC_LABELS),
                         help='Filtragem anisotrópica (-1..5). Implica preset custom.')
+    parser.add_argument('--hd-texture-pack', type=Path, help='Pacote local de cor opaca revisado, gerado pelo Real-ESRGAN.')
+    parser.add_argument('--ui-texture-pack', type=Path, help='Atlas de fonte revisado com alpha e métricas originais; experimental.')
     parser.add_argument('--texture-quality', choices=graphics.TEXTURE_QUALITIES,
                         help='Limite de memória do cache de texturas. Implica preset custom.')
     parser.add_argument('--dither', choices=('on', 'off'),
                         help='Dithering de apresentação. Implica preset custom.')
     parser.add_argument('--shader-mode', choices=graphics.SHADER_MODES, default='async',
                         help='Shaders novos: async em segundo plano (padrão) ou blocking com espera.')
+    parser.add_argument('--shader-preload', choices=('on', 'off'), default='on',
+                        help='Preparar shaders/pipelines conhecidos antes de jogar. Cache persistente; não cobre cenas inéditas.')
     parser.add_argument('--vsync', choices=('on', 'off'),
                         help='VSync. Padrão ligado; desligado é experimental. O modo ilimitado exige off.')
     parser.add_argument('--present-mode', choices=('auto', 'mailbox', 'fifo', 'immediate'),
@@ -112,12 +120,13 @@ def resolve_graphics(parser, args, target):
             fps_target=target,
             vsync=vsync_on,
             shader_mode=args.shader_mode,
+            shader_preload=args.shader_preload == 'on',
             output_resolution=args.output_resolution,
             upscaler=args.upscaler,
+            antialiasing=args.antialiasing,
+            fullscreen=args.fullscreen == 'on',
+            fsr_sharpness=args.fsr_sharpness,
         )
-        if data['render_scale'] > 1:
-            print('Compatibilidade: escala interna 2x/3x causa áreas pretas neste jogo; usando 1x. A resolução da janela continua independente.', file=sys.stderr)
-            data['render_scale'] = 1
         return data
     except Exception as exc:  # PortError and malformed command-line combinations
         parser.error(str(exc))
@@ -230,8 +239,85 @@ def build_command(root, binary, game, run, log, args, target, graphics_data, pre
     return command
 
 
-def presentation_environment(binary, data, env, parser):
+def presentation_arguments(data, installation, parser):
+    """Use real embedded FSR1 only when the verified build records its SDK ABI."""
+    sdk = (installation or {}).get('recipe', {}).get('sdk_spatial')
+    preload = []
+    if isinstance(sdk, dict) and graphics.SHADER_PRELOAD_PATCH in sdk.get('patches', {}):
+        preload = ['--shader_preload='+str(data.get('shader_preload', True)).lower()]
+    elif not data.get('shader_preload', True):
+        parser.error('A opção de preparação de shaders exige atualizar o backend pelo launcher.')
+    if data.get('render_scale', 1) > 1:
+        sdk = (installation or {}).get('recipe', {}).get('sdk_spatial')
+        if not isinstance(sdk, dict) or graphics.SCALED_PIXEL_CENTER_PATCH not in sdk.get('patches', {}):
+            parser.error('Resolução interna 2x/3x exige o backend com a correção de profundidade. '
+                         'Use Gerar port/Atualizar port no launcher ou selecione 1x.')
+    if not installation or installation.get('presentation_backend') != 'sdk-spatial-fsr1':
+        return []
+    if not installation.get('recipe', {}).get('sdk_spatial'):
+        parser.error('O manifesto não confirma o SDK espacial; gere novamente o port.')
+    if data['upscaler'] not in ('bilinear', 'fsr1'):
+        parser.error('Este runtime compartilhado Linux/Windows oferece bilinear e FSR 1. Selecione FSR 1 para ampliar a imagem.')
+    if data['upscaler'] == 'fsr1':
+        return [*preload, '--present_effect=fsr', '--present_fsr_max_upsampling_passes=2',
+                f"--present_fsr_sharpness_reduction={2 * (1 - graphics.validate(data)['fsr_sharpness'] / 100):g}"]
+    return [*preload, '--present_effect=bilinear']
+
+
+def hd_texture_environment(directory, installation, env, parser):
     env = dict(env)
+    env.pop('ASTER_HD_TEXTURE_PACK_DIR', None)
+    if directory:
+        patches = (installation or {}).get('recipe', {}).get('sdk_spatial', {}).get('patches', {})
+        if '0006-reviewed-hd-texture-override.patch' not in patches:
+            parser.error('Texturas HD exigem atualizar o backend nativo no launcher.')
+        if (Path(directory) / 'library.json').exists() and '0012-campaign-texture-library.patch' not in patches:
+            parser.error('Bibliotecas da campanha exigem atualizar o backend nativo no launcher.')
+        if ((Path(directory) / 'pack.json').exists() or (Path(directory) / 'texture-pack.index').exists()) and '0009-multi-material-hd-pack.patch' not in patches:
+            parser.error('Pacotes com vários materiais exigem atualizar o backend de texturas HD no launcher.')
+        from native_port.texture_pack import validate_texture_pack
+        try:
+            verified = validate_texture_pack(directory)
+            manifests = list(verified.glob('*/manifest.json')) if (verified / 'pack.json').exists() or (verified / 'library.json').exists() else [verified / 'manifest.json']
+            if '0011-hd-texture-scales.patch' not in patches and any(
+                    json.loads(path.read_text(encoding='utf8')).get('recipe', {}).get('host_scale') == 4 for path in manifests):
+                parser.error('Texturas Ultra 4x exigem atualizar o backend nativo no launcher.')
+            env['ASTER_HD_TEXTURE_PACK_DIR'] = str(verified)
+        except Exception as exc:
+            parser.error(str(exc))
+    return env
+
+
+def ui_texture_environment(directory, installation, env, parser):
+    """Keep UI coverage atlases separate from opaque materials and inherited env."""
+    env = dict(env)
+    env.pop('ASTER_UI_TEXTURE_PACK_DIR', None)
+    if directory:
+        patches = (installation or {}).get('recipe', {}).get('sdk_spatial', {}).get('patches', {})
+        if '0016-reviewed-ui-alpha-atlas.patch' not in patches:
+            parser.error('Fontes revisadas exigem atualizar o backend nativo no launcher.')
+        from native_port.texture_ui import validate_ui_pack
+        try:
+            env['ASTER_UI_TEXTURE_PACK_DIR'] = str(validate_ui_pack(directory))
+        except Exception as exc:
+            parser.error(str(exc))
+    return env
+
+
+def presentation_environment(binary, data, env, parser, installation=None):
+    env = dict(env)
+    if installation and installation.get('presentation_backend') == 'sdk-spatial-fsr1':
+        # Source-built presentation is inside the actual runtime on both OSes.
+        # Do not preload the older Linux ABI compatibility module into it.
+        presentation_arguments(data, installation, parser)
+        env.pop('ASTER_PRESENT_FILTER', None)
+        if os.name != 'nt':
+            arena = binary.parent / 'libaster_arena_lifetime.so'
+            if not arena.is_file():
+                parser.error('O módulo de liberação de arenas está ausente; atualize o port antes de jogar.')
+            env['LD_PRELOAD'] = str(arena.resolve())
+        print(f"Filtro de saída: {data['upscaler']} (SDK espacial; FSR 1 EASU + RCAS quando selecionado)", flush=True)
+        return env
     library = binary.parent / 'libaster_presenter_compat.so'
     if os.name != 'nt' and library.is_file():
         # Applied only to the game, never SDK tools or the Python launcher.
@@ -239,7 +325,7 @@ def presentation_environment(binary, data, env, parser):
         env['ASTER_PRESENT_FILTER'] = data['upscaler']
         print(f"Filtro de saída: {data['upscaler']} (interno 720p; reconstrução espacial)", flush=True)
     elif data['upscaler'] != 'bilinear':
-        parser.error('Este filtro exige o backend Linux atualizado. Use Gerar port para atualizar; no Windows use bilinear.')
+        parser.error('Este filtro exige o runtime espacial atualizado. Use Gerar port/Atualizar port no launcher.')
     return env
 
 
@@ -289,6 +375,7 @@ def main():
     log = root / '.aster/reports' / f'green-lantern-play-{prefix}{stamp}.log'
     present_mode = resolve_present_mode(args, target, graphics_data['vsync'])
     command = build_command(root, binary, game, run, log, args, target, graphics_data, present_mode)
+    command.extend(presentation_arguments(graphics_data, installation, parser))
     if installation and installation['renderer'] == 'd3d12-rov':
         command[command.index('--render_target_path_vulkan=fsi')] = '--render_target_path_d3d12=rov'
         command = [flag for flag in command if not flag.startswith('--vulkan_allow_present_mode_')]
@@ -312,7 +399,11 @@ def main():
     print('Enter: Start | Espaço: A | Backspace: B | WASD: stick esquerdo | L: X', flush=True)
     print('Setas: stick direito | P: Y | Q/E: LT/RT | 1/3: LB/RB | F/K: LS/RS | Tab: Back | Shift+setas: direcional', flush=True)
     print(f'Jogo: {game}\nSaves: {run / "user"}\nLog desta sessão: {log}', flush=True)
-    env = presentation_environment(binary, graphics_data, external_env(), parser)
+    env = presentation_environment(binary, graphics_data, external_env(), parser, installation)
+    env.pop('ASTER_EFFECTS_DIAGNOSTICS', None)
+    env.pop('ASTER_EFFECTS_SOURCE_INDEX', None)
+    env = hd_texture_environment(args.hd_texture_pack, installation, env, parser)
+    env = ui_texture_environment(args.ui_texture_pack, installation, env, parser)
     if args.dry_run:
         print('Validação concluída. Comando de execução:\n' + shlex.join(command))
         return 0

@@ -1,0 +1,140 @@
+--- a/include/rex/graphics/pipeline/texture/effects_diagnostics.h
++++ b/include/rex/graphics/pipeline/texture/effects_diagnostics.h
+@@ -1,6 +1,7 @@
+ // Optional, bounded source/metadata inspection. No render state is changed.
+ #ifndef REX_GRAPHICS_PIPELINE_TEXTURE_EFFECTS_DIAGNOSTICS_H_
+ #define REX_GRAPHICS_PIPELINE_TEXTURE_EFFECTS_DIAGNOSTICS_H_
++#include <atomic>
+ #include <chrono>
+ #include <filesystem>
+ #include <fstream>
+@@ -149,6 +150,15 @@
+   return nullptr;
+ }
+ 
++// At most 16 decision records per explicitly enabled process. No texture bytes
++// or extra snapshots; rejection paths retain all original source checks.
++inline bool DecisionOnce(uint32_t index) {
++  if (!Enabled() || index >= 16) return false;
++  static std::atomic<uint32_t> observed{0};
++  const uint32_t bit = uint32_t(1) << index;
++  return !(observed.fetch_or(bit, std::memory_order_relaxed) & bit);
++}
++
+ // Failed fingerprints/snapshots consume the budget too: <=32 snapshots/process.
+ // Reservation precedes the snapshot, so repeated draws never re-read that state.
+ class StateBudget {
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -335,13 +335,31 @@
+ uint32_t TextureCache::GetEffectsDiagnosticCandidateMask(uint32_t used_texture_mask) const {
+   if (!effects_diagnostics::Enabled() || effects_diagnostics::Budget().Full()) return 0;
+   const auto sources = effects_diagnostics::Selection().Get();
+-  if (!sources) return 0;  // Local index supplied but not armed: zero snapshots.
++  if (effects_diagnostics::DecisionOnce(0))
++    REXGPU_INFO("ASTER_EFFECTS_GATE stage=entered");
++  if (!sources) {
++    if (effects_diagnostics::DecisionOnce(1))
++      REXGPU_INFO("ASTER_EFFECTS_GATE stage=source_index_unarmed");
++    return 0;  // Local index supplied but not armed: zero snapshots.
++  }
++  if (effects_diagnostics::DecisionOnce(2))
++    REXGPU_INFO("ASTER_EFFECTS_GATE stage=source_index_armed");
+   uint32_t mask = 0;
+   for (uint32_t i = 0; i < xenos::kTextureFetchConstantCount; ++i) {
+     if (!(used_texture_mask & (uint32_t(1) << i))) continue;
+     const TextureBinding* binding = GetValidTextureBinding(i);
+     if (!binding) continue;
+     const auto& key = binding->key;
++    if (effects_diagnostics::HasGeometry(*sources, key.GetWidth(), key.GetHeight(), key.pitch) &&
++        effects_diagnostics::DecisionOnce(3)) {
++      REXGPU_INFO("ASTER_EFFECTS_GATE stage=geometry_match scaled={} signed={} dimension={} depth={} "
++          "format={} endian={} tiled={} packed={} max_mip={} mip_page={} texture={} hd={}",
++          uint32_t(key.scaled_resolve), uint32_t(key.signed_separate), uint32_t(key.dimension),
++          key.GetDepthOrArraySize(), uint32_t(key.format), uint32_t(key.endianness),
++          uint32_t(key.tiled), uint32_t(key.packed_mips), uint32_t(key.mip_max_level),
++          uint32_t(key.mip_page), binding->texture != nullptr,
++          binding->texture && binding->texture->hd_replacement());
++    }
+     if (key.is_valid && !key.scaled_resolve && !key.signed_separate && key.base_page &&
+         key.dimension == xenos::DataDimension::k2DOrStacked &&
+         key.GetDepthOrArraySize() == 1 &&
+@@ -350,6 +368,8 @@
+         key.tiled && !key.packed_mips && !key.mip_max_level && !key.mip_page &&
+         binding->texture && !binding->texture->hd_replacement()) mask |= uint32_t(1) << i;
+   }
++  if (mask && effects_diagnostics::DecisionOnce(4))
++    REXGPU_INFO("ASTER_EFFECTS_GATE stage=candidate");
+   return mask;
+ }
+ 
+@@ -366,12 +386,21 @@
+     for (uint32_t i = 0; i < xenos::kTextureFetchConstantCount; ++i) {
+       if (!(candidate_mask & (uint32_t(1) << i))) continue;
+       const auto* binding = GetValidTextureBinding(i);
+-      if (!binding || !binding->texture || binding->texture->outdated_mask()) continue;
++      if (!binding || !binding->texture || binding->texture->outdated_mask()) {
++        if (effects_diagnostics::DecisionOnce(5))
++          REXGPU_INFO("ASTER_EFFECTS_GATE stage=unavailable_or_outdated");
++        continue;
++      }
+       const auto& key = binding->key;
+       const auto layout = key.GetGuestLayout();
+       if (layout.mips_total_extent_bytes ||
+           !effects_diagnostics::FindSource(*sources, key.GetWidth(), key.GetHeight(),
+-              key.pitch, layout.base.level_data_extent_bytes)) continue;
++              key.pitch, layout.base.level_data_extent_bytes)) {
++        if (effects_diagnostics::DecisionOnce(6))
++          REXGPU_INFO("ASTER_EFFECTS_GATE stage=layout_rejected base_extent={} mips_extent={}",
++              layout.base.level_data_extent_bytes, layout.mips_total_extent_bytes);
++        continue;
++      }
+       std::ostringstream state;
+       state << "{\"backend\":\"" << backend << "\",\"vs_hash\":" << vertex_shader_hash
+         << ",\"ps_hash\":" << pixel_shader_hash << ",\"fetch\":" << i
+@@ -397,7 +426,11 @@
+           << ",\"border\":" << s.border << '}';
+       }
+       // A texture reference without a sampler binding cannot establish sampling.
+-      if (first) continue;
++      if (first) {
++        if (effects_diagnostics::DecisionOnce(7))
++          REXGPU_INFO("ASTER_EFFECTS_GATE stage=no_sampler");
++        continue;
++      }
+       state << "],\"fetch_raw\":[";
+       const auto fetch = regs.GetTextureFetch(i);
+       const auto* fetch_bytes = reinterpret_cast<const unsigned char*>(&fetch);
+@@ -454,15 +487,29 @@
+         << ",\"guest_msaa_samples_enum\":" << uint32_t(surface.msaa_samples)
+         << ",\"guest_surface_pitch\":" << surface.surface_pitch << '}';
+       const auto state_text = state.str();
+-      if (!effects_diagnostics::Budget().Reserve(state_text)) continue;
++      if (!effects_diagnostics::Budget().Reserve(state_text)) {
++        if (effects_diagnostics::DecisionOnce(8))
++          REXGPU_INFO("ASTER_EFFECTS_GATE stage=state_duplicate_or_budget_full");
++        continue;
++      }
+       std::vector<uint8_t> snapshot;
+       if (!shared_memory().TrySnapshotCpuTexture(key.base_page << 12,
+-          layout.base.level_data_extent_bytes, snapshot)) continue;
++          layout.base.level_data_extent_bytes, snapshot)) {
++        if (effects_diagnostics::DecisionOnce(9))
++          REXGPU_INFO("ASTER_EFFECTS_GATE stage=cpu_snapshot_rejected");
++        continue;
++      }
+       const auto fingerprint = rex::hash_bytes(std::string_view(
+           reinterpret_cast<const char*>(snapshot.data()), snapshot.size()));
+       if (!effects_diagnostics::FindSource(*sources, key.GetWidth(), key.GetHeight(),
+           key.pitch, layout.base.level_data_extent_bytes, &fingerprint) ||
+-          binding->texture->outdated_mask()) continue;
++          binding->texture->outdated_mask()) {
++        if (effects_diagnostics::DecisionOnce(10))
++          REXGPU_INFO("ASTER_EFFECTS_GATE stage=fingerprint_or_late_invalidation_rejected");
++        continue;
++      }
++      if (effects_diagnostics::DecisionOnce(11))
++        REXGPU_INFO("ASTER_EFFECTS_GATE stage=verified_source");
+       if (effects_diagnostics::Selection().local) {
+         REXGPU_INFO("ASTER_EFFECTS_META {{\"schema\":2,\"source_raw_xxh3_128\":\"{}\","
+           "\"snapshot_bytes\":{},\"gpu_written_pages\":false,\"actual_rt_size\":null,"

@@ -1,0 +1,826 @@
+diff --git a/include/rex/graphics/d3d12/texture_cache.h b/include/rex/graphics/d3d12/texture_cache.h
+--- a/include/rex/graphics/d3d12/texture_cache.h
++++ b/include/rex/graphics/d3d12/texture_cache.h
+@@ -10,6 +10,7 @@
+  */
+ 
+ #pragma once
++#include <rex/ui/d3d12/d3d12_upload_buffer_pool.h>
+ 
+ #include <array>
+ #include <functional>
+@@ -34,12 +35,17 @@
+ 
+ class D3D12TextureCache final : public TextureCache {
+  public:
++  void CompletedSubmissionUpdated(uint64_t completed_submission_index) override;
+   // Keys that can be stored for checking validity whether descriptors for host
+   // shader bindings are up to date.
+   struct TextureSRVKey {
+     TextureKey key;
+     uint32_t host_swizzle;
+     uint8_t swizzled_signs;
++    // Guest identity is unchanged by HD overrides. Monotonic identities also
++    // distinguish resources recreated at a recycled wrapper/resource address.
++    uint64_t host_resource_identity;
++    uint64_t host_resource_signed_identity;
+   };
+ 
+   // Sampler parameters that can be directly converted to a host sampler or used
+@@ -162,6 +168,8 @@
+                                      uint32_t* width_unscaled_out = nullptr,
+                                      uint32_t* height_unscaled_out = nullptr);
+ 
++  std::unique_ptr<ui::d3d12::D3D12UploadBufferPool> hd_upload_pool_;
++
+  protected:
+   bool IsSignedVersionSeparateForFormat(TextureKey key) const override;
+   bool IsScaledResolveSupportedForFormat(TextureKey key) const override;
+@@ -170,7 +178,8 @@
+   uint32_t GetMaxHostTextureWidthHeight(xenos::DataDimension dimension) const override;
+   uint32_t GetMaxHostTextureDepthOrArraySize(xenos::DataDimension dimension) const override;
+ 
+-  std::unique_ptr<Texture> CreateTexture(TextureKey key) override;
++  std::unique_ptr<Texture> CreateTexture(TextureKey key,
++      std::shared_ptr<const HDTextureReplacement> replacement = {}) override;
+ 
+   // This binds pipelines, allocates descriptors, and copies!
+   bool LoadTextureDataFromResidentMemoryImpl(Texture& texture, bool load_base,
+diff --git a/include/rex/graphics/pipeline/texture/cache.h b/include/rex/graphics/pipeline/texture/cache.h
+--- a/include/rex/graphics/pipeline/texture/cache.h
++++ b/include/rex/graphics/pipeline/texture/cache.h
+@@ -24,6 +24,7 @@
+ #include <rex/graphics/shared_memory.h>
+ #include <rex/graphics/xenos.h>
+ #include <rex/hash.h>
++#include <rex/graphics/pipeline/texture/hd_override.h>
+ #include <rex/thread/mutex.h>
+ 
+ namespace rex::graphics {
+@@ -110,6 +111,14 @@
+   }
+ 
+   virtual void RequestTextures(uint32_t used_texture_mask);
++  void SetHDTextureDrawEligible(bool eligible) {
++    // Off and rejected packs retain the native binding-cache behavior.
++    eligible = eligible && bool(LoadHDTextureReplacement());
++    if (hd_draw_eligible_ != eligible) {
++      hd_draw_eligible_ = eligible;
++      ResetTextureBindings();
++    }
++  }
+ 
+   // "ActiveTexture" means as of the latest RequestTextures call.
+ 
+@@ -202,6 +211,15 @@
+     TextureCache& texture_cache() const { return texture_cache_; }
+ 
+     const TextureKey& key() const { return key_; }
++    uint64_t host_resource_identity() const { return host_resource_identity_; }
++    const std::shared_ptr<const HDTextureReplacement>& hd_replacement() const { return hd_replacement_; }
++    void SetHDReplacement(std::shared_ptr<const HDTextureReplacement> replacement) {
++      hd_replacement_ = std::move(replacement);
++    }
++    uint32_t host_mip_count() const { return hd_replacement_ ? uint32_t(hd_replacement_->mips.size()) : key_.mip_max_level + 1; }
++    void DetachForRetirement();
++    bool hd_failed() const { return hd_failed_; }
++    void SetHDFailed() { hd_failed_ = true; }
+ 
+     const texture_util::TextureGuestLayout& guest_layout() const { return guest_layout_; }
+     uint32_t GetGuestBaseSize() const { return guest_layout().base.level_data_extent_bytes; }
+@@ -251,6 +269,9 @@
+     TextureCache& texture_cache_;
+ 
+     TextureKey key_;
++    uint64_t host_resource_identity_;
++    std::shared_ptr<const HDTextureReplacement> hd_replacement_;
++    bool hd_failed_ = false;
+ 
+     texture_util::TextureGuestLayout guest_layout_;
+ 
+@@ -509,12 +530,15 @@
+   // The texture must be created exactly with this key (if the implementation
+   // supports the texture with this key, otherwise, or in case of a runtime
+   // failure, it should return nullptr), modifying it is not allowed.
+-  virtual std::unique_ptr<Texture> CreateTexture(TextureKey key) = 0;
++  virtual std::unique_ptr<Texture> CreateTexture(TextureKey key,
++      std::shared_ptr<const HDTextureReplacement> replacement = {}) = 0;
+ 
+   // Returns nullptr not only if the key is not supported, but also if couldn't
+   // create the texture - if it's nullptr, occasionally a recreation attempt
+   // should be made.
+-  Texture* FindOrCreateTexture(TextureKey key);
++  Texture* FindOrCreateTexture(TextureKey key, bool allow_hd = false);
++  std::shared_ptr<const HDTextureReplacement> FindHDReplacement(TextureKey key, bool request_ranges = true);
++  void RetireInvalidHDTextures();
+ 
+   static const LoadShaderInfo& GetLoadShaderInfo(LoadShaderIndex load_shader_index) {
+     assert_true(load_shader_index < kLoadShaderCount);
+@@ -604,6 +628,11 @@
+   uint64_t current_submission_time_ = 0;
+ 
+   std::unordered_map<TextureKey, std::unique_ptr<Texture>, TextureKey::Hasher> textures_;
++  std::unordered_map<TextureKey, std::unique_ptr<Texture>, TextureKey::Hasher> hd_textures_;
++  std::vector<std::unique_ptr<Texture>> retired_hd_textures_;
++  bool hd_draw_eligible_ = false;
++  // Never reset on cache clears: external descriptor keys may survive a clear.
++  uint64_t next_host_resource_identity_ = 1;
+ 
+   uint64_t textures_total_host_memory_usage_ = 0;
+ 
+diff --git a/include/rex/graphics/pipeline/texture/hd_override.h b/include/rex/graphics/pipeline/texture/hd_override.h
+new file mode 100644
+--- /dev/null
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -0,0 +1,127 @@
++#pragma once
++// Aster experimental single-material replacement. No game assets embedded.
++// Deliberately opt-in and restricted to reviewed opaque color DXT1/DXT5.
++#include <rex/graphics/pipeline/shader/shader.h>
++#include <rex/graphics/pipeline/texture/conversion.h>
++#include <rex/graphics/pipeline/texture/util.h>
++#include <rex/hash.h>
++#include <algorithm>
++#include <cstdlib>
++#include <filesystem>
++#include <fstream>
++#include <memory>
++#include <span>
++#include <string>
++#include <vector>
++
++namespace rex::graphics {
++inline bool IsHDTextureFetchEligible(const ParsedTextureFetchInstruction& fetch) {
++  const auto& a = fetch.attributes;
++  return fetch.opcode == ucode::FetchOpcode::kTextureFetch &&
++      fetch.dimension == xenos::FetchOpDimension::k2D &&
++      !a.unnormalized_coordinates && a.use_computed_lod &&
++      !a.use_register_lod && !a.use_register_gradients && a.lod_bias == 0.0f &&
++      a.offset_x == 0.0f && a.offset_y == 0.0f && a.offset_z == 0.0f;
++}
++inline bool IsHDTextureDrawEligible(const Shader* vertex, const Shader* pixel) {
++  if (!pixel || pixel->texture_bindings().empty() ||
++      (vertex && !vertex->texture_bindings().empty())) return false;
++  for (const auto& binding : pixel->texture_bindings())
++    if (!IsHDTextureFetchEligible(binding.fetch_instr)) return false;
++  return true;
++}
++struct HDTextureReplacement {
++  struct Mip { uint32_t width, height, row_bytes, rows; size_t offset, size; };
++  uint32_t source_format = 0, source_width = 0, source_height = 0;
++  uint32_t width = 0, height = 0;
++  std::string canonical_bc_xxh3_128;
++  std::vector<uint8_t> bytes;
++  std::vector<Mip> mips;
++};
++inline bool IsHDFingerprint(const std::string& value) {
++  return value.size() == 32 && value.find_first_not_of("0123456789abcdef") == std::string::npos;
++}
++inline uint32_t HDReadWord(const std::vector<uint8_t>& data, size_t offset) {
++  return uint32_t(data[offset]) | (uint32_t(data[offset + 1]) << 8) |
++      (uint32_t(data[offset + 2]) << 16) | (uint32_t(data[offset + 3]) << 24);
++}
++inline std::shared_ptr<const HDTextureReplacement> LoadHDTextureReplacement() {
++  // A pack is immutable for this process. Changing files requires a restart.
++  static const auto pack = []() -> std::shared_ptr<const HDTextureReplacement> {
++    try {
++      const char* directory = std::getenv("ASTER_HD_TEXTURE_PACK_DIR");
++      if (!directory || !*directory) return {};
++      const auto path = std::filesystem::u8path(directory);
++      std::ifstream index(path / "texture.index");
++      std::string magic, expected_dds_hash, classification, trailing;
++      auto result = std::make_shared<HDTextureReplacement>();
++      if (!(index >> magic >> result->source_format >> result->source_width >>
++            result->source_height >> result->canonical_bc_xxh3_128 >>
++            expected_dds_hash >> classification) || (index >> trailing) ||
++          magic != "ASTERHD1" || classification != "reviewed-color-opaque" ||
++          (result->source_format != 18 && result->source_format != 20) ||
++          result->source_width < 64 || result->source_height < 64 ||
++          result->source_width > 2048 || result->source_height > 2048 ||
++          !IsHDFingerprint(result->canonical_bc_xxh3_128) ||
++          !IsHDFingerprint(expected_dds_hash)) return {};
++      std::ifstream file(path / "texture.dds", std::ios::binary | std::ios::ate);
++      const auto length = file.tellg();
++      if (!file || length < 128 || length > (64 << 20)) return {};
++      std::vector<uint8_t> dds(static_cast<size_t>(length));
++      file.seekg(0); file.read(reinterpret_cast<char*>(dds.data()), dds.size());
++      if (!file || rex::hash_bytes(std::string_view(
++          reinterpret_cast<const char*>(dds.data()), dds.size())) != expected_dds_hash)
++        return {};
++      if (HDReadWord(dds, 0) != 0x20534444 || HDReadWord(dds, 4) != 124 ||
++          HDReadWord(dds, 76) != 32 || HDReadWord(dds, 80) != 4 ||
++          HDReadWord(dds, 112) != 0) return {};  // No cubes/volume/DX10 extensions.
++      result->width = HDReadWord(dds, 16); result->height = HDReadWord(dds, 12);
++      const uint32_t format = HDReadWord(dds, 84);
++      if (result->width != result->source_width * 2 ||
++          result->height != result->source_height * 2 ||
++          format != (result->source_format == 18 ? 0x31545844u : 0x35545844u)) return {};
++      uint32_t w = result->width, h = result->height, count = 0;
++      size_t offset = 0;
++      const uint32_t block_bytes = result->source_format == 18 ? 8 : 16;
++      do {
++        const uint32_t row = ((w + 3) / 4) * block_bytes, rows = (h + 3) / 4;
++        const size_t size = size_t(row) * rows;
++        result->mips.push_back({w, h, row, rows, offset, size});
++        offset += size; ++count;
++        if (w == 1 && h == 1) break;
++        w = std::max(1u, w >> 1); h = std::max(1u, h >> 1);
++      } while (count < 14);
++      if (HDReadWord(dds, 28) != count || offset + 128 != dds.size() ||
++          result->mips.back().width != 1 || result->mips.back().height != 1) return {};
++      result->bytes.assign(dds.begin() + 128, dds.end());
++      return result;
++    } catch (const std::exception&) { return {}; }
++  }();
++  return pack;
++}
++inline bool HDCanonicalBlocks(std::span<const uint8_t> raw, uint32_t width,
++    uint32_t height, uint32_t row_pitch, uint32_t format, uint32_t endian,
++    bool tiled, std::vector<uint8_t>& linear) {
++  if ((format != 18 && format != 20) || endian > 3 || !width || !height ||
++      width > 2048 || height > 2048) return false;
++  const uint32_t bpb = format == 18 ? 8 : 16, nx = (width + 3) / 4, ny = (height + 3) / 4;
++  if (row_pitch % bpb || row_pitch < nx * bpb || (tiled && ((row_pitch / bpb) & 31))) return false;
++  linear.resize(size_t(nx) * ny * bpb);
++  for (uint32_t y = 0; y < ny; ++y) for (uint32_t x = 0; x < nx; ++x) {
++    const int64_t offset = tiled ? texture_util::GetTiledOffset2D(x, y, row_pitch / bpb,
++        bpb == 8 ? 3 : 4) : int64_t(y) * row_pitch + x * bpb;
++    if (offset < 0 || uint64_t(offset) + bpb > raw.size()) return false;
++    const uint8_t* src = raw.data() + offset;
++    uint8_t* dst = linear.data() + (size_t(y) * nx + x) * bpb;
++    if (endian == 3) {
++      for (uint32_t i = 0; i < bpb; i += 4) {
++        dst[i] = src[i + 2]; dst[i + 1] = src[i + 3];
++        dst[i + 2] = src[i]; dst[i + 3] = src[i + 1];
++      }
++    } else {
++      texture_conversion::CopySwapBlock(static_cast<xenos::Endian>(endian), dst, src, bpb);
++    }
++  }
++  return true;
++}
++}  // namespace rex::graphics
+diff --git a/include/rex/graphics/vulkan/texture_cache.h b/include/rex/graphics/vulkan/texture_cache.h
+--- a/include/rex/graphics/vulkan/texture_cache.h
++++ b/include/rex/graphics/vulkan/texture_cache.h
+@@ -1,4 +1,5 @@
+ #pragma once
++#include <rex/ui/vulkan/upload_buffer_pool.h>
+ /**
+  ******************************************************************************
+  * Xenia : Xbox 360 Emulator Research Project                                 *
+@@ -28,6 +29,7 @@
+ 
+ class VulkanTextureCache final : public TextureCache {
+  public:
++  void CompletedSubmissionUpdated(uint64_t completed_submission_index) override;
+   // Sampler parameters that can be directly converted to a host sampler or used
+   // for checking whether samplers bindings are up to date.
+   union SamplerParameters {
+@@ -133,6 +135,8 @@
+   void UseScaledResolveBufferForWrite(uint64_t written_start_scaled,
+                                       uint64_t written_length_scaled);
+ 
++  std::unique_ptr<ui::vulkan::VulkanUploadBufferPool> hd_upload_pool_;
++
+  protected:
+   bool IsSignedVersionSeparateForFormat(TextureKey key) const override;
+   bool IsScaledResolveSupportedForFormat(TextureKey key) const override;
+@@ -141,7 +145,8 @@
+   uint32_t GetMaxHostTextureWidthHeight(xenos::DataDimension dimension) const override;
+   uint32_t GetMaxHostTextureDepthOrArraySize(xenos::DataDimension dimension) const override;
+ 
+-  std::unique_ptr<Texture> CreateTexture(TextureKey key) override;
++  std::unique_ptr<Texture> CreateTexture(TextureKey key,
++      std::shared_ptr<const HDTextureReplacement> replacement = {}) override;
+ 
+   bool EnsureScaledResolveMemoryCommitted(uint32_t start_unscaled, uint32_t length_unscaled,
+                                           uint32_t length_scaled_alignment_log2 = 0) override;
+diff --git a/src/graphics/d3d12/command_processor.cpp b/src/graphics/d3d12/command_processor.cpp
+--- a/src/graphics/d3d12/command_processor.cpp
++++ b/src/graphics/d3d12/command_processor.cpp
+@@ -2407,6 +2407,8 @@
+   uint32_t used_texture_mask =
+       vertex_shader->GetUsedTextureMaskAfterTranslation() |
+       (pixel_shader != nullptr ? pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
++  texture_cache_->SetHDTextureDrawEligible(IsHDTextureDrawEligible(
++      vertex_shader, pixel_shader));
+   texture_cache_->RequestTextures(used_texture_mask);
+ 
+   // Bind the pipeline after configuring it and doing everything that may bind
+diff --git a/src/graphics/d3d12/texture_cache.cpp b/src/graphics/d3d12/texture_cache.cpp
+--- a/src/graphics/d3d12/texture_cache.cpp
++++ b/src/graphics/d3d12/texture_cache.cpp
+@@ -654,6 +654,11 @@
+   srv_descriptor_cache_.clear();
+ }
+ 
++void D3D12TextureCache::CompletedSubmissionUpdated(uint64_t completed_submission_index) {
++  if (hd_upload_pool_) hd_upload_pool_->Reclaim(completed_submission_index);
++  TextureCache::CompletedSubmissionUpdated(completed_submission_index);
++}
++
+ void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
+   TextureCache::BeginSubmission(new_submission_index);
+ 
+@@ -779,7 +784,9 @@
+       continue;
+     }
+     if (key.key != binding->key || key.host_swizzle != binding->host_swizzle ||
+-        key.swizzled_signs != binding->swizzled_signs) {
++        key.swizzled_signs != binding->swizzled_signs ||
++        key.host_resource_identity != (binding->texture ? binding->texture->host_resource_identity() : 0) ||
++        key.host_resource_signed_identity != (binding->texture_signed ? binding->texture_signed->host_resource_identity() : 0)) {
+       return false;
+     }
+   }
+@@ -796,11 +803,14 @@
+       key.key.MakeInvalid();
+       key.host_swizzle = xenos::XE_GPU_TEXTURE_SWIZZLE_0000;
+       key.swizzled_signs = kSwizzledSignsUnsigned;
++      key.host_resource_identity = key.host_resource_signed_identity = 0;
+       continue;
+     }
+     key.key = binding->key;
+     key.host_swizzle = binding->host_swizzle;
+     key.swizzled_signs = binding->swizzled_signs;
++    key.host_resource_identity = binding->texture ? binding->texture->host_resource_identity() : 0;
++    key.host_resource_signed_identity = binding->texture_signed ? binding->texture_signed->host_resource_identity() : 0;
+   }
+ }
+ 
+@@ -1516,9 +1526,12 @@
+   }
+ }
+ 
+-std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTexture(TextureKey key) {
++std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTexture(TextureKey key,
++    std::shared_ptr<const HDTextureReplacement> replacement) {
+   D3D12_RESOURCE_DESC desc;
+   desc.Format = GetDXGIResourceFormat(key);
++  if (replacement && desc.Format != DXGI_FORMAT_BC1_UNORM && desc.Format != DXGI_FORMAT_BC3_UNORM)
++    return nullptr;
+   if (desc.Format == DXGI_FORMAT_UNKNOWN) {
+     unsupported_format_features_used_[uint32_t(key.format)] |= kUnsupportedResourceBit;
+     return nullptr;
+@@ -1530,14 +1543,14 @@
+     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+   }
+   desc.Alignment = 0;
+-  desc.Width = key.GetWidth();
+-  desc.Height = key.GetHeight();
++  desc.Width = replacement ? replacement->width : key.GetWidth();
++  desc.Height = replacement ? replacement->height : key.GetHeight();
+   if (key.scaled_resolve) {
+     desc.Width *= draw_resolution_scale_x();
+     desc.Height *= draw_resolution_scale_y();
+   }
+   desc.DepthOrArraySize = key.GetDepthOrArraySize();
+-  desc.MipLevels = key.mip_max_level + 1;
++  desc.MipLevels = replacement ? uint16_t(replacement->mips.size()) : key.mip_max_level + 1;
+   desc.SampleDesc.Count = 1;
+   desc.SampleDesc.Quality = 0;
+   desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+@@ -1554,13 +1567,60 @@
+                                              resource_state, nullptr, IID_PPV_ARGS(&resource)))) {
+     return nullptr;
+   }
+-  return std::unique_ptr<Texture>(new D3D12Texture(*this, key, resource.Get(), resource_state));
++  auto texture = std::make_unique<D3D12Texture>(*this, key, resource.Get(), resource_state);
++  texture->SetHDReplacement(std::move(replacement));
++  return texture;
+ }
+ 
+ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, bool load_base,
+                                                               bool load_mips) {
+   D3D12Texture& d3d12_texture = static_cast<D3D12Texture&>(texture);
+   TextureKey texture_key = d3d12_texture.key();
++
++  if (const auto& replacement = texture.hd_replacement()) {
++    const auto& provider = command_processor_.GetD3D12Provider();
++    ID3D12Device* device = provider.GetDevice();
++    const auto desc = d3d12_texture.resource()->GetDesc();
++    const UINT levels = UINT(replacement->mips.size());
++    std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(levels);
++    UINT64 total;
++    device->GetCopyableFootprints(&desc, 0, levels, 0, footprints.data(), nullptr, nullptr, &total);
++    if (!total || total > (128u << 20)) return false;
++    if (!hd_upload_pool_) hd_upload_pool_ = std::make_unique<ui::d3d12::D3D12UploadBufferPool>(
++        provider, std::max<size_t>(ui::GraphicsUploadBufferPool::kDefaultPageSize,
++            rex::align(size_t(total), size_t(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT))));
++    ID3D12Resource* upload_buffer;
++    size_t upload_offset;
++    uint8_t* mapping = hd_upload_pool_->Request(command_processor_.GetCurrentSubmission(),
++        size_t(total), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT, &upload_buffer, &upload_offset, nullptr);
++    if (!mapping) return false;
++    std::memset(mapping, 0, size_t(total));
++    for (UINT level = 0; level < levels; ++level) {
++      const auto& mip = replacement->mips[level];
++      const auto& footprint = footprints[level];
++      for (uint32_t row = 0; row < mip.rows; ++row)
++        std::memcpy(mapping + footprint.Offset + size_t(row) * footprint.Footprint.RowPitch,
++            replacement->bytes.data() + mip.offset + size_t(row) * mip.row_bytes, mip.row_bytes);
++    }
++    hd_upload_pool_->FlushWrites();
++    d3d12_texture.MarkAsUsed();
++    command_processor_.PushTransitionBarrier(d3d12_texture.resource(),
++        d3d12_texture.SetResourceState(D3D12_RESOURCE_STATE_COPY_DEST), D3D12_RESOURCE_STATE_COPY_DEST);
++    command_processor_.SubmitBarriers();
++    auto& commands = command_processor_.GetDeferredCommandList();
++    for (UINT level = 0; level < levels; ++level) {
++      D3D12_TEXTURE_COPY_LOCATION source = {}, destination = {};
++      source.pResource = upload_buffer;
++      source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
++      source.PlacedFootprint = footprints[level];
++      source.PlacedFootprint.Offset += upload_offset;
++      destination.pResource = d3d12_texture.resource();
++      destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
++      destination.SubresourceIndex = level;
++      commands.D3DCopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
++    }
++    return true;
++  }
+ 
+   DeferredCommandList& command_list = command_processor_.GetDeferredCommandList();
+   ID3D12Device* device = command_processor_.GetD3D12Provider().GetDevice();
+@@ -2074,7 +2134,7 @@
+     return UINT32_MAX;
+   }
+ 
+-  uint32_t mip_levels = texture_key.mip_max_level + 1;
++  uint32_t mip_levels = texture.host_mip_count();
+   ID3D12Resource* resource_for_view = texture.resource();
+   switch (dimension) {
+     case xenos::DataDimension::k3D:
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -333,6 +333,9 @@
+ }
+ 
+ void TextureCache::CompletedSubmissionUpdated(uint64_t completed_submission_index) {
++  std::erase_if(retired_hd_textures_, [completed_submission_index](const auto& texture) {
++    return texture->last_usage_submission_index() <= completed_submission_index;
++  });
+   // If memory usage is too high, destroy unused textures.
+   uint64_t current_time = rex::chrono::Clock::QueryHostUptimeMillis();
+   // texture_cache_memory_limit_render_to_texture is assumed to be included in
+@@ -371,11 +374,12 @@
+       ResetTextureBindings();
+     }
+     // Remove the texture from the map and destroy it via its unique_ptr.
+-    auto found_texture_it = textures_.find(texture->key());
+-    assert_true(found_texture_it != textures_.end());
+-    if (found_texture_it != textures_.end()) {
++    auto& storage = texture->hd_replacement() ? hd_textures_ : textures_;
++    auto found_texture_it = storage.find(texture->key());
++    assert_true(found_texture_it != storage.end());
++    if (found_texture_it != storage.end()) {
+       assert_true(found_texture_it->second.get() == texture);
+-      textures_.erase(found_texture_it);
++      storage.erase(found_texture_it);
+       // `texture` is invalid now.
+     }
+   }
+@@ -514,6 +518,18 @@
+     }
+   }
+ 
++  if (texture.hd_replacement()) {
++    auto global_lock = global_critical_region_.Acquire();
++    // Recheck the exact CPU snapshot and install watches in the same critical
++    // region, before any potentially lengthy host upload. Never bless a newer
++    // guest-memory generation as represented by an older HD image.
++    // Install invalidation watches before the final snapshot. The snapshot
++    // also requires valid CPU-resident pages (protected by RequestRanges),
++    // rejecting any page invalidated since the range upload.
++    texture.MakeUpToDateAndWatch(global_lock);
++    auto replacement = FindHDReplacement(texture_key, false);
++    if (!replacement || replacement != texture.hd_replacement()) return false;
++  }
+   if (!LoadTextureDataFromResidentMemoryImpl(texture, pending_load.load_base,
+                                              pending_load.load_mips)) {
+     return false;
+@@ -523,7 +539,8 @@
+   // resolves as well to detect when the CPU wants to reuse the memory for a
+   // regular texture or a vertex buffer, and thus the scaled resolve version is
+   // not up to date anymore.
+-  texture.MakeUpToDateAndWatch(global_critical_region_.Acquire());
++  if (!texture.hd_replacement())
++    texture.MakeUpToDateAndWatch(global_critical_region_.Acquire());
+   // Compressed, single-layer 2D CPU textures only. Never resolve/depth targets,
+   // arrays/cubes, signed textures, small packed-base atlases, or unsupported data.
+   if (pending_load.load_base && !texture_key.scaled_resolve &&
+@@ -551,6 +568,7 @@
+ }
+ 
+ void TextureCache::RequestTextures(uint32_t used_texture_mask) {
++  RetireInvalidHDTextures();
+   const auto& regs = register_file();
+ 
+   if (texture_became_outdated_.exchange(false, std::memory_order_acquire)) {
+@@ -618,6 +636,18 @@
+         any_sign_is_signed != any_sign_was_signed) {
+       bindings_changed |= index_bit;
+     }
++    uint32_t hd_mip_min = 0;
++    texture_util::GetSubresourcesFromFetchConstant(fetch, nullptr, nullptr, nullptr, nullptr,
++        nullptr, &hd_mip_min, nullptr);
++    const bool allow_hd_binding = hd_draw_eligible_ && !any_sign_is_signed &&
++        fetch.lod_bias == 0 && hd_mip_min == 0;
++    // Fetch bias/min-LOD and signedness may change without changing TextureKey.
++    // Re-select the host resource on those fetch-constant updates as well.
++    if (binding.texture &&
++        bool(binding.texture->hd_replacement()) != allow_hd_binding) {
++      key_changed = true;
++      bindings_changed |= index_bit;
++    }
+     bool load_unsigned_data = false, load_signed_data = false;
+     if (IsSignedVersionSeparateForFormat(binding.key)) {
+       // Can reuse previously loaded unsigned/signed versions if the key is the
+@@ -628,7 +658,7 @@
+       // load).
+       if (any_sign_is_not_signed) {
+         if (key_changed || !any_sign_was_not_signed) {
+-          binding.texture = FindOrCreateTexture(binding.key);
++          binding.texture = FindOrCreateTexture(binding.key, allow_hd_binding);
+           load_unsigned_data = true;
+         }
+       } else {
+@@ -648,7 +678,7 @@
+       // Same resource for both unsigned and signed, but descriptor formats may
+       // be different.
+       if (key_changed) {
+-        binding.texture = FindOrCreateTexture(binding.key);
++        binding.texture = FindOrCreateTexture(binding.key, allow_hd_binding);
+         load_unsigned_data = true;
+       }
+       binding.texture_signed = nullptr;
+@@ -677,16 +707,32 @@
+         pending_shared_memory_range_pairs.data(), pending_shared_memory_range_pairs.size());
+   }
+ 
++  bool hd_load_failed = false;
+   if (batched_shared_memory_request_succeeded) {
+     for (const PendingTextureLoad& pending_load : pending_texture_loads) {
+-      CommitPreparedTextureLoad(pending_load);
++      if (!CommitPreparedTextureLoad(pending_load) && pending_load.texture &&
++          pending_load.texture->hd_replacement()) {
++        pending_load.texture->SetHDFailed();
++        hd_load_failed = true;
++      }
+     }
+   } else {
+     for (const PendingTextureLoad& pending_load : pending_texture_loads) {
+       if (pending_load.texture != nullptr) {
+-        LoadTextureData(*pending_load.texture);
+-      }
+-    }
++        if (!LoadTextureData(*pending_load.texture) && pending_load.texture->hd_replacement()) {
++          pending_load.texture->SetHDFailed();
++          hd_load_failed = true;
++        }
++      }
++    }
++  }
++  if (hd_load_failed) {
++    // Fail closed in this draw: rebind native resources, retaining any submitted
++    // HD copies and descriptors until their submission fence completes.
++    SetHDTextureDrawEligible(false);
++    ResetTextureBindings();
++    RequestTextures(used_texture_mask);
++    return;
+   }
+   if (bindings_changed) {
+     UpdateTextureBindingsImpl(bindings_changed);
+@@ -739,6 +785,7 @@
+ TextureCache::Texture::Texture(TextureCache& texture_cache, const TextureKey& key, bool track_usage)
+     : texture_cache_(texture_cache),
+       key_(key),
++      host_resource_identity_(texture_cache.next_host_resource_identity_++),
+       guest_layout_(key.GetGuestLayout()),
+       last_usage_submission_index_(texture_cache.current_submission_index_),
+       last_usage_time_(texture_cache.current_submission_time_),
+@@ -858,10 +905,76 @@
+ void TextureCache::DestroyAllTextures(bool from_destructor) {
+   ResetTextureBindings(from_destructor);
+   textures_.clear();
++  hd_textures_.clear();
++  retired_hd_textures_.clear();
+   COUNT_profile_set("gpu/texture_cache/textures", 0);
+ }
+ 
+-TextureCache::Texture* TextureCache::FindOrCreateTexture(TextureKey key) {
++std::shared_ptr<const HDTextureReplacement> TextureCache::FindHDReplacement(TextureKey key, bool request_ranges) {
++  try {
++    auto pack = LoadHDTextureReplacement();
++    if (!pack || key.scaled_resolve || key.signed_separate || !key.base_page ||
++        key.dimension != xenos::DataDimension::k2DOrStacked || key.GetDepthOrArraySize() != 1 ||
++        uint32_t(key.format) != pack->source_format || key.GetWidth() != pack->source_width ||
++        key.GetHeight() != pack->source_height) return {};
++    uint32_t max_level = 0;
++    for (uint32_t size = std::max(key.GetWidth(), key.GetHeight()); size > 1; size >>= 1) ++max_level;
++    if (key.mip_max_level != max_level) return {};
++    const auto layout = key.GetGuestLayout();
++    if (layout.packed_level == 0 || !layout.base.level_data_extent_bytes ||
++        layout.base.level_data_extent_bytes > (16u << 20)) return {};
++    if (request_ranges && !shared_memory().RequestRange(key.base_page << 12, layout.base.level_data_extent_bytes)) return {};
++    std::vector<uint8_t> raw, linear;
++    if (!shared_memory().TrySnapshotCpuTexture(key.base_page << 12,
++        layout.base.level_data_extent_bytes, raw) ||
++        !HDCanonicalBlocks(raw, key.GetWidth(), key.GetHeight(), layout.base.row_pitch_bytes,
++            uint32_t(key.format), uint32_t(key.endianness), key.tiled, linear)) return {};
++    if (key.mip_page && layout.mips_total_extent_bytes) {
++      std::vector<uint8_t> mip_snapshot;
++      if ((request_ranges && !shared_memory().RequestRange(key.mip_page << 12, layout.mips_total_extent_bytes)) ||
++          !shared_memory().TrySnapshotCpuTexture(key.mip_page << 12,
++              layout.mips_total_extent_bytes, mip_snapshot)) return {};
++    }
++    if (rex::hash_bytes(std::string_view(reinterpret_cast<const char*>(linear.data()),
++        linear.size())) != pack->canonical_bc_xxh3_128) return {};
++    return pack;
++  } catch (const std::exception&) { return {}; }
++}
++
++void TextureCache::Texture::DetachForRetirement() {
++  auto global_lock = texture_cache_.global_critical_region_.Acquire();
++  if (base_watch_handle_) {
++    texture_cache_.shared_memory().UnwatchMemoryRange(base_watch_handle_);
++    base_watch_handle_ = nullptr;
++  }
++  if (mips_watch_handle_) {
++    texture_cache_.shared_memory().UnwatchMemoryRange(mips_watch_handle_);
++    mips_watch_handle_ = nullptr;
++  }
++  if (in_usage_list_) {
++    if (used_previous_) used_previous_->used_next_ = used_next_;
++    else texture_cache_.texture_used_first_ = used_next_;
++    if (used_next_) used_next_->used_previous_ = used_previous_;
++    else texture_cache_.texture_used_last_ = used_previous_;
++    used_previous_ = used_next_ = nullptr;
++    in_usage_list_ = false;
++  }
++  // Host memory budget is decremented by the destructor after the fence, not here.
++}
++
++void TextureCache::RetireInvalidHDTextures() {
++  bool reset = false;
++  for (auto it = hd_textures_.begin(); it != hd_textures_.end();) {
++    if (!it->second->outdated_mask() && !it->second->hd_failed()) { ++it; continue; }
++    it->second->DetachForRetirement();
++    retired_hd_textures_.push_back(std::move(it->second));
++    it = hd_textures_.erase(it);
++    reset = true;
++  }
++  if (reset) ResetTextureBindings();
++}
++
++TextureCache::Texture* TextureCache::FindOrCreateTexture(TextureKey key, bool allow_hd) {
+   // Check if the texture is a scaled resolve texture.
+   if (IsDrawResolutionScaled() && key.tiled && IsScaledResolveSupportedForFormat(key)) {
+     texture_util::TextureGuestLayout scaled_resolve_guest_layout = key.GetGuestLayout();
+@@ -956,6 +1069,19 @@
+     get_host_extent(host_width, host_height, host_depth_or_array_size);
+   }
+ 
++  if (allow_hd) {
++    const auto found_hd = hd_textures_.find(key);
++    if (found_hd != hd_textures_.end()) return found_hd->second.get();
++    if (auto replacement = FindHDReplacement(key)) {
++      if (auto created = CreateTexture(key, replacement)) {
++        assert_true(created->key() == key);
++        Texture* texture = hd_textures_.emplace(key, std::move(created)).first->second.get();
++        texture->LogAction("Created reviewed HD host resource");
++        return texture;
++      }
++    }
++  }
++
+   // Try to find an existing texture.
+   // TODO(Triang3l): Reuse a texture with mip_page unchanged, but base_page
+   // previously 0, now not 0, to save memory - common case in streaming.
+diff --git a/src/graphics/vulkan/command_processor.cpp b/src/graphics/vulkan/command_processor.cpp
+--- a/src/graphics/vulkan/command_processor.cpp
++++ b/src/graphics/vulkan/command_processor.cpp
+@@ -3835,6 +3835,8 @@
+   uint32_t used_texture_mask =
+       vertex_shader->GetUsedTextureMaskAfterTranslation() |
+       (pixel_shader != nullptr ? pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
++  texture_cache_->SetHDTextureDrawEligible(IsHDTextureDrawEligible(
++      vertex_shader, pixel_shader));
+   texture_cache_->RequestTextures(used_texture_mask);
+ 
+   const VulkanPipelineCache::PipelineLayoutProvider* pipeline_layout_provider;
+diff --git a/src/graphics/vulkan/texture_cache.cpp b/src/graphics/vulkan/texture_cache.cpp
+--- a/src/graphics/vulkan/texture_cache.cpp
++++ b/src/graphics/vulkan/texture_cache.cpp
+@@ -491,6 +491,11 @@
+   }
+ }
+ 
++void VulkanTextureCache::CompletedSubmissionUpdated(uint64_t completed_submission_index) {
++  if (hd_upload_pool_) hd_upload_pool_->Reclaim(completed_submission_index);
++  TextureCache::CompletedSubmissionUpdated(completed_submission_index);
++}
++
+ void VulkanTextureCache::BeginSubmission(uint64_t new_submission_index) {
+   TextureCache::BeginSubmission(new_submission_index);
+ 
+@@ -1114,7 +1119,8 @@
+   }
+ }
+ 
+-std::unique_ptr<TextureCache::Texture> VulkanTextureCache::CreateTexture(TextureKey key) {
++std::unique_ptr<TextureCache::Texture> VulkanTextureCache::CreateTexture(TextureKey key,
++    std::shared_ptr<const HDTextureReplacement> replacement) {
+   VkFormat formats[] = {VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};
+   const HostFormatPair& host_format = GetHostFormatPair(key);
+   if (host_format.format_signed.format == VK_FORMAT_UNDEFINED) {
+@@ -1137,6 +1143,7 @@
+       }
+     }
+   }
++  if (replacement && !host_format.format_unsigned.block_compressed) return nullptr;
+   if (formats[0] == VK_FORMAT_UNDEFINED) {
+     unsupported_format_features_used_[uint32_t(key.format)] |= kUnsupportedResourceBit;
+     return nullptr;
+@@ -1162,14 +1169,14 @@
+   }
+   image_create_info.imageType = is_3d ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
+   image_create_info.format = formats[0];
+-  image_create_info.extent.width = key.GetWidth();
+-  image_create_info.extent.height = key.GetHeight();
++  image_create_info.extent.width = replacement ? replacement->width : key.GetWidth();
++  image_create_info.extent.height = replacement ? replacement->height : key.GetHeight();
+   if (key.scaled_resolve) {
+     image_create_info.extent.width *= draw_resolution_scale_x();
+     image_create_info.extent.height *= draw_resolution_scale_y();
+   }
+   image_create_info.extent.depth = is_3d ? depth_or_array_size : 1;
+-  image_create_info.mipLevels = key.mip_max_level + 1;
++  image_create_info.mipLevels = replacement ? uint32_t(replacement->mips.size()) : key.mip_max_level + 1;
+   image_create_info.arrayLayers = is_3d ? 1 : depth_or_array_size;
+   image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+   image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+@@ -1199,7 +1206,9 @@
+     return nullptr;
+   }
+ 
+-  return std::unique_ptr<Texture>(new VulkanTexture(*this, key, image, allocation));
++  auto texture = std::make_unique<VulkanTexture>(*this, key, image, allocation);
++  texture->SetHDReplacement(std::move(replacement));
++  return texture;
+ }
+ 
+ bool VulkanTextureCache::EnsureScaledResolveMemoryCommitted(uint32_t start_unscaled,
+@@ -1217,6 +1226,50 @@
+                                                                bool load_mips) {
+   VulkanTexture& vulkan_texture = static_cast<VulkanTexture&>(texture);
+   TextureKey texture_key = vulkan_texture.key();
++
++  if (const auto& replacement = texture.hd_replacement()) {
++    if (!hd_upload_pool_) hd_upload_pool_ = std::make_unique<ui::vulkan::VulkanUploadBufferPool>(
++        command_processor_.GetVulkanDevice(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
++        std::max<size_t>(ui::GraphicsUploadBufferPool::kDefaultPageSize,
++            rex::align(replacement->bytes.size(), size_t(16))));
++    VkBuffer upload_buffer;
++    VkDeviceSize upload_offset;
++    uint8_t* mapping = hd_upload_pool_->Request(command_processor_.GetCurrentSubmission(),
++        replacement->bytes.size(), 16, upload_buffer, upload_offset);
++    if (!mapping) return false;
++    std::memcpy(mapping, replacement->bytes.data(), replacement->bytes.size());
++    hd_upload_pool_->FlushWrites();
++    vulkan_texture.MarkAsUsed();
++    const auto previous = vulkan_texture.SetUsage(VulkanTexture::Usage::kTransferDestination);
++    if (previous != VulkanTexture::Usage::kTransferDestination) {
++      VkPipelineStageFlags src_stage, dst_stage;
++      VkAccessFlags src_access, dst_access;
++      VkImageLayout old_layout, new_layout;
++      GetTextureUsageMasks(previous, src_stage, src_access, old_layout);
++      GetTextureUsageMasks(VulkanTexture::Usage::kTransferDestination, dst_stage, dst_access, new_layout);
++      command_processor_.PushImageMemoryBarrier(vulkan_texture.image(),
++          ui::vulkan::util::InitializeSubresourceRange(), src_stage, dst_stage,
++          src_access, dst_access, old_layout, new_layout);
++    }
++    command_processor_.PushBufferMemoryBarrier(upload_buffer, upload_offset,
++        replacement->bytes.size(), VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
++        VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
++    command_processor_.SubmitBarriers(true);
++    auto* copies = command_processor_.deferred_command_buffer().CmdCopyBufferToImageEmplace(
++        upload_buffer, vulkan_texture.image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++        uint32_t(replacement->mips.size()));
++    for (size_t level = 0; level < replacement->mips.size(); ++level) {
++      const auto& mip = replacement->mips[level];
++      auto& copy = copies[level];
++      copy = {};
++      copy.bufferOffset = upload_offset + mip.offset;
++      copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++      copy.imageSubresource.mipLevel = uint32_t(level);
++      copy.imageSubresource.layerCount = 1;
++      copy.imageExtent = {mip.width, mip.height, 1};
++    }
++    return true;
++  }
+ 
+   // Get the pipeline.
+   const HostFormatPair& host_format_pair = GetHostFormatPair(texture_key);

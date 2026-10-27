@@ -1,0 +1,240 @@
+diff --git a/include/rex/graphics/pipeline/texture/hd_override.h b/include/rex/graphics/pipeline/texture/hd_override.h
+--- a/include/rex/graphics/pipeline/texture/hd_override.h
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -1,5 +1,5 @@
+ #pragma once
+-// Aster experimental single-material replacement. No game assets embedded.
++// Aster bounded reviewed material replacements. No game assets embedded.
+ // Deliberately opt-in and restricted to reviewed opaque color DXT1/DXT5.
+ #include <rex/graphics/pipeline/shader/shader.h>
+ #include <rex/graphics/pipeline/texture/conversion.h>
+@@ -10,6 +10,8 @@
+ #include <filesystem>
+ #include <fstream>
+ #include <memory>
++#include <sstream>
++#include <unordered_map>
+ #include <span>
+ #include <string>
+ #include <vector>
+@@ -45,14 +47,47 @@
+   return uint32_t(data[offset]) | (uint32_t(data[offset + 1]) << 8) |
+       (uint32_t(data[offset + 2]) << 16) | (uint32_t(data[offset + 3]) << 24);
+ }
+-inline std::shared_ptr<const HDTextureReplacement> LoadHDTextureReplacement() {
+-  // A pack is immutable for this process. Changing files requires a restart.
+-  static const auto pack = []() -> std::shared_ptr<const HDTextureReplacement> {
+-    try {
+-      const char* directory = std::getenv("ASTER_HD_TEXTURE_PACK_DIR");
+-      if (!directory || !*directory) return {};
+-      const auto path = std::filesystem::u8path(directory);
+-      std::ifstream index(path / "texture.index");
++// Reject links in every path component. Loaded bytes are immutable thereafter.
++// Packs must not be concurrently edited while they are being loaded.
++inline bool HDPathWithoutSymlinks(const std::filesystem::path& path) {
++  const auto absolute = std::filesystem::absolute(path).lexically_normal();
++  std::filesystem::path current;
++  for (const auto& component : absolute) {
++    current /= component;
++    const auto status = std::filesystem::symlink_status(current);
++    if (!std::filesystem::exists(status) || std::filesystem::is_symlink(status)) return false;
++  }
++  // Also catches Windows directory junctions that canonicalization resolves.
++  return std::filesystem::canonical(absolute) == absolute;
++}
++inline bool HDReadSmallFile(const std::filesystem::path& path, size_t limit, std::string& text) {
++  if (!HDPathWithoutSymlinks(path) || !std::filesystem::is_regular_file(path)) return false;
++  std::ifstream file(path, std::ios::binary | std::ios::ate);
++  const auto length = file.tellg();
++  if (!file || length < 0 || uint64_t(length) > limit) return false;
++  text.resize(size_t(length));
++  file.seekg(0); file.read(text.data(), text.size());
++  return bool(file);
++}
++inline bool HDRelativeDirectory(const std::string& value) {
++  if (value.empty() || value.size() > 192 || value.front() == '/' || value.back() == '/') return false;
++  size_t start = 0;
++  while (start < value.size()) {
++    const auto end = value.find('/', start);
++    const auto component = value.substr(start, end == std::string::npos ? end : end - start);
++    if (component.empty() || component == "." || component == ".." ||
++        component.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != std::string::npos)
++      return false;
++    if (end == std::string::npos) break;
++    start = end + 1;
++  }
++  return true;
++}
++inline std::shared_ptr<const HDTextureReplacement> HDReadReplacement(
++    const std::filesystem::path& path, size_t& remaining_bytes) {
++      std::string index_text;
++      if (!HDReadSmallFile(path / "texture.index", 512, index_text)) return {};
++      std::istringstream index(index_text);
+       std::string magic, expected_dds_hash, classification, trailing;
+       auto result = std::make_shared<HDTextureReplacement>();
+       if (!(index >> magic >> result->source_format >> result->source_width >>
+@@ -62,11 +97,15 @@
+           (result->source_format != 18 && result->source_format != 20) ||
+           result->source_width < 64 || result->source_height < 64 ||
+           result->source_width > 2048 || result->source_height > 2048 ||
++          (result->source_width & (result->source_width - 1)) ||
++          (result->source_height & (result->source_height - 1)) ||
+           !IsHDFingerprint(result->canonical_bc_xxh3_128) ||
+           !IsHDFingerprint(expected_dds_hash)) return {};
++      if (!HDPathWithoutSymlinks(path / "texture.dds") ||
++          !std::filesystem::is_regular_file(path / "texture.dds")) return {};
+       std::ifstream file(path / "texture.dds", std::ios::binary | std::ios::ate);
+       const auto length = file.tellg();
+-      if (!file || length < 128 || length > (64 << 20)) return {};
++      if (!file || length < 128 || length > (64 << 20) || uint64_t(length) > remaining_bytes) return {};
+       std::vector<uint8_t> dds(static_cast<size_t>(length));
+       file.seekg(0); file.read(reinterpret_cast<char*>(dds.data()), dds.size());
+       if (!file || rex::hash_bytes(std::string_view(
+@@ -93,11 +132,69 @@
+       } while (count < 14);
+       if (HDReadWord(dds, 28) != count || offset + 128 != dds.size() ||
+           result->mips.back().width != 1 || result->mips.back().height != 1) return {};
++      remaining_bytes -= size_t(length);
+       result->bytes.assign(dds.begin() + 128, dds.end());
++      return result;
++}
++struct HDTexturePack {
++  std::unordered_map<std::string, std::shared_ptr<const HDTextureReplacement>> entries;
++  bool HasGeometry(uint32_t format, uint32_t width, uint32_t height) const {
++    for (const auto& entry : entries) {
++      const auto& replacement = *entry.second;
++      if (replacement.source_format == format && replacement.source_width == width &&
++          replacement.source_height == height) return true;
++    }
++    return false;
++  }
++};
++inline std::shared_ptr<const HDTexturePack> LoadHDTexturePack() {
++  // Validate the entire bounded pack before enabling any replacement. Bad entries
++  // reject the whole pack; changing files requires restarting this process.
++  static const auto pack = []() -> std::shared_ptr<const HDTexturePack> {
++    try {
++      const char* directory = std::getenv("ASTER_HD_TEXTURE_PACK_DIR");
++      if (!directory || !*directory) return {};
++      const auto root = std::filesystem::u8path(directory);
++      if (!HDPathWithoutSymlinks(root) || !std::filesystem::is_directory(root)) return {};
++      auto result = std::make_shared<HDTexturePack>();
++      size_t remaining = 256u << 20;
++      if (!std::filesystem::exists(std::filesystem::symlink_status(root / "texture-pack.index"))) {
++        auto entry = HDReadReplacement(root, remaining);
++        if (!entry) return {};
++        result->entries.emplace(entry->canonical_bc_xxh3_128, std::move(entry));
++        return result;
++      }
++      std::string text;
++      if (!HDReadSmallFile(root / "texture-pack.index", 65536, text)) return {};
++      std::istringstream stream(text);
++      std::string line, magic, trailing;
++      uint32_t count = 0;
++      if (!std::getline(stream, line)) return {};
++      std::istringstream header(line);
++      if (!(header >> magic >> count) || (header >> trailing) || magic != "ASTERHDPACK1" ||
++          !count || count > 256) return {};
++      for (uint32_t i = 0; i < count; ++i) {
++        if (!std::getline(stream, line)) return {};
++        std::istringstream row(line);
++        std::string fingerprint, relative;
++        if (!(row >> fingerprint >> relative) || (row >> trailing) ||
++            !IsHDFingerprint(fingerprint) || !HDRelativeDirectory(relative) ||
++            result->entries.contains(fingerprint)) return {};
++        auto entry = HDReadReplacement(root / std::filesystem::u8path(relative), remaining);
++        if (!entry || entry->canonical_bc_xxh3_128 != fingerprint) return {};
++        result->entries.emplace(fingerprint, std::move(entry));
++      }
++      // No extra records, including blank records, after the declared count.
++      if (std::getline(stream, line)) return {};
+       return result;
+     } catch (const std::exception&) { return {}; }
+   }();
+   return pack;
++}
++// Compatibility accessor for legacy single-material consumers and tests.
++inline std::shared_ptr<const HDTextureReplacement> LoadHDTextureReplacement() {
++  const auto pack = LoadHDTexturePack();
++  return pack && pack->entries.size() == 1 ? pack->entries.begin()->second : nullptr;
+ }
+ inline bool HDCanonicalBlocks(std::span<const uint8_t> raw, uint32_t width,
+     uint32_t height, uint32_t row_pitch, uint32_t format, uint32_t endian,
+diff --git a/include/rex/graphics/pipeline/texture/cache.h b/include/rex/graphics/pipeline/texture/cache.h
+--- a/include/rex/graphics/pipeline/texture/cache.h
++++ b/include/rex/graphics/pipeline/texture/cache.h
+@@ -16,6 +16,7 @@
+ #include <cstring>
+ #include <memory>
+ #include <unordered_map>
++#include <unordered_set>
+ #include <vector>
+ 
+ #include <rex/assert.h>
+@@ -113,7 +114,7 @@
+   virtual void RequestTextures(uint32_t used_texture_mask);
+   void SetHDTextureDrawEligible(bool eligible) {
+     // Off and rejected packs retain the native binding-cache behavior.
+-    eligible = eligible && bool(LoadHDTextureReplacement());
++    eligible = eligible && bool(LoadHDTexturePack());
+     if (hd_draw_eligible_ != eligible) {
+       hd_draw_eligible_ = eligible;
+       ResetTextureBindings();
+@@ -633,6 +634,7 @@
+   std::unordered_map<TextureKey, std::unique_ptr<Texture>, TextureKey::Hasher> hd_textures_;
+   std::vector<std::unique_ptr<Texture>> retired_hd_textures_;
+   bool hd_draw_eligible_ = false;
++  std::unordered_set<std::string> logged_hd_materials_;
+   // Never reset on cache clears: external descriptor keys may survive a clear.
+   uint64_t next_host_resource_identity_ = 1;
+ 
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -913,11 +913,10 @@
+ 
+ std::shared_ptr<const HDTextureReplacement> TextureCache::FindHDReplacement(TextureKey key, bool request_ranges) {
+   try {
+-    auto pack = LoadHDTextureReplacement();
++    auto pack = LoadHDTexturePack();
+     if (!pack || key.scaled_resolve || key.signed_separate || !key.base_page ||
+         key.dimension != xenos::DataDimension::k2DOrStacked || key.GetDepthOrArraySize() != 1 ||
+-        uint32_t(key.format) != pack->source_format || key.GetWidth() != pack->source_width ||
+-        key.GetHeight() != pack->source_height) return {};
++        !pack->HasGeometry(uint32_t(key.format), key.GetWidth(), key.GetHeight())) return {};
+     uint32_t max_level = 0;
+     for (uint32_t size = std::max(key.GetWidth(), key.GetHeight()); size > 1; size >>= 1) ++max_level;
+     if (key.mip_max_level != max_level) return {};
+@@ -936,9 +935,15 @@
+           !shared_memory().TrySnapshotCpuTexture(key.mip_page << 12,
+               layout.mips_total_extent_bytes, mip_snapshot)) return {};
+     }
+-    if (rex::hash_bytes(std::string_view(reinterpret_cast<const char*>(linear.data()),
+-        linear.size())) != pack->canonical_bc_xxh3_128) return {};
+-    return pack;
++    const auto fingerprint = rex::hash_bytes(std::string_view(
++        reinterpret_cast<const char*>(linear.data()), linear.size()));
++    const auto found = pack->entries.find(fingerprint);
++    if (found == pack->entries.end()) return {};
++    const auto& replacement = found->second;
++    if (replacement->source_format != uint32_t(key.format) ||
++        replacement->source_width != key.GetWidth() ||
++        replacement->source_height != key.GetHeight()) return {};
++    return replacement;
+   } catch (const std::exception&) { return {}; }
+ }
+ 
+@@ -1078,6 +1083,13 @@
+         assert_true(created->key() == key);
+         Texture* texture = hd_textures_.emplace(key, std::move(created)).first->second.get();
+         texture->LogAction("Created reviewed HD host resource");
++        // Log once per selected material, rather than once per draw/recreation.
++        if (logged_hd_materials_.size() < 256 &&
++            logged_hd_materials_.insert(replacement->canonical_bc_xxh3_128).second) {
++          REXGPU_INFO("Aster reviewed HD material {}: guest {}x{}, host {}x{}, {} mips",
++              replacement->canonical_bc_xxh3_128, key.GetWidth(), key.GetHeight(),
++              replacement->width, replacement->height, replacement->mips.size());
++        }
+         return texture;
+       }
+     }

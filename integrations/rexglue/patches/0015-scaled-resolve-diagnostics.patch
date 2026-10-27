@@ -1,0 +1,81 @@
+--- a/include/rex/graphics/pipeline/texture/cache.h
++++ b/include/rex/graphics/pipeline/texture/cache.h
+@@ -516,6 +516,12 @@
+   // externally, the implementation should take only format-related parameters
+   // such as the format itself and the signedness into account.
+   virtual bool IsScaledResolveSupportedForFormat(TextureKey /*key*/) const { return false; }
++  // Read-only metadata query for opt-in backend diagnostics. It does not
++  // establish that an unscaled mirror exists, and exposes no tracking storage.
++  bool QueryScaledResolveRangeForDiagnostics(uint32_t start_unscaled,
++                                              uint32_t length_unscaled) {
++    return IsRangeScaledResolved(start_unscaled, length_unscaled);
++  }
+   // For formats with less than 4 components, implementations normally should
+   // replicate the last component into the non-existent ones, similar to what is
+   // done for unused components of operands in shaders by Microsoft's Xbox 360
+--- a/src/graphics/vulkan/texture_cache.cpp
++++ b/src/graphics/vulkan/texture_cache.cpp
+@@ -11,6 +11,7 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <atomic>
+ #include <cstddef>
+ #include <cstring>
+ #include <utility>
+@@ -34,6 +35,9 @@
+ #include <rex/ui/vulkan/util.h>
+ 
+ REXCVAR_DEFINE_BOOL(non_seamless_cube_map, false, "GPU", "Use non-seamless cube map sampling");
++
++REXCVAR_DEFINE_BOOL(aster_scaled_resolve_diagnostics, false, "GPU/Vulkan",
++                    "Bounded metadata-only scaled resolve consumer diagnostics (128 resources)");
+ 
+ namespace rex::graphics::vulkan {
+ 
+@@ -1121,6 +1125,45 @@
+ 
+ std::unique_ptr<TextureCache::Texture> VulkanTextureCache::CreateTexture(TextureKey key,
+     std::shared_ptr<const HDTextureReplacement> replacement) {
++  // ASTER_SCALED_RESOLVE_DIAGNOSTICS_BEGIN
++  // Metadata only: overlap does not prove an unscaled mirror is valid or stale.
++  // Off by default; no page queries or counter work in normal production runs.
++  if (REXCVAR_GET(aster_scaled_resolve_diagnostics) && IsDrawResolutionScaled()) {
++    const auto layout = key.GetGuestLayout();
++    const uint32_t base_address = key.base_page << 12;
++    const uint32_t mip_address = key.mip_page << 12;
++    const bool base_overlap = layout.base.level_data_extent_bytes &&
++        QueryScaledResolveRangeForDiagnostics(base_address, layout.base.level_data_extent_bytes);
++    const bool mip_overlap = layout.mips_total_extent_bytes &&
++        QueryScaledResolveRangeForDiagnostics(mip_address, layout.mips_total_extent_bytes);
++    if (key.scaled_resolve || base_overlap || mip_overlap) {
++      // Process-wide limit, including cache eviction/recreation and multiple caches.
++      static std::atomic<uint32_t> records{0};
++      uint32_t record = records.load(std::memory_order_relaxed);
++      while (record < 128 && !records.compare_exchange_weak(
++                 record, record + 1, std::memory_order_relaxed)) {}
++      if (record < 128) {
++        const bool supported = IsScaledResolveSupportedForFormat(key);
++        const char* path = key.scaled_resolve ? "scaled" :
++            (!key.tiled ? "unscaled-linear" :
++             (!supported ? "unscaled-unsupported-loader" : "unscaled-key"));
++        REXGPU_INFO(
++            "Aster scaled resolve consumer {}/128: base={:08X} mip={:08X} "
++            "format={} dimension={} tiled={} guest={}x{}x{} max_mip={} "
++            "base_extent={} mip_extent={} base_pitch={} scale={}x{} "
++            "base_overlap={} mip_overlap={} scaled_key={} loader_supported={} "
++            "path={} mirror1x=unknown",
++            record + 1, base_address, mip_address, uint32_t(key.format),
++            uint32_t(key.dimension), uint32_t(key.tiled), key.GetWidth(),
++            key.GetHeight(), key.GetDepthOrArraySize(), uint32_t(key.mip_max_level),
++            layout.base.level_data_extent_bytes, layout.mips_total_extent_bytes,
++            layout.base.row_pitch_bytes, draw_resolution_scale_x(),
++            draw_resolution_scale_y(), base_overlap, mip_overlap,
++            uint32_t(key.scaled_resolve), supported, path);
++      }
++    }
++  }
++  // ASTER_SCALED_RESOLVE_DIAGNOSTICS_END
+   VkFormat formats[] = {VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};
+   const HostFormatPair& host_format = GetHostFormatPair(key);
+   if (host_format.format_signed.format == VK_FORMAT_UNDEFINED) {

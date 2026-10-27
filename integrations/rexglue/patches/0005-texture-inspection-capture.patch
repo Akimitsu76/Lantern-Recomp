@@ -1,0 +1,176 @@
+diff --git a/include/rex/graphics/shared_memory.h b/include/rex/graphics/shared_memory.h
+--- a/include/rex/graphics/shared_memory.h
++++ b/include/rex/graphics/shared_memory.h
+@@ -94,6 +94,12 @@
+   // the pages they touch, the CPU data is properly loaded to the unmodified
+   // regions in those pages.
+   void RangeWrittenByGpu(uint32_t start, uint32_t length);
++
++  // Opt-in inspection only: copy CPU-resident bytes, rejecting any page with
++  // GPU-authored data. This is not proof of a texture's material semantics or
++  // future immutability, and must never be used to replace guest memory.
++  bool TrySnapshotCpuTexture(uint32_t start, uint32_t length,
++                             std::vector<uint8_t>& snapshot);
+ 
+  protected:
+   SharedMemory(memory::Memory& memory);
+diff --git a/src/graphics/shared_memory.cpp b/src/graphics/shared_memory.cpp
+--- a/src/graphics/shared_memory.cpp
++++ b/src/graphics/shared_memory.cpp
+@@ -87,6 +87,32 @@
+   system_page_flags_valid_and_gpu_written_.clear();
+   system_page_flags_valid_and_gpu_written_.shrink_to_fit();
+   num_system_page_flags_ = 0;
++}
++
++bool SharedMemory::TrySnapshotCpuTexture(uint32_t start, uint32_t length,
++                                         std::vector<uint8_t>& snapshot) {
++  snapshot.clear();
++  // Bound allocations even if inspection callers are changed later.
++  if (!length || length > (16u << 20) || start >= kBufferSize ||
++      length > kBufferSize - start) {
++    return false;
++  }
++  auto lock = global_critical_region_.Acquire();
++  const uint32_t first = start >> page_size_log2_;
++  const uint32_t last = (start + length - 1) >> page_size_log2_;
++  for (uint32_t page = first; page <= last; ++page) {
++    const uint64_t mask = uint64_t(1) << (page & 63);
++    if (page / 64 >= system_page_flags_valid_.size() ||
++        !(system_page_flags_valid_[page / 64] & mask) ||
++        (system_page_flags_valid_and_gpu_written_[page / 64] & mask)) {
++      return false;
++    }
++  }
++  const auto* source = memory_.TranslatePhysical<const uint8_t*>(start);
++  snapshot.assign(source, source + length);
++  // CPU writes can resume after their invalidation callback. Reject a visibly
++  // changing snapshot too; this still does not establish long-term immutability.
++  return std::memcmp(snapshot.data(), source, length) == 0;
+ }
+ 
+ void SharedMemory::InvalidateAllPages() {
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -11,6 +11,12 @@
+ 
+ #include <algorithm>
+ #include <cstdint>
++#include <cstdlib>
++#include <filesystem>
++#include <fstream>
++#include <mutex>
++#include <unordered_set>
++#include <rex/hash.h>
+ #include <utility>
+ 
+ #include <rex/assert.h>
+@@ -126,6 +132,79 @@
+ //     "GPU");
+ 
+ namespace rex::graphics {
++
++namespace {
++// Inspection is disabled unless explicitly requested by a local operator.
++// No replacement is performed. Captures must be reviewed before AI processing:
++// DXT1/5 alone cannot establish diffuse-vs-normal/UI material semantics.
++void CaptureCpuTextureForInspection(SharedMemory& memory, uint32_t base_page,
++    uint32_t mip_page, uint32_t width, uint32_t height, uint32_t pitch,
++    uint32_t format, uint32_t endian, bool tiled, bool packed_mips,
++    uint32_t mip_max, const texture_util::TextureGuestLayout& layout) {
++  const char* directory = std::getenv("ASTER_TEXTURE_CAPTURE_DIR");
++  if (!directory || !*directory) return;
++  static std::mutex mutex;
++  static std::unordered_set<std::string> seen;
++  static size_t count = 0, total = 0;
++  std::lock_guard<std::mutex> lock(mutex);
++  constexpr size_t kMaxCount = 16, kMaxBytes = 64u << 20;
++  const uint32_t base_size = layout.base.level_data_extent_bytes;
++  const uint32_t mip_size = mip_page ? layout.mips_total_extent_bytes : 0;
++  if (count >= kMaxCount || seen.size() >= 64 || !base_size || base_size > (16u << 20) ||
++      mip_size > (16u << 20) || base_size + size_t(mip_size) > kMaxBytes - total)
++    return;
++  std::vector<uint8_t> base, mips;
++  if (!memory.TrySnapshotCpuTexture(base_page << 12, base_size, base) ||
++      (mip_size && !memory.TrySnapshotCpuTexture(mip_page << 12, mip_size, mips)))
++    return;
++  const std::string raw_hash = rex::hash_bytes(std::string_view(
++      reinterpret_cast<const char*>(base.data()), base.size()));
++  // Include interpretation metadata to disambiguate equal bytes used differently.
++  const std::string id = raw_hash + "-" + std::to_string(width) + "x" +
++      std::to_string(height) + "-" + std::to_string(format) + "-" +
++      std::to_string(endian) + "-" + std::to_string(pitch) + "-" +
++      std::to_string(tiled);
++  if (!seen.insert(id).second) return;
++  try {
++    const std::filesystem::path out = std::filesystem::u8path(directory);
++    std::filesystem::create_directories(out);
++    const auto prefix = out / id;
++    // The bounded dump is for the operator's own local inspection only.
++    std::ofstream raw(prefix.string() + ".base.bin", std::ios::binary);
++    raw.write(reinterpret_cast<const char*>(base.data()), base.size());
++    raw.close();
++    if (!raw) return;
++    if (!mips.empty()) {
++      std::ofstream mip(prefix.string() + ".mips.bin", std::ios::binary);
++      mip.write(reinterpret_cast<const char*>(mips.data()), mips.size());
++      mip.close();
++      if (!mip) return;
++    }
++    std::ofstream meta(prefix.string() + ".json");
++    meta << "{\n  \"schema\": 1,\n  \"purpose\": \"inspection-only\",\n"
++         << "  \"classification\": \"unknown-review-required\",\n"
++         << "  \"immutability_proven\": false,\n"
++         << "  \"gpu_written_pages\": false,\n"
++         << "  \"raw_xxh3_128\": \"" << raw_hash << "\",\n"
++         << "  \"width\": " << width << ", \"height\": " << height
++         << ", \"pitch_texels_div_32\": " << pitch << ",\n"
++         << "  \"format\": " << format << ", \"endian\": " << endian
++         << ", \"tiled\": " << (tiled ? "true" : "false") << ",\n"
++         << "  \"packed_mips\": " << (packed_mips ? "true" : "false")
++         << ", \"packed_level\": " << layout.packed_level << ",\n"
++         << "  \"mip_max_level\": " << mip_max
++         << ", \"base_page\": " << base_page << ", \"mip_page\": " << mip_page << ",\n"
++         << "  \"base_size\": " << base.size() << ", \"mips_size\": " << mips.size()
++         << ", \"base_row_pitch_bytes\": " << layout.base.row_pitch_bytes << "\n}\n";
++    meta.close();
++    if (!meta) return;
++    ++count;
++    total += base.size() + mips.size();
++  } catch (const std::exception&) {
++    // Inspection must never make gameplay fail.
++  }
++}
++}  // namespace
+ 
+ const TextureCache::LoadShaderInfo TextureCache::load_shader_info_[kLoadShaderCount] = {
+     // k8bpb
+@@ -445,6 +524,27 @@
+   // regular texture or a vertex buffer, and thus the scaled resolve version is
+   // not up to date anymore.
+   texture.MakeUpToDateAndWatch(global_critical_region_.Acquire());
++  // Compressed, single-layer 2D CPU textures only. Never resolve/depth targets,
++  // arrays/cubes, signed textures, small packed-base atlases, or unsupported data.
++  if (pending_load.load_base && !texture_key.scaled_resolve &&
++      !texture_key.signed_separate && texture_key.base_page &&
++      texture_key.dimension == xenos::DataDimension::k2DOrStacked &&
++      texture_key.GetDepthOrArraySize() == 1 &&
++      texture_key.GetWidth() >= 64 && texture_key.GetHeight() >= 64 &&
++      texture_key.GetWidth() <= 2048 && texture_key.GetHeight() <= 2048 &&
++      texture.guest_layout().packed_level != 0 &&
++      (texture_key.format == xenos::TextureFormat::k_DXT1 ||
++       texture_key.format == xenos::TextureFormat::k_DXT4_5)) {
++    try {
++      CaptureCpuTextureForInspection(shared_memory_, texture_key.base_page,
++        texture_key.mip_page, texture_key.GetWidth(), texture_key.GetHeight(),
++        texture_key.pitch, uint32_t(texture_key.format), uint32_t(texture_key.endianness),
++        texture_key.tiled, texture_key.packed_mips, texture_key.mip_max_level,
++        texture.guest_layout());
++    } catch (const std::exception&) {
++      // Opt-in inspection must never make a valid texture upload fail.
++    }
++  }
+   texture.LogAction("Loaded");
+ 
+   return true;

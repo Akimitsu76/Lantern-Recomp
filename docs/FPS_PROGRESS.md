@@ -189,13 +189,13 @@ tocadas.
 
 ## Launcher e presets
 
-O launcher agora expõe presets **Baixa/Padrão/Alta/Ultra/Personalizada** e os
+O launcher agora expõe presets **Baixa/Média/Alta/Ultra/Personalizada** e os
 alvos **30/60/ilimitado** na aba **Gráficos**. As preferências usam schema 2 em
 `.aster/config/settings.json`; schema 1 é migrado em memória e salvo como 2.
 Nenhum preset ou alvo grava no save/perfil do jogo. O padrão restaurado nesta
-máquina é 30 fps com preset Padrão. A suíte completa tem **152 testes aprovados**
+máquina é 30 fps com preset Média. A suíte completa tem **152 testes aprovados**
 em Xvfb 1440×900; `--validar` passou nos três alvos. Um probe curto do build
-principal com preset Padrão (`preset30-default-001`, 12,52 s) carregou o XEX,
+principal com preset Média (`preset30-default-001`, 12,52 s) carregou o XEX,
 aceitou as CVars, fez 461 apresentações em FSI/FIFO e não teve fatal; `ready=false`
 pelo prazo curto, então isso não é validação de gameplay. A avaliação visual dos
 presets e a sensação de 60/ilimitado continuam dependendo do usuário.

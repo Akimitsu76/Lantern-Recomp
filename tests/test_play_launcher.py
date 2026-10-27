@@ -244,6 +244,7 @@ class PlayLauncherTests(unittest.TestCase):
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b'synthetic executable')
             (binary.parent / 'libaster_presenter_compat.so').write_bytes(b'synthetic presenter')
+            (binary.parent / 'libaster_arena_lifetime.so').write_bytes(b'synthetic arena cleanup')
             report = root / launcher.MAIN_REPORT
             report.parent.mkdir(parents=True)
             identity = launcher.digest(game / 'default.xex')
@@ -255,6 +256,13 @@ class PlayLauncherTests(unittest.TestCase):
             output = io.StringIO()
             with patch.object(launcher, '__file__', str(root / 'scripts/play_green_lantern.py')), \
                     patch.object(launcher, 'EXPECTED_XEX', identity), \
+                    patch.object(launcher, 'XEX_SHA256', identity), \
+                    patch.object(launcher, 'read_install', return_value={
+                        'binary': str(binary.relative_to(root)), 'game_root': str(game),
+                        'renderer': 'vulkan-fsi', 'presentation_backend': 'sdk-spatial-fsr1',
+                        'recipe': {'integration': 7, 'sdk_spatial': {'revision': 'verified',
+                                   'patches': {launcher.graphics.SCALED_PIXEL_CENTER_PATCH: 'verified'}}}}), \
+                    patch.object(launcher, 'verify_install'), \
                     patch('sys.argv', ['play_green_lantern.py', '--dry-run', '--graphics-preset',
                                        'high', str(game)]), \
                     patch.object(launcher.subprocess, 'run',
@@ -262,12 +270,14 @@ class PlayLauncherTests(unittest.TestCase):
                     contextlib.redirect_stdout(output):
                 self.assertEqual(launcher.main(), 0)
             arguments = shlex.split(output.getvalue().splitlines()[-1])
-            self.assertIn('--resolution_scale=1', arguments)
+            self.assertIn('--resolution_scale=2', arguments)
+            self.assertIn('--present_effect=fsr', arguments)
+            self.assertIn('--present_fsr_sharpness_reduction=1.4', arguments)
             self.assertFalse(any(a.startswith('--native_2x_msaa=') for a in arguments))
             self.assertIn('--anisotropic_override=4', arguments)
             self.assertIn('--texture_cache_memory_limit_hard=1024', arguments)
 
-    def test_custom_graphics_overrides_preset_values(self):
+    def test_legacy_build_cannot_silently_downgrade_requested_internal_scale(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             game = root / 'dump'
@@ -293,12 +303,17 @@ class PlayLauncherTests(unittest.TestCase):
                     patch.object(launcher.subprocess, 'run',
                                  return_value=subprocess.CompletedProcess([], 0, '', '')), \
                     contextlib.redirect_stdout(output):
-                self.assertEqual(launcher.main(), 0)
-            arguments = shlex.split(output.getvalue().splitlines()[-1])
-            self.assertIn('--resolution_scale=1', arguments)
-            self.assertFalse(any(a.startswith('--native_2x_msaa=') for a in arguments))
-            self.assertIn('--anisotropic_override=4', arguments)
-            self.assertIn('--present_dither=true', arguments)
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as failure:
+                    launcher.main()
+                self.assertEqual(failure.exception.code, 2)
+
+    def test_antialiasing_cli_reaches_backend_flag(self):
+        parser, args = launcher.parse_arguments(['--graphics-preset', 'high',
+                                                '--antialiasing', 'fxaa_extreme', 'dummy'])
+        data = launcher.resolve_graphics(parser, args, '30')
+        self.assertEqual(data['antialiasing'], 'fxaa_extreme')
+        self.assertEqual(data['preset'], 'custom')
+        self.assertIn('--swap_post_effect=fxaa_extreme', launcher.graphics.cvar_arguments(data))
 
     def test_shader_and_vsync_reject_unknown_modes(self):
         for options in [['--shader-mode', 'magic'], ['--vsync', 'maybe'], ['--present-mode', 'magic']]:
@@ -385,6 +400,7 @@ if __name__ == '__main__':
 
 
 class PresentationEnvironmentTests(unittest.TestCase):
+    @unittest.skipIf(os.name == 'nt', 'LD_PRELOAD compatibility shim is Linux-only; shared spatial SDK tests cover both platforms.')
     def test_filter_is_applied_only_to_game_environment(self):
         import argparse
         with tempfile.TemporaryDirectory() as folder:
@@ -399,3 +415,64 @@ class PresentationEnvironmentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(SystemExit):
                 launcher.presentation_environment(Path(folder)/'game',{'upscaler':'sharp'},{},argparse.ArgumentParser())
+
+
+class SharedSpatialBackendTests(unittest.TestCase):
+    def test_verified_sdk_uses_real_fsr_flow_without_legacy_preload_on_both_platforms(self):
+        import argparse
+        parser = argparse.ArgumentParser()
+        installation = {'presentation_backend': 'sdk-spatial-fsr1',
+                        'recipe': {'sdk_spatial': {'revision': 'verified'}}}
+        for platform_name in ('posix', 'nt'):
+            with self.subTest(platform=platform_name), tempfile.TemporaryDirectory() as folder:
+                binary = Path(folder) / 'game'
+                # A stale compatibility module must not be loaded into the new ABI.
+                (binary.parent / 'libaster_presenter_compat.so').write_bytes(b'old ABI')
+                arena = binary.parent / 'libaster_arena_lifetime.so'
+                arena.write_bytes(b'ABI-independent arena cleanup')
+                with patch.object(launcher.os, 'name', platform_name):
+                    flags = launcher.presentation_arguments({'upscaler': 'fsr1'}, installation, parser)
+                    env = launcher.presentation_environment(binary, {'upscaler': 'fsr1'}, {}, parser, installation)
+                self.assertIn('--present_effect=fsr', flags)
+                self.assertIn('--present_fsr_sharpness_reduction=1.4', flags)
+                if platform_name == 'posix':
+                    self.assertEqual(env['LD_PRELOAD'], str(arena.resolve()))
+                else:
+                    self.assertNotIn('LD_PRELOAD', env)
+                self.assertNotIn('ASTER_PRESENT_FILTER', env)
+
+    def test_sdk_without_abi_recipe_cannot_claim_fsr_capability(self):
+        import argparse
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            launcher.presentation_arguments({'upscaler': 'fsr1'},
+                {'presentation_backend': 'sdk-spatial-fsr1', 'recipe': {}}, argparse.ArgumentParser())
+
+
+class SharedDisplayControlsTests(unittest.TestCase):
+    def test_scaled_internal_rendering_requires_the_depth_fix_on_both_platforms(self):
+        import argparse
+        patch_name = launcher.graphics.SCALED_PIXEL_CENTER_PATCH
+        for platform_name in ('linux', 'win32'):
+            for scale in (2, 3):
+                data = launcher.graphics.from_options('custom', render_scale=scale)
+                old = {'presentation_backend': 'sdk-spatial-fsr1', 'recipe': {'sdk_spatial': {'patches': {}}}}
+                with patch.object(launcher.sys, 'platform', platform_name), \
+                        contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    launcher.presentation_arguments(data, old, argparse.ArgumentParser())
+                new = {'presentation_backend': 'sdk-spatial-fsr1',
+                       'recipe': {'sdk_spatial': {'patches': {patch_name: 'verified'}}}}
+                with patch.object(launcher.sys, 'platform', platform_name):
+                    self.assertEqual(launcher.presentation_arguments(data, new, argparse.ArgumentParser()),
+                                     ['--present_effect=bilinear'])
+                    self.assertIn('--resolution_scale='+str(scale), launcher.graphics.cvar_arguments(data))
+
+    def test_fullscreen_and_fsr_sharpness_use_real_shared_runtime_flags(self):
+        import argparse
+        installation = {'presentation_backend': 'sdk-spatial-fsr1', 'recipe': {'sdk_spatial': {
+            'patches': {launcher.graphics.SCALED_PIXEL_CENTER_PATCH: 'verified'}}}}
+        for strength, reduction in [(0, '2'), (75, '0.5'), (100, '0')]:
+            parser, args = launcher.parse_arguments(['--graphics-preset', 'high', '--fullscreen', 'on', '--fsr-sharpness', str(strength)])
+            data = launcher.resolve_graphics(parser, args, '30')
+            self.assertTrue(data['fullscreen'])
+            self.assertIn('--fullscreen=true', launcher.graphics.cvar_arguments(data))
+            self.assertIn('--present_fsr_sharpness_reduction=' + reduction, launcher.presentation_arguments(data, installation, parser))

@@ -10,36 +10,43 @@ import sys
 
 from .errors import PortError
 
+DEFAULT_FSR_SHARPNESS = 30
+SCALED_PIXEL_CENTER_PATCH = '0024-scaled-pixel-parameter-centers.patch'
+SHADER_PRELOAD_PATCH = '0025-known-shader-preload-selection.patch'
+
 PRESETS = ('low', 'default', 'high', 'ultra', 'custom')
 PRESET_LABELS = {
     'low': 'Baixa',
-    'default': 'Padrão',
+    'default': 'Média',
     'high': 'Alta',
     'ultra': 'Ultra',
     'custom': 'Personalizada',
 }
 PRESET_DESCRIPTIONS = {
     'low': 'Máximo desempenho: 720p interno, MSAA do jogo e cache de texturas reduzido.',
-    'default': 'Equilíbrio original: 720p interno, MSAA do jogo e 4x anisotrópico.',
-    'high': 'Ampliação bicúbica, filtragem 8x e cache maior; interno nativo.',
-    'ultra': 'Ampliação bicúbica com nitidez, filtragem 16x e cache máximo; interno nativo.',
-    'custom': 'Escolha resolução interna, MSAA, filtragem e memória de texturas.',
+    'default': '720p interno, FXAA, MSAA do jogo e 4x anisotrópico.',
+    'high': '1440p interno, FSR 1, FXAA, filtragem 8x e materiais HD 2x.',
+    'ultra': '4K interno, FSR 1, FXAA, filtragem 16x e materiais HD 4x.',
+    'custom': 'Ajuste imagem, filtragem, qualidade de texturas e desempenho.',
 }
 TARGETS = ('30', '60', 'unlimited')
 TARGET_LABELS = {'30': '30 fps', '60': '60 fps', 'unlimited': 'Ilimitado'}
 TARGET_DESCRIPTIONS = {
     '30': 'Padrão. Menor carga de CPU/GPU. Save compartilhado do usuário.',
     '60': 'Experimental. Usa o mesmo save do usuário, independente dos gráficos.',
-    'unlimited': ('Experimental. Remove a espera de pacing, desliga VSync e usa '
-                  'apresentação imediata; a simulação mantém alvo 60.'),
+    'unlimited': ('Experimental. Reduz a espera de pacing e usa apresentação imediata; '
+                  'ganho real acima de 60 fps ainda não confirmado.'),
 }
+ANTIALIASING = ('none', 'fxaa', 'fxaa_extreme')
+ANTIALIASING_LABELS = {'none': 'Desligado', 'fxaa': 'FXAA', 'fxaa_extreme': 'FXAA intenso'}
 SHADER_MODES = ('async', 'blocking')
-UPSCALERS = ('bilinear', 'cubic', 'sharp', 'fsr1')
-UPSCALER_LABELS = {'bilinear': 'Bilinear', 'cubic': 'Bicúbico', 'sharp': 'Bicúbico + nitidez', 'fsr1': 'FSR 1 EASU (experimental)'}
+UPSCALERS = ('bilinear', 'cubic', 'sharp', 'fsr1')  # Legacy cubic/sharp accepted by CLI.
+COMMON_UPSCALERS = ('bilinear', 'fsr1')
+UPSCALER_LABELS = {'bilinear': 'Bilinear', 'cubic': 'Bicúbico', 'sharp': 'Bicúbico + nitidez', 'fsr1': 'FSR 1 espacial (experimental)'}
 OUTPUT_RESOLUTIONS = ('auto', '1280x720', '1920x1080', '2560x1440', '3840x2160')
 TEXTURE_QUALITIES = ('low', 'default', 'high', 'ultra')
 TEXTURE_QUALITY_LABELS = {
-    'low': 'Leve', 'default': 'Padrão', 'high': 'Alta', 'ultra': 'Ultra',
+    'low': 'Baixa', 'default': 'Média', 'high': 'Alta', 'ultra': 'Ultra',
 }
 TEXTURE_LIMITS = {
     # soft, hard, render-to-texture (MB)
@@ -62,9 +69,9 @@ _PRESET_VALUES = {
             'texture_quality': 'low', 'present_dither': False},
     'default': {'render_scale': 1, 'msaa_2x': True, 'anisotropic': 3,
                 'texture_quality': 'default', 'present_dither': False},
-    'high': {'render_scale': 1, 'msaa_2x': True, 'anisotropic': 4,
+    'high': {'render_scale': 2, 'msaa_2x': True, 'anisotropic': 4,
              'texture_quality': 'high', 'present_dither': False},
-    'ultra': {'render_scale': 1, 'msaa_2x': True, 'anisotropic': 5,
+    'ultra': {'render_scale': 3, 'msaa_2x': True, 'anisotropic': 5,
               'texture_quality': 'ultra', 'present_dither': False},
     'custom': {'render_scale': 1, 'msaa_2x': True, 'anisotropic': 3,
                'texture_quality': 'default', 'present_dither': False},
@@ -78,20 +85,22 @@ def defaults():
         'fps_target': '30',
         'vsync': True,
         'shader_mode': 'async',
+        'shader_preload': True,
         'output_resolution': 'auto',
+        'fullscreen': False,
+        'fsr_sharpness': DEFAULT_FSR_SHARPNESS,
     }
 
 
-for _name, _filter in [('low', 'bilinear'), ('default', 'bilinear'), ('high', 'cubic'), ('ultra', 'sharp'), ('custom', 'bilinear')]:
+for _name, _filter in [('low', 'bilinear'), ('default', 'bilinear'), ('high', 'fsr1'), ('ultra', 'fsr1'), ('custom', 'bilinear')]:
     _PRESET_VALUES[_name]['upscaler'] = _filter
+    _PRESET_VALUES[_name]['antialiasing'] = 'none' if _name == 'low' else 'fxaa'
 
 
 def preset_values(name):
     if name not in PRESETS:
         raise PortError('GRAPHICS_VALUE', f'Preset gráfico inválido: {name}.')
     values = dict(_PRESET_VALUES[name])
-    if sys.platform != 'linux':
-        values['upscaler'] = 'bilinear'
     return values
 
 
@@ -108,7 +117,7 @@ def apply_preset(name, current=None):
 
 def from_options(preset='default', *, render_scale=None, msaa_2x=None,
                  anisotropic=None, texture_quality=None, present_dither=None,
-                 fps_target='30', vsync=True, shader_mode='async', output_resolution='auto', upscaler=None):
+                 fps_target='30', vsync=True, shader_mode='async', shader_preload=True, output_resolution='auto', upscaler=None, antialiasing=None, fullscreen=False, fsr_sharpness=DEFAULT_FSR_SHARPNESS):
     """Build a graphics block from CLI/UI values.
 
     Any explicit rendering override switches the block to ``custom`` so a
@@ -125,6 +134,7 @@ def from_options(preset='default', *, render_scale=None, msaa_2x=None,
         'anisotropic': anisotropic,
         'texture_quality': texture_quality,
         'present_dither': present_dither,
+        'antialiasing': antialiasing,
     }
     applied = False
     for field, value in overrides.items():
@@ -133,7 +143,7 @@ def from_options(preset='default', *, render_scale=None, msaa_2x=None,
             applied = True
     if applied and preset != 'custom':
         values['preset'] = 'custom'
-    values.update(fps_target=fps_target, vsync=vsync, shader_mode=shader_mode, output_resolution=output_resolution)
+    values.update(fps_target=fps_target, vsync=vsync, shader_mode=shader_mode, shader_preload=shader_preload, output_resolution=output_resolution, fullscreen=fullscreen, fsr_sharpness=fsr_sharpness)
     if upscaler is not None:
         if values['upscaler'] != upscaler:
             values['preset'] = 'custom'
@@ -154,10 +164,18 @@ def validate(data):
         result.update(preset_values(result['preset']))
     if result['fps_target'] not in TARGETS:
         raise PortError('GRAPHICS_VALUE', 'Alvo de FPS deve ser 30, 60 ou ilimitado.')
+    if not isinstance(result['fullscreen'], bool):
+        raise PortError('GRAPHICS_VALUE', 'Modo de tela inválido.')
+    if type(result['fsr_sharpness']) is not int or not 0 <= result['fsr_sharpness'] <= 100:
+        raise PortError('GRAPHICS_VALUE', 'Nitidez FSR deve ficar entre 0 e 100.')
     if not isinstance(result['vsync'], bool):
         raise PortError('GRAPHICS_VALUE', 'VSync inválido.')
     if result['shader_mode'] not in SHADER_MODES:
         raise PortError('GRAPHICS_VALUE', 'Modo de shaders inválido.')
+    if type(result['shader_preload']) is not bool:
+        raise PortError('GRAPHICS_VALUE', 'Pré-compilação de shaders deve estar ligada ou desligada.')
+    if result['antialiasing'] not in ANTIALIASING:
+        raise PortError('GRAPHICS_VALUE', 'Antisserrilhado inválido.')
     if result['upscaler'] not in UPSCALERS:
         raise PortError('GRAPHICS_VALUE', 'Filtro de ampliação inválido.')
     if result['output_resolution'] not in OUTPUT_RESOLUTIONS:
@@ -207,6 +225,8 @@ def cvar_arguments(data):
         f"--texture_cache_memory_limit_hard={hard}",
         f"--texture_cache_memory_limit_render_to_texture={rtt}",
         f"--present_dither={str(data['present_dither']).lower()}",
+        f"--swap_post_effect={data['antialiasing']}",
+        f"--fullscreen={str(data['fullscreen']).lower()}",
     ]
     if data['output_resolution'] != 'auto':
         width, height = data['output_resolution'].split('x')
@@ -219,5 +239,5 @@ def summary(data):
     return (f"{PRESET_LABELS[data['preset']]} · {internal_resolution(data['render_scale'])} · "
             f"{UPSCALER_LABELS[data['upscaler']]} · MSAA do jogo · "
             f"Aniso {ANISOTROPIC_LABELS[data['anisotropic']]} · "
-            f"Cache de texturas {TEXTURE_QUALITY_LABELS[data['texture_quality']]} · "
+            f"Texturas {TEXTURE_QUALITY_LABELS[data['texture_quality']]} · "
             f"{TARGET_LABELS[data['fps_target']]}")

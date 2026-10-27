@@ -9,8 +9,8 @@ class GraphicsPresetTests(unittest.TestCase):
         expected = {
             'low': (1, True, 1, 'low', False),
             'default': (1, True, 3, 'default', False),
-            'high': (1, True, 4, 'high', False),
-            'ultra': (1, True, 5, 'ultra', False),
+            'high': (2, True, 4, 'high', False),
+            'ultra': (3, True, 5, 'ultra', False),
         }
         for name, values in expected.items():
             with self.subTest(preset=name):
@@ -56,11 +56,11 @@ class GraphicsPresetTests(unittest.TestCase):
         data = graphics.from_options('high', fps_target='30', vsync=True)
         arguments = graphics.cvar_arguments(data)
         self.assertEqual(arguments, [
-            '--resolution_scale=1', '--anisotropic_override=4',
+            '--resolution_scale=2', '--anisotropic_override=4',
             '--texture_cache_memory_limit_soft=512',
             '--texture_cache_memory_limit_hard=1024',
             '--texture_cache_memory_limit_render_to_texture=32',
-            '--present_dither=false'])
+            '--present_dither=false', '--swap_post_effect=fxaa', '--fullscreen=false'])
 
     def test_unlimited_always_disables_vsync_without_touching_other_fields(self):
         data = graphics.from_options('low', fps_target='unlimited', vsync=True)
@@ -84,11 +84,11 @@ if __name__ == '__main__':
 
 
 class SpatialFilterTests(unittest.TestCase):
-    def test_presets_change_filter_without_scaling_guest_buffers(self):
-        for preset, expected in [('low','bilinear'),('default','bilinear'),('high','cubic'),('ultra','sharp')]:
+    def test_presets_apply_filter_and_real_internal_resolution(self):
+        for preset, expected in [('low','bilinear'),('default','bilinear'),('high','fsr1'),('ultra','fsr1')]:
             data=graphics.from_options(preset, output_resolution='1920x1080')
             self.assertEqual(data['upscaler'], expected)
-            self.assertEqual(data['render_scale'], 1)
+            self.assertEqual(data['render_scale'], {'low': 1, 'default': 1, 'high': 2, 'ultra': 3}[preset])
             self.assertIn('--window_width=1920', graphics.cvar_arguments(data))
     def test_explicit_filter_is_preserved_and_validated(self):
         data=graphics.from_options('ultra',upscaler='cubic')
@@ -98,14 +98,14 @@ class SpatialFilterTests(unittest.TestCase):
 
 
 class WindowsPresetTests(unittest.TestCase):
-    def test_windows_presets_use_available_filter(self):
+    def test_windows_and_linux_presets_share_fsr_and_aa(self):
         from unittest.mock import patch
         with patch.object(graphics.sys, 'platform', 'win32'):
             for name in ('high', 'ultra'):
                 data = graphics.from_options(name, output_resolution='1920x1080')
-                self.assertEqual(data['upscaler'], 'bilinear')
-                self.assertEqual(graphics.apply_preset(name)['upscaler'], 'bilinear')
-                self.assertEqual(graphics.validate({'preset': name})['upscaler'], 'bilinear')
+                self.assertEqual(data['upscaler'], 'fsr1')
+                self.assertEqual(graphics.apply_preset(name)['upscaler'], 'fsr1')
+                self.assertEqual(graphics.validate({'preset': name})['upscaler'], 'fsr1')
                 self.assertGreaterEqual(data['anisotropic'], 4)
 
     def test_explicit_unsupported_filter_remains_visible_to_runtime_validation(self):
@@ -115,10 +115,55 @@ class WindowsPresetTests(unittest.TestCase):
 
 
 class FsrEasuTests(unittest.TestCase):
-    def test_explicit_easu_selects_custom_and_keeps_guest_at_720p(self):
+    def test_easu_matches_high_preset_and_renders_at_1440p(self):
         data=graphics.from_options('high', upscaler='fsr1', output_resolution='1920x1080')
-        self.assertEqual(data['preset'], 'custom')
+        self.assertEqual(data['preset'], 'high')
         self.assertEqual(data['upscaler'], 'fsr1')
-        self.assertEqual(data['render_scale'], 1)
+        self.assertEqual(data['render_scale'], 2)
         self.assertEqual(graphics.apply_preset('custom', data)['upscaler'], 'fsr1')
         self.assertEqual(graphics.validate(data), data)
+
+
+class AntialiasingTests(unittest.TestCase):
+    def test_same_fxaa_policy_on_linux_and_windows(self):
+        from unittest.mock import patch
+        for platform in ('linux', 'win32'):
+            with patch.object(graphics.sys, 'platform', platform):
+                for preset in ('low', 'default', 'high', 'ultra'):
+                    with self.subTest(platform=platform, preset=preset):
+                        data = graphics.from_options(preset)
+                        expected = 'none' if preset == 'low' else 'fxaa'
+                        self.assertEqual(data['antialiasing'], expected)
+                        self.assertIn('--swap_post_effect=' + expected, graphics.cvar_arguments(data))
+
+    def test_antialiasing_is_independent_of_upscaler_and_persists_in_custom(self):
+        data = graphics.from_options('high', antialiasing='fxaa_extreme', upscaler='fsr1')
+        self.assertEqual(data['preset'], 'custom')
+        self.assertEqual(graphics.apply_preset('custom', data)['antialiasing'], 'fxaa_extreme')
+        self.assertIn('--swap_post_effect=fxaa_extreme', graphics.cvar_arguments(data))
+        self.assertEqual(graphics.from_options('custom', antialiasing='none')['antialiasing'], 'none')
+        with self.assertRaises(PortError):
+            graphics.from_options('custom', antialiasing='taa')
+
+    def test_old_custom_settings_receive_safe_fxaa_default(self):
+        self.assertEqual(graphics.validate({'preset': 'custom'})['antialiasing'], 'fxaa')
+
+
+class DisplayAndTexturePolicyTests(unittest.TestCase):
+    def test_display_preferences_survive_preset_change(self):
+        data = graphics.from_options('high', fullscreen=True, fsr_sharpness=90, output_resolution='1920x1080')
+        changed = graphics.apply_preset('low', data)
+        self.assertTrue(changed['fullscreen'])
+        self.assertEqual(changed['fsr_sharpness'], 90)
+        self.assertEqual(changed['output_resolution'], '1920x1080')
+        self.assertIn('--fullscreen=true', graphics.cvar_arguments(changed))
+
+    def test_invalid_display_fields_are_rejected(self):
+        for field, value in [('fullscreen', 'on'), ('fsr_sharpness', -1), ('fsr_sharpness', 101), ('fsr_sharpness', True), ('fsr_sharpness', 2.5)]:
+            with self.subTest(field=field, value=value), self.assertRaises(PortError):
+                graphics.validate({'preset': 'custom', field: value})
+
+    def test_texture_policy_is_bound_to_quality_presets(self):
+        self.assertEqual(graphics.PRESET_LABELS['default'], 'Média')
+        for preset in ('low', 'default', 'high', 'ultra'):
+            self.assertEqual(graphics.from_options(preset)['texture_quality'], preset)

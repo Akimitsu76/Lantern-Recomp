@@ -14,7 +14,7 @@ def read_runtime_logs(attempt: Path) -> tuple[str, list[str]]:
     current = attempt / 'runtime.log'
     if current.is_file():
         paths.append(current)
-    return ''.join(p.read_text(errors='replace') for p in paths), [p.name for p in paths]
+    return ''.join(p.read_text(errors='replace', encoding='utf8') for p in paths), [p.name for p in paths]
 
 
 def summarize_runtime_log(text: str) -> dict:
