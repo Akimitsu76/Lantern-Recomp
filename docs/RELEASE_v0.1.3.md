@@ -64,8 +64,10 @@ FPS ou de ausência de engasgos.
 ## O que ainda não está validado
 
 - Campanha inteira, transições, mortes/recarregamentos e todas as cenas.
-- Jogo nativo em Windows real, D3D12 e GPU Windows; Wine e a compilação do CI
-  validam apenas o launcher/contratos, não gameplay.
+- Jogo nativo em Windows real, D3D12 e GPU Windows; Wine valida apenas o
+  launcher/contratos, não gameplay.
+- Compilação C++ nativa em Windows via CI; nenhum workflow de CI foi publicado
+  nesta revisão e nenhuma execução de CI ocorreu.
 - 60 FPS estáveis em 2x, desempenho acima de 60 e ausência de stutter.
 - Avaliação visual completa de FSR/FXAA, sombras, partículas e texturas HD.
 - Instalação real de dependências em máquina limpa Windows/Linux.
@@ -103,8 +105,9 @@ Confira `SHA256SUMS` antes de abrir os executáveis.
 
 - Linux: 379 testes, 1 ignorado, sem falhas, com Xvfb e acesso de display.
 - Contratos Windows/Wine: 353 testes, 25 ignorados, sem falhas. Os testes C++
-  que exigem compilador são ignorados no Wine e devem ser cobertos pelo workflow
-  Windows; isso não substitui uma partida nativa.
+  que exigem compilador são ignorados no Wine; a compilação C++ nativa em
+  Windows continua pendente e não foi coberta por CI nesta revisão. Isso não
+  substitui uma partida nativa.
 - Os testes C++ do 0026 executam o ramo real do presenter no Linux.
 
 Evidências privadas de sessões e relatórios não são enviadas ao repositório nem

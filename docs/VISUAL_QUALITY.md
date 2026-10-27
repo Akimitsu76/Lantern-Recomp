@@ -139,8 +139,8 @@ pelo prazo do teste, com XEX intacto. São testes visuais limitados; não provam
 Validação de código em 26/10/2026: 379 testes Linux (1 ignorado) com Xvfb e
 353 contratos Windows sob Wine (25 ignorados). O teste C++ do presenter executa
 os blocos reais de ambos os backends, incluindo escalas 1/2/3 e assimétricas. A
-compilação e GPU nativas de Windows precisam ser verificadas pelo workflow e em
-máquina Windows. Wine não substitui uma partida nativa.
+compilação e a GPU nativas de Windows precisam ser verificadas em máquina
+Windows; não houve CI nesta revisão. Wine não substitui uma partida nativa.
 
 O código comum contempla Vulkan e D3D12. Testes do launcher e dos contratos
 Windows sob Wine não substituem uma partida nativa em Windows. A validação

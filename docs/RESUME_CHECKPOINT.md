@@ -62,7 +62,8 @@ e UTF-8 explícito. Não confundir Wine com gameplay Windows real.
   não avançou mesmo após Start posterior. Não revalidaram gameplay 60 FPS.
 - Windows em Wine: 61 testes de interface/processamento/cache e smoke do EXE.
   Compilação D3D12 e gameplay no Windows real permanecem pendentes. O workflow
-  native-graphics-windows.yml compila apenas SDK público quando publicado.
+  native-graphics-windows.yml, não publicado nesta revisão, compila apenas SDK
+  público quando habilitado.
 - AppImage e EXE novos estão em `dist/experimental-hd` no workspace privado,
   com SHA256SUMS. Nenhum modelo, textura de jogo ou save entra nos pacotes.
 - Abaixo há registros históricos; não usar seus perfis isolados, flags antigas

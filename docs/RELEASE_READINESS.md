@@ -10,8 +10,8 @@ Esta seção substitui as contagens e o estado de empacotamento do histórico de
 - A suíte Linux completa passou com **379 testes e 1 ignorado** sob Xvfb, sem
   falhas. A suíte de contratos Windows sob Wine passou com **353 testes e 25
   ignorados**. Os dois testes C++ novos do patch 0026 executaram o ramo real no
-  Linux; no Wine eles são ignorados por falta de compilador, e o workflow do
-  GitHub deve compilá-los em Windows.
+  Linux; no Wine eles são ignorados por falta de compilador. A compilação C++
+  nativa em Windows continua pendente e não foi coberta por CI nesta revisão.
 - Patch 0024 corrige as coordenadas de profundidade em 2x/3x nos emissores
   SPIR-V e DXBC. Patch 0025 adiciona a pré-compilação opcional do cache conhecido
   de shaders, ligada por padrão. Patch 0026 guarda o formato do pipeline final do
@@ -30,6 +30,8 @@ Esta seção substitui as contagens e o estado de empacotamento do histórico de
   Atualizações do launcher preservam a pasta de dados. A pré-release inclui os
   executáveis atuais Linux/Windows e `SHA256SUMS`; Windows foi exercitado apenas
   como launcher sob Wine.
+- Nenhum workflow de CI foi publicado ou executado nesta revisão; o arquivo
+  `native-graphics-windows.yml` permanece fora da publicação.
 
 Critérios ainda pendentes: campanha completa, Windows nativo/D3D12, 60 FPS
 estáveis em 2x, ausência de engasgos, avaliação visual dos efeitos e instalação
@@ -81,7 +83,8 @@ pelo usuário; o executável do launcher não contém o jogo, saves ou texturas.
 1. Navegação e gameplay do ilimitado, incluindo sair/carregar uma partida;
    relógio da simulação, física, animações e combate em velocidade correta.
 2. Teste real em Windows: gerar a partir do dump, executar D3D12, preparar IA,
-   controles, saves e os três alvos de FPS. Wine e compilação de CI não substituem isso.
+   controles, saves e os três alvos de FPS. Wine não substitui isso; não houve CI
+   nesta revisão.
 3. Repetir cenas com cache frio/quente, registrar pausas e demonstrar melhora;
    não anunciar eliminação de stutter com os dados atuais.
 4. Sessões prolongadas e progressão além da abertura, incluindo transições,

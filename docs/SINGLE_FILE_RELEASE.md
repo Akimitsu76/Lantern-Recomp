@@ -47,9 +47,9 @@ As mudanças deste empacotamento estão na árvore original do projeto. Antes de
 publicar, compare os arquivos públicos com o checkout da branch remota. A
 auditoria inclui `native_port/`, `apps/`, `scripts/`, `integrations/rexglue/`,
 `games/` (somente metadados/hints revisados), `tests/` e fixtures públicas,
-`docs/`, README, CMake/pyproject e workflows. `.aster`, dumps, saves, texturas
-extraídas/HD, código gerado do jogo e executáveis de build nunca entram no
-repositório.
+`docs/`, README, CMake/pyproject e, quando incluídos, workflows de CI. `.aster`,
+dumps, saves, texturas extraídas/HD, código gerado do jogo e executáveis de build
+nunca entram no repositório.
 
 A pré-release v0.1.3 inclui os patches 0024 (profundidade em 2x/3x), 0025
 (pré-compilação de shaders conhecidos) e 0026 (cache de formato do pipeline do

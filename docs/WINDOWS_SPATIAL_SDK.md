@@ -69,11 +69,12 @@ visual material review and runtime original-BC fingerprints independently guard
 this bounded replacement route. See [HD_TEXTURES.md](HD_TEXTURES.md) for the
 complete contract and validation limits.
 
-The GitHub Actions workflow `native-graphics-windows.yml` compiles only public
-runtime sources and preserves compilation evidence. It requires no XEX or game
-assets. A successful workflow would confirm compilation, **not Windows gameplay**.
-No claim of Windows visual or performance validation follows from a Wine launcher
-smoke test or the existence of this workflow.
+The Windows validation workflow `native-graphics-windows.yml` is prepared but
+not included in this revision. If enabled, it compiles only public runtime
+sources and preserves compilation evidence. It requires no XEX or game assets. A
+successful run would confirm compilation, **not Windows gameplay**. No claim of
+Windows visual or performance validation follows from a Wine launcher smoke test
+or the pending workflow.
 
 FSR1 improves spatial reconstruction from the original image; it does not create
 HD textures and is not temporal antialiasing. The separately configured FXAA
