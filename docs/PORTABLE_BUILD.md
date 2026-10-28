@@ -53,19 +53,19 @@ Os requisitos de Clang/C++23 e do dump continuam os mesmos.
    instalar Python nem rodar pip para usar o launcher.
 3. Selecione a pasta extraída que contém `default.xex` e os demais arquivos do
    jogo. ISO e XEX isolado não são suficientes para esta geração.
-4. Clique **GERAR PORT NATIVO**, ou abra a página **Gerar port**.
+4. Clique **GERAR PORT NATIVO**, ou abra a página **PREPARAR**.
 5. Confirme a preparação das dependências e o download das fontes públicas do
    SDK ReXGlue nas revisões fixadas. A primeira geração compila o SDK gráfico
    completo nos dois sistemas. Fontes/builds ficam na pasta do usuário;
    compilador e bibliotecas ausentes podem ser instalados no sistema pelo seu
    gerenciador oficial, com autorização administrativa. Artefatos verificados
    são reutilizados; jogar um port já gerado não reinstala a toolchain.
-6. Acompanhe **Gerar port**. As seis etapas mostram downloads em bytes, compilação
+6. Acompanhe **PREPARAR**. As seis etapas mostram downloads em bytes, compilação
    em alvos Ninja e atividade indeterminada quando não existe um total conhecido.
    O launcher verifica o dump, gera C++ pelo ReXGlue,
    configura CMake e compila. Não feche o launcher durante a geração; para
-   interromper use **Cancelar tarefa**. Logs ficam em `app/.aster/native/`.
-7. Após **Port gerado**, clique **JOGAR AGORA**. Compilação concluída não é
+   interromper use **Cancelar geração**. Logs ficam em `app/.aster/native/`.
+7. Após **Seu port está pronto**, clique **JOGAR AGORA**. Compilação concluída não é
    certificação de gameplay: inicialização, áudio e campanha devem ser testados.
 
 O dump é lido sem alterações. Todos os alvos de FPS e configurações gráficas

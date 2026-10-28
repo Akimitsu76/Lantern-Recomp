@@ -1,3 +1,85 @@
+# Entrega atual — launcher com atualizador, 28/10/2026
+
+Último pedido: acrescentar Atualizações ao lado de Diagnóstico e preparar prompt
+para o OpenCode publicar. Concluído em Linux e Windows/Wine. Jogo segue PAUSADO
+até nova confirmação explícita; não abrir gameplay, compilar backend ou alterar saves.
+
+Versão0.1.4-rc.3; pyproject0.1.4rc3. Pacotes finais desta função:
+`dist/launcher-updater-2026-10-28-r2` com AppImage, EXE, SHA256SUMS, README e auditoria.
+Candidatos anteriores permanecem históricos, não publicar no lugar destes.
+Prompt de publicação mantido no relatório privado.
+Notas: `docs/RELEASE_v0.1.4-rc.3.md`; funcionamento: `docs/LAUNCHER_UPDATES.md`.
+Repositório atual Akimitsu76/Lantern-Recomp, ID1431033413; endereço antigo redireciona.
+Publicação desta revisão: pré-release `v0.1.4-rc.3` pelo OpenCode.
+
+51 testes UI/Tk9Linux;20 atualizadorLinux;20Windows/Wine;3payload. Smoke dos dois
+binários finalizados; troca/restart e recuperação reais em cópias isoladas passaram
+nos dois sistemas, com dados fictícios preservados. Sem validação Windows nativa.
+Evidências: `.aster/reports/launcher-updater-2026-10-28/VALIDACAO_FINAL.json` e
+`OBSERVACOES.md`. Saves e instalação humana intactos; bugDisparo do Anel pendente.
+
+## Histórico da entrega anterior
+
+# Prioridade e autorização — launcher, 28/10/2026
+
+O usuário determinou: terminar as melhorias do launcher, avisá-lo e só voltar
+a mexer no jogo após confirmação explícita. Não iniciar gameplay, recompilar
+backend, investigar progressão nem alterar saves enquanto essa confirmação
+não chegar. O tutorial do Ring Blaster continua pendente; não declarar corrigido.
+
+Melhorias de interface e progresso concluídas. Pacotes entregáveis em
+`dist/launcher-2026-10-28-final`: AppImage Linux e EXE Windows, SHA256SUMS,
+LEIA-ME e auditoria. Fontes DejaVu privadas nos dois sistemas. Tk9 Linux foi
+recompilado com Xft e o módulo Pillow dinâmico foi incluído; candidatos anteriores
+em `dist/launcher-2026-10-28` e `dist/launcher-2026-10-28-r2` permanecem históricos,
+não usar seus AppImages. Não substituir estes caminhos pelo candidato antigo.
+
+Os executáveis finais passaram no smoke de fontes/imagem e abriram/fecharam
+normalmente com perfis isolados (Linux e Windows via Wine). 47 testes da interface
+passaram no Tk9 Linux corrigido, incluindo o tamanho mínimo 1088×720. A auditoria
+conferiu as 134 entradas públicas em cada pacote e seus inventários; sem conteúdo
+do jogo. Isso não valida gameplay/compilação nativos Windows. Instalação humana e
+saves preservados. Evidências em `.aster/reports/launcher-redesign-2026-10-28/final`.
+
+Aguardar confirmação explícita do usuário para retomar o jogo. O problema do
+tutorial do Disparo do Anel permanece sem causa/correção confirmada.
+
+## Estado anterior do jogo — pausado
+
+# Estado atual — 28/10/2026
+
+Prioridade atual: bloqueio humano no tutorial de atribuição do Ring Blaster.
+A gravação mostra slots preenchidos e tutorial aberto, com teclado e controle
+relatados pelo usuário. A sessão foi encerrada com autorização e os saves
+originais foram preservados. Reprodução e comparação30/60 em cópias ainda
+não concluídas; não declarar causa nem corrigir progressão por flags forçadas.
+
+No código do launcher, recibos externos de validação HD evitam reler/decodificar
+os253 originais e toda biblioteca inalterada em cada abertura. A primeira
+execução após a atualização continua integral. A mudança é comum a Linux/Windows,
+com invalidação por metadados e opção de validação integral. Inventário real
+medido em cerca de25ms aquecido; isso não mede a abertura completa do jogo.
+Suíte Linux em Xvfb:419 testes,3skips, sem falhas. Instalação humana preservada
+no backend32/integração21; estes novos arquivos ainda não estão no AppImage.
+
+Workspace nativo: backend33/integração22. O patch0033 corrige a espera de
+apresentação na retirada da swapchain, fora do caminho de cada quadro.
+Preparação opcional agora reconstrói quatro shaders e dois pipelines revisados
+do dump local, além do cache aprendido. Cobertura: filtro da abertura e uma
+partícula do primeiro combate, não a campanha inteira. Teste pareado190/191,
+mesmas entradas/cachebase, sem PNG durante comandos e cacheglobal do driver
+desativado: máximo100–170s caiu de517,45ms para34,45ms; medianas16,819/16,819ms.
+O pipeline de480ms passou para a preparação inicial. Sem fatal/destino não
+registrado nos dois testes. Não comprova zero stutter ou aumento do FPS médio.
+
+Correção de evidência: o contador antigo não interceptava pipelines obtidos via
+vkGetInstanceProcAddr. Resultados antigos com zero criações não excluem
+compilação naquele caminho. O novo contador intercepta ambos os resolvedores.
+Windows/Wine validou os testes focados, mas GPU/compilação nativos Windows
+continuam pendentes. Candidata r4 abaixo permanece histórica, sem estas mudanças.
+
+## Histórico da revisão anterior
+
 # Estado atual — 27/10/2026
 
 SDK local com patches até 0032, integração 21. A frente de qualidade de fontes

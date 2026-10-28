@@ -68,7 +68,7 @@ class CampaignLaunchTests(unittest.TestCase):
         installation=self.installation('0006-reviewed-hd-texture-override.patch',
             '0009-multi-material-hd-pack.patch','0011-hd-texture-scales.patch')
         error=io.StringIO()
-        with patch('native_port.texture_pack.validate_texture_pack') as validate, \
+        with patch('native_port.texture_pack.validate_texture_pack_cached') as validate, \
              contextlib.redirect_stderr(error),self.assertRaises(SystemExit) as stopped:
             self.call(installation)
         self.assertEqual(stopped.exception.code,2)
@@ -78,9 +78,10 @@ class CampaignLaunchTests(unittest.TestCase):
 
     def test_validated_library_is_forwarded_with_0012(self):
         installation=self.installation('0006-reviewed-hd-texture-override.patch','0012-campaign-texture-library.patch')
-        with patch('native_port.texture_pack.validate_texture_pack',return_value=self.library) as validate:
+        with patch('native_port.texture_pack.validate_texture_pack_cached',return_value=self.library) as validate:
             result=self.call(installation)
-        validate.assert_called_once_with(str(self.library))
+        validate.assert_called_once_with(str(self.library),
+            Path(launcher.__file__).resolve().parent.parent / '.aster/cache/texture-validation')
         self.assertEqual(result['ASTER_HD_TEXTURE_PACK_DIR'],str(self.library))
         self.assertEqual(result['KEEP'],'original')
         self.assertEqual(self.environment['ASTER_HD_TEXTURE_PACK_DIR'],'inherited-stale-selection')
@@ -89,7 +90,7 @@ class CampaignLaunchTests(unittest.TestCase):
         (self.child/'manifest.json').write_text(json.dumps({'recipe':{'host_scale':4}}))
         installation=self.installation('0006-reviewed-hd-texture-override.patch','0012-campaign-texture-library.patch')
         error=io.StringIO()
-        with patch('native_port.texture_pack.validate_texture_pack',return_value=self.library), \
+        with patch('native_port.texture_pack.validate_texture_pack_cached',return_value=self.library), \
              contextlib.redirect_stderr(error),self.assertRaises(SystemExit):
             self.call(installation)
         self.assertIn('Ultra 4x',error.getvalue())
@@ -98,14 +99,14 @@ class CampaignLaunchTests(unittest.TestCase):
         (self.child/'manifest.json').write_text(json.dumps({'recipe':{'host_scale':4}}))
         installation=self.installation('0006-reviewed-hd-texture-override.patch',
             '0012-campaign-texture-library.patch','0011-hd-texture-scales.patch')
-        with patch('native_port.texture_pack.validate_texture_pack',return_value=self.library):
+        with patch('native_port.texture_pack.validate_texture_pack_cached',return_value=self.library):
             result=self.call(installation)
         self.assertEqual(result['ASTER_HD_TEXTURE_PACK_DIR'],str(self.library))
 
     def test_corrupt_library_prevents_launch_environment(self):
         installation=self.installation('0006-reviewed-hd-texture-override.patch','0012-campaign-texture-library.patch')
         error=io.StringIO()
-        with patch('native_port.texture_pack.validate_texture_pack',side_effect=PortError('HD_LIBRARY','corrupt library')), \
+        with patch('native_port.texture_pack.validate_texture_pack_cached',side_effect=PortError('HD_LIBRARY','corrupt library')), \
              contextlib.redirect_stderr(error),self.assertRaises(SystemExit):
             self.call(installation)
         self.assertIn('corrupt library',error.getvalue())
@@ -121,7 +122,7 @@ class CampaignLaunchTests(unittest.TestCase):
         (self.library/'library.json').unlink()
         (self.library/'manifest.json').write_text(json.dumps({'recipe':{'host_scale':2}}))
         installation=self.installation('0006-reviewed-hd-texture-override.patch')
-        with patch('native_port.texture_pack.validate_texture_pack',return_value=self.library):
+        with patch('native_port.texture_pack.validate_texture_pack_cached',return_value=self.library):
             result=self.call(installation)
         self.assertEqual(result['ASTER_HD_TEXTURE_PACK_DIR'],str(self.library))
 

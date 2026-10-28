@@ -24,7 +24,7 @@ from .workspace import Workspace
 
 XEX_SHA256 = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 SDK_VERSION = '0.10.0'
-INTEGRATION_VERSION = 21
+INTEGRATION_VERSION = 22
 SDK_ASSETS = {
     'linux-amd64': '0388edb3f8fb1444f1b0ad5d440cb02d9690ac20a76b04fd6b7dcc19f59328a6',
     'win-amd64': 'ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b',
@@ -212,7 +212,8 @@ def backend_update_reason(data):
     if data.get('presentation_backend') != 'sdk-spatial-fsr1':
         return 'Atualize o backend espacial em Gerar port/Atualizar port.'
     patches = recipe.get('sdk_spatial', {}).get('patches', {})
-    required = {'0032-refresh-unchanged-surface-size.patch'}
+    required = {'0032-refresh-unchanged-surface-size.patch',
+                '0033-retire-present-queue.patch'}
     if data.get('renderer') == 'vulkan-fsi':
         required.add('0031-vulkan-fxaa-quality-parity.patch')
     if required.difference(patches):
@@ -236,6 +237,8 @@ def cpu_sdk_identity(recipe):
     declaration and GPU-only selection branches, with no existing ABI change.
     Patch 0027 changes Vulkan submission scheduling and protects memory exports;
     no declarations, data members or layouts change.
+    Patch 0033 drains the existing presentation queue on swapchain retirement;
+    no header, class layout or normal frame scheduling changes.
     Patch 0032 refreshes the existing presenter connection on repeated native
     size notifications, within window.cpp; no header/ABI change.
     Patch 0031 replaces Vulkan postprocess shader source only; all existing
@@ -270,7 +273,8 @@ def cpu_sdk_identity(recipe):
                 '0029-effects-pixel-constants.patch',
                 '0030-ui-uncompressed-coverage.patch',
                 '0031-vulkan-fxaa-quality-parity.patch',
-                '0032-refresh-unchanged-surface-size.patch'}
+                '0032-refresh-unchanged-surface-size.patch',
+                '0033-retire-present-queue.patch'}
     result['patches'] = {name: digest for name, digest in recipe.get('patches', {}).items() if name not in gpu_only}
     return result
 
@@ -335,7 +339,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
         candidate = root / current['binary']
         if (all(previous.get(key) == recipe[key] for key in host_fields)
                 and cpu_sdk_identity(previous.get('sdk_spatial')) == cpu_sdk_identity(recipe.get('sdk_spatial'))
-                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
+                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22)
                 and candidate.is_file()
                 and current.get('files', {}).get(current['binary']) == file_hash(candidate)):
             reusable_host = candidate

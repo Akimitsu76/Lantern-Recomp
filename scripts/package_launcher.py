@@ -17,7 +17,22 @@ import zipfile
 
 PUBLIC_DIRS = ['native_port', 'games', 'integrations/rexglue']
 PUBLIC_SCRIPTS = ['play_green_lantern.py']
-FORBIDDEN_SUFFIXES = {'.xex', '.iso', '.xexp', '.lvl_760', '.pdb', '.xdb', '.vkcache', '.usm'}
+FORBIDDEN_SUFFIXES = {'.xex', '.iso', '.xexp', '.lvl_760', '.pdb', '.xdb', '.vkcache', '.xsh', '.xpso', '.usm'}
+
+
+def launcher_resource_arguments(root):
+    """Data must sit beside frozen modules as well as in the public payload.
+
+    PyInstaller's module importer can load native_port from _MEIPASS even after
+    the bootstrap adds the persistent app directory to sys.path.
+    """
+    resources = Path(root) / 'native_port/resources'
+    required = ['fonts/DejaVuSans.ttf', 'fonts/DejaVuSans-Bold.ttf',
+                'fonts/DejaVuSansCondensed-Bold.ttf', 'fonts/LICENSE-DejaVu.txt']
+    if (resources.is_symlink() or (resources / 'fonts').is_symlink() or
+            any(not (resources / name).is_file() or (resources / name).is_symlink() for name in required)):
+        raise ValueError('Bundled launcher fonts/license are missing or linked')
+    return ['--add-data', str(resources) + os.pathsep + 'native_port/resources']
 
 
 def single_file(bundle, work, output, command, env, root, args):
@@ -88,7 +103,7 @@ def copy_public(root, destination):
         shutil.copy2(root / 'scripts' / name, destination / 'scripts' / name)
         copied.append('scripts/' + name)
     (destination / 'docs').mkdir(exist_ok=True)
-    for name in ['PORTABLE_BUILD.md', 'THIRD_PARTY_NOTICES.md', 'HD_TEXTURES.md', 'WINDOWS_SPATIAL_SDK.md']:
+    for name in ['PORTABLE_BUILD.md', 'THIRD_PARTY_NOTICES.md', 'HD_TEXTURES.md', 'WINDOWS_SPATIAL_SDK.md', 'SHADER_PREPARATION.md', 'LAUNCHER.md', 'LAUNCHER_UPDATES.md']:
         shutil.copy2(root / 'docs' / name, destination / 'docs' / name)
         copied.append('docs/' + name)
     for name in ['pyproject.toml']:
@@ -116,6 +131,48 @@ def prune_optional_linux_avif(bundle):
         (internal / name).unlink(missing_ok=True)
 
 
+def apply_tk_runtime(bundle, prefix):
+    """Overlay the audited Tk9/Xft closure, never system Tk8 or host libraries."""
+    prefix = Path(prefix).resolve()
+    manifest_path = prefix / 'TK_RUNTIME.json'
+    manifest = json.loads(manifest_path.read_text())
+    if (manifest.get('schema') != 1 or manifest.get('tk') != '9.0.4' or
+            manifest.get('abi') != 'Tcl9' or manifest.get('xft') is not True or
+            manifest.get('glibc_ceiling') != '2.27'):
+        raise ValueError('Unsupported Tk runtime manifest')
+    expected = manifest.get('files', {})
+    if not expected or len(expected) > 5000:
+        raise ValueError('Invalid Tk runtime file inventory')
+    actual = {p.relative_to(prefix).as_posix() for p in prefix.rglob('*') if p.is_file()
+              and p != manifest_path}
+    if set(expected) != actual:
+        raise ValueError('Tk runtime inventory changed')
+    for relative, sha256 in expected.items():
+        path = prefix / relative
+        if (not path.resolve().is_relative_to(prefix) or path.is_symlink() or
+                any(parent.is_symlink() for parent in path.parents if parent != prefix) or
+                hashlib.sha256(path.read_bytes()).hexdigest() != sha256):
+            raise ValueError('Tk runtime file changed: ' + relative)
+    internal = bundle / '_internal'
+    tk = internal / 'libtcl9tk9.0.so'
+    if not tk.is_file():
+        raise ValueError('Tk9 overlay requires a Tcl9/Tk9 portable Python build')
+    for path in (prefix / 'lib').iterdir():
+        if not path.is_file() or path.name.startswith(('libc.so', 'libm.so', 'libpthread.so', 'ld-linux')):
+            raise ValueError('Forbidden runtime library: ' + path.name)
+        shutil.copy2(path, internal / path.name)
+    shutil.copytree(prefix / 'tk_data', internal / '_tk_data', dirs_exist_ok=True)
+    shutil.copy2(prefix / 'launcher_fontconfig.conf', internal / 'launcher_fontconfig.conf')
+    shutil.copytree(prefix / 'LICENSES', bundle / 'LICENSES/Tk9-Xft', dirs_exist_ok=True)
+    shutil.copy2(manifest_path, bundle / 'LICENSES/Tk9-Xft/TK_RUNTIME.json')
+
+
+def needs_tk_xft_overlay(base_prefix):
+    """Known portable Tk9 builds omit scalable fonts; fail before packaging."""
+    library = Path(base_prefix) / 'lib/libtcl9tk9.0.so'
+    return library.is_file() and b'XftFontOpen' not in library.read_bytes()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=Path('dist'))
@@ -124,7 +181,13 @@ def main():
     parser.add_argument('--single-file', action='store_true')
     parser.add_argument('--appimagetool', type=Path)
     parser.add_argument('--appimage-runtime', type=Path)
+    parser.add_argument('--tk-runtime-prefix', type=Path,
+                        help='Linux: audited Tk9/Xft overlay from build_launcher_tk.py')
     args = parser.parse_args()
+    if os.name == 'nt' and args.tk_runtime_prefix:
+        parser.error('--tk-runtime-prefix applies only to Linux')
+    if os.name != 'nt' and not args.tk_runtime_prefix and needs_tk_xft_overlay(sys.base_prefix):
+        parser.error('Portable Tk9 lacks Xft. Build scripts/build_launcher_tk.py and supply --tk-runtime-prefix.')
     root = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     target = 'windows-x64' if os.name == 'nt' else 'linux-x86_64'
@@ -139,15 +202,20 @@ def main():
                '--hidden-import', 'ssl', '--hidden-import', 'tomllib',
                '--hidden-import', 'urllib.request', '--hidden-import', 'zipfile',
                '--hidden-import', 'shlex', str(entry)]
+    command[-1:-1] = launcher_resource_arguments(root)
+    if args.tk_runtime_prefix:
+        command[-1:-1] = ['--runtime-hook', str(root / 'scripts/launcher_tk_hook.py')]
     if os.name == 'nt':
         command.insert(4, '--windowed')
     else:
-        command[4:4] = ['--hidden-import', 'resource']
+        command[4:4] = ['--hidden-import', 'resource', '--hidden-import', 'PIL._tkinter_finder']
     env = os.environ.copy()
     env['PYINSTALLER_CONFIG_DIR'] = str(work / 'cache')
     subprocess.run(command, check=True, cwd=root, env=env)
     bundle = output / target / 'AsterNative'
     prune_optional_linux_avif(bundle)
+    if args.tk_runtime_prefix:
+        apply_tk_runtime(bundle, args.tk_runtime_prefix)
     sources = copy_public(root, bundle / 'app')
     if args.cmake_data:
         cmake = bundle / 'app/tools/cmake'
@@ -159,6 +227,7 @@ def main():
         shutil.copy2(args.ninja, ninja / args.ninja.name)
     licenses = bundle / 'LICENSES'
     licenses.mkdir(exist_ok=True)
+    shutil.copy2(root / 'native_port/resources/fonts/LICENSE-DejaVu.txt', licenses / 'DejaVu-LICENSE.txt')
     candidates = [Path(sys.base_prefix) / 'LICENSE.txt',
                   Path(sys.base_prefix) / 'lib' / ('python' + str(sys.version_info.major) + '.' + str(sys.version_info.minor)) / 'LICENSE.txt']
     for candidate in candidates:

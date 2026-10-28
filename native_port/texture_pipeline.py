@@ -137,7 +137,8 @@ def _extract_original(decoded, entry, destination, helper, root, cancel):
         if stage.exists(): shutil.rmtree(stage)
 
 
-def ensure_graphics_textures(source, graphics_data, root, work, *, cancel=None, emit=None, allow_download=False):
+def ensure_graphics_textures(source, graphics_data, root, work, *, cancel=None, emit=None, allow_download=False,
+                             full_validation=False):
     cancel = cancel or Cancellation(); emit = emit or (lambda event: None)
     quality = graphics_data.get('texture_quality', 'default')
     if quality not in ('low', 'default', 'high', 'ultra'):
@@ -147,21 +148,53 @@ def ensure_graphics_textures(source, graphics_data, root, work, *, cancel=None, 
         return {'pack': None, 'material_count': 0, 'state': 'original', 'host_scale': 1}
     from .sources import source_path
     from .texture_tools import ensure_texture_tools
+    from .texture_validation import ValidationReceipt, safe_path
     from .xctd import decode_container
     root = Path(root).resolve()
     profile, profile_hash = load_source_profile(root)
     candidate = Path(source).expanduser()
+    safe_path(candidate)
     if candidate.is_dir():
         matches = [path for path in candidate.iterdir() if path.name.lower() == 'default.xex']
         if len(matches) != 1:
             raise PortError('HD_XEX', 'Selecione uma pasta com um único default.xex.')
         candidate = matches[0]
+    safe_path(candidate)
     xex = source_path(candidate)
+    dump = xex.parent
+    entries = profile['entries']
+    scale = 4 if quality == 'ultra' else 2
+    safe_path(work.root / ('textures/originals/' + profile_hash), allow_missing=True)
+    home = work.path('textures/originals/' + profile_hash)
+    producer_kind = 'libraries' if profile.get('runtime_library') is True else 'packs'
+    safe_path(work.root / ('textures/' + producer_kind), allow_missing=True)
+    output_home = work.path('textures/' + producer_kind)
+    safe_path(work.root / 'cache/texture-validation', allow_missing=True)
+    receipt = ValidationReceipt(work.path('cache/texture-validation'),
+        {'purpose': 'graphics-textures-v1', 'profile_sha256': profile_hash, 'source': str(xex),
+         'source_xex_sha256': SOURCE_XEX_SHA256, 'host_scale': scale,
+         'originals': str(home), 'output_home': str(output_home)}, cancel)
+
+    def dependencies(pack):
+        return [root / PROFILE, xex, home, pack,
+                *{_relative(dump, e['source_relative']) for e in entries}]
+
+    cached = None if full_validation else receipt.read()
+    if cached:
+        result = cached.get('result')
+        if isinstance(result, dict) and isinstance(result.get('pack'), str):
+            pack = Path(result['pack'])
+            expected = {'pack': str(pack), 'material_count': len(entries), 'state': 'prepared',
+                        'host_scale': scale, 'coverage': profile.get('coverage', 'reviewed-materials-only')}
+            if (pack.parent == output_home and _HEX.fullmatch(pack.name) and result == expected and
+                    receipt.matches(cached, dependencies(pack))):
+                emit({'stage': 'hd-batch', 'message': 'Texturas HD verificadas anteriormente; arquivos inalterados.',
+                      'completed': len(entries), 'total': len(entries), 'unit': 'materials', 'state': 'completed'})
+                return result
     if sha(xex, cancel) != SOURCE_XEX_SHA256:
         raise PortError('HD_XEX', 'Texturas HD ainda não revisadas para este XEX.')
-    dump = xex.parent
-    entries = profile['entries']; tools = None; decoded_files = {}; checked_sources = set()
-    home = work.path('textures/originals/' + profile_hash); home.mkdir(parents=True, exist_ok=True)
+    tools = None; decoded_files = {}; checked_sources = set()
+    home.mkdir(parents=True, exist_ok=True)
     for index, entry in enumerate(entries):
         cancel.check()
         emit({'stage': 'hd-batch', 'message': f'Verificando originais {index + 1}/{len(entries)}',
@@ -196,12 +229,33 @@ def ensure_graphics_textures(source, graphics_data, root, work, *, cancel=None, 
     else:
         # Workspace publication uses exclusive temporaries and atomic replacement.
         work.write_json(catalog_path.relative_to(work.root), catalog)
-    scale = 4 if quality == 'ultra' else 2
     producer = prepare_texture_pack
     if profile.get('runtime_library') is True:
         from .texture_library import prepare_texture_library
         producer = prepare_texture_library
     pack = producer(catalog_path, root, work, host_scale=scale,
                                 cancel=cancel, emit=emit, allow_download=allow_download)
-    return {'pack': str(pack), 'material_count': len(entries), 'state': 'prepared', 'host_scale': scale,
-            'coverage': profile.get('coverage', 'reviewed-materials-only')}
+    result = {'pack': str(pack), 'material_count': len(entries), 'state': 'prepared', 'host_scale': scale,
+              'coverage': profile.get('coverage', 'reviewed-materials-only')}
+    # New outputs did not exist before preparation. Validate the completed tree
+    # once between stable inventories before it can authorize later fast starts.
+    # This is intentionally more work on the first run, with no AI on validation.
+    def verify_complete():
+        from .texture_pack import validate_texture_pack_cached
+        if load_source_profile(root)[1] != profile_hash or sha(xex, cancel) != SOURCE_XEX_SHA256:
+            raise PortError('HD_SOURCE_CHANGED', 'A identidade das texturas mudou durante a preparação.')
+        checked = set()
+        for entry in entries:
+            cancel.check()
+            source_file = _relative(dump, entry['source_relative'])
+            if source_file not in checked:
+                _check_file(source_file, entry['compressed_size'], entry['compressed_sha256'], cancel)
+                checked.add(source_file)
+            if not _original_matches(home / entry['canonical_rgba8_sha256'], entry, cancel):
+                raise PortError('HD_CACHE_CHANGED', 'Originais HD ausentes após a preparação.')
+        validate_texture_pack_cached(pack, work.path('cache/texture-validation'),
+                                    expected_xex_sha256=SOURCE_XEX_SHA256, cancel=cancel, full=True)
+
+    if Path(pack).is_dir():
+        receipt.publish(result, dependencies(pack), verify_complete)
+    return result

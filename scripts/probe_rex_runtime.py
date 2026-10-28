@@ -50,8 +50,12 @@ def stop_probe_process(process: subprocess.Popen) -> None:
         process.wait()
 
 
-def capture_own_x11_window(pid: int, output: Path) -> dict:
-    """Capture only a window whose _NET_WM_PID matches this probe's child."""
+def capture_own_x11_window(pid: int, output: Path | None) -> dict:
+    """Verify the child's window; capture it only when output is provided.
+
+    Timing probes can request ownership-checked input without screenshot
+    readback or PNG encoding disturbing the measured frame intervals.
+    """
     try:
         result = subprocess.run(["xprop", "-root", "_NET_CLIENT_LIST"],
                                 capture_output=True, text=True, timeout=2)
@@ -93,6 +97,8 @@ def capture_own_x11_window(pid: int, output: Path) -> dict:
             match = re.search(r"=\s*(\d+)\s*$", prop.stdout)
             if not match or int(match.group(1)) != pid:
                 continue
+            if output is None:
+                return {"pid": pid, "window_id": window_id}
             image = subprocess.run(["import", "-silent", "-window", window_id, str(output)],
                                    capture_output=True, text=True, timeout=3)
             if image.returncode == 0 and output.is_file():

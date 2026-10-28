@@ -12,7 +12,8 @@ from native_port.native_build import INTEGRATION_VERSION, backend_update_reason
 def current_manifest(renderer):
     return {'recipe': {'integration': INTEGRATION_VERSION, 'sdk_spatial': {'patches': {
         '0031-vulkan-fxaa-quality-parity.patch': 'verified',
-        '0032-refresh-unchanged-surface-size.patch': 'verified'}}},
+        '0032-refresh-unchanged-surface-size.patch': 'verified',
+        '0033-retire-present-queue.patch': 'verified'}}},
         'renderer': renderer, 'presentation_backend': 'sdk-spatial-fsr1'}
 
 
@@ -34,6 +35,15 @@ class QualityUpdateTests(unittest.TestCase):
                 self.assertFalse(backend_update_reason(manifest))
                 del manifest['recipe']['sdk_spatial']['patches']['0032-refresh-unchanged-surface-size.patch']
                 self.assertIn('correções', backend_update_reason(manifest))
+
+    def test_backend21_cannot_silently_keep_the_old_swapchain_retirement(self):
+        for renderer in ('vulkan-fsi', 'd3d12-rov'):
+            manifest = current_manifest(renderer)
+            manifest['recipe']['integration'] = 21
+            self.assertIn('Backend 21 instalado', backend_update_reason(manifest))
+        manifest = current_manifest('vulkan-fsi')
+        del manifest['recipe']['sdk_spatial']['patches']['0033-retire-present-queue.patch']
+        self.assertIn('correções', backend_update_reason(manifest))
 
     def test_vulkan_quality_filter_required_but_d3d12_uses_existing_quality_shader(self):
         manifest = current_manifest('vulkan-fsi')

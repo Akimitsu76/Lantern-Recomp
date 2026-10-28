@@ -1,5 +1,39 @@
 # Preparação da release
 
+## Atualização do launcher — v0.1.4-rc.3, 28/10/2026
+
+**Pré-release experimental, não stable.** Esta revisão publica o launcher com
+interface renovada, fontes DejaVu privadas, Tk 9.0.4/Xft no Linux e atualizador
+integrado. A versão embutida é `0.1.4-rc.3`; o `pyproject.toml` usa a forma
+PEP 440 `0.1.4rc3`. O backend do jogo não é atualizado automaticamente por esta
+entrega.
+
+- A aba **Atualizações** consulta a API pública do repositório pelo ID
+  `1431033413`, em segundo plano na abertura, a cada 30 minutos e manualmente.
+  Ela ignora rascunhos, versões não maiores e releases sem o asset da plataforma
+  e `SHA256SUMS`. Pré-releases são incluídas por padrão, com opção para excluí-las.
+- O download aceita somente HTTPS nos hosts previstos, pode ser cancelado e
+  confere tamanho, formato x64 e SHA-256. A instalação usa um helper copiado,
+  substituição atômica, backup, reinicialização e handshake de versão/nonce; se a
+  nova interface não abrir, a versão anterior é restaurada. Staging concluído é
+  limpo, preservando backup e dados do usuário.
+- Validação desta entrega: 51 testes da interface/Tk9 no Linux; 20 testes do
+  atualizador no Linux e 20 no Windows/Wine; 3 testes de payload. Os dois
+  executáveis passaram no smoke com perfis `ASTER_DATA_HOME` temporários e
+  informaram versão `0.1.4-rc.3`, `scalable_fonts=true`,
+  `hero_image_ready=true`, aba de atualizações e `game_launched=false`.
+  Troca/reinicialização e recuperação reais passaram em cópias isoladas nos dois
+  sistemas, com dados fictícios preservados. A consulta GitHub ao vivo passou
+  em Linux e Windows/Wine.
+- Assets: `AsterNative-linux-x86_64.AppImage` (53.148.152 bytes, SHA-256
+  `d51e9a062d45f5ff9249f8d282fc27440142ed013268e51dd3138f21c819dda8`) e
+  `AsterNative-windows-x64.exe` (61.333.642 bytes, SHA-256
+  `17c38e24517fdcde515b7e924f27a72e89163ddf25fdf0d7a0480fbe8a680f83`).
+- Limites: não houve novo teste de gameplay nem validação Windows nativa; Wine
+  não certifica D3D12/GPU nativas. O tutorial do Disparo do Anel continua
+  pendente, a campanha completa não está certificada e o port não é stable.
+  Usuários de launcher antigo precisam baixar esta versão manualmente uma vez.
+
 ## Revisão local de qualidade — patches 0029–0032, integração 21
 
 **Candidata experimental, ainda sem aprovação stable.** A publicação desta

@@ -1,11 +1,15 @@
 # Arquivos únicos para Releases
 
-Os assets da pré-release experimental v0.1.4-rc.2 são:
+Os assets da pré-release experimental v0.1.4-rc.3 são:
 
 - `AsterNative-windows-x64.exe` — executável Windows com recursos embutidos.
 - `AsterNative-linux-x86_64.AppImage` — AppImage Linux com recursos embutidos.
 - `SHA256SUMS` — checksums somente desses dois executáveis.
-- `LEIA-ME-CANDIDATA.txt` — nota curta da candidata e limites conhecidos.
+- `LEIA-ME-ATUALIZACAO.md` — instruções curtas do launcher e limites conhecidos.
+
+Launchers anteriores não têm a aba **Atualizações**: baixe e abra esta versão
+manualmente uma vez. Depois disso, os próximos releases compatíveis podem ser
+instalados pela própria interface, que preserva dump, saves e preferências.
 
 Esses quatro arquivos são os assets obrigatórios da prerelease. ZIP e TAR.GZ são
 formatos anteriores opcionais e não substituem os executáveis acima. O `.exe`
@@ -52,24 +56,25 @@ auditoria inclui `native_port/`, `apps/`, `scripts/`, `integrations/rexglue/`,
 dumps, saves, texturas extraídas/HD, código gerado do jogo e executáveis de build
 nunca entram no repositório.
 
-A pré-release v0.1.4-rc.2 preserva os patches 0024 (profundidade em 2x/3x),
+A pré-release v0.1.4-rc.3 preserva os patches 0024 (profundidade em 2x/3x),
 0025 (pré-compilação de shaders conhecidos), 0026 (cache de formato do pipeline
-do presenter Vulkan), 0027 (submissão Vulkan assíncrona sem drenar workers) e
-0028 (uma repetição do pedido de tela cheia no primeiro foco), e acrescenta:
-0031 (FXAA Quality 3.11 no Vulkan), 0032 (atualização da conexão de apresentação
-em tamanho nativo repetido), 0030 (ASTERUI2 RGBA8 opcional para cobertura de UI)
-e 0029 (diagnóstico opcional de c255). A integração do backend é 21. O módulo de
-requisitos e as opções independentes de gráficos continuam incluídos. Não altere
-o requisito de toolchain: Clang/C++23 e, no Windows, Build Tools/Windows SDK
-continuam necessários para GERAR o jogo, embora Python não seja necessário para
-ABRIR o launcher.
+do presenter Vulkan), 0027 (submissão Vulkan assíncrona sem drenar workers),
+0028 (uma repetição do pedido de tela cheia no primeiro foco), 0031 (FXAA Quality
+3.11 no Vulkan), 0032 (atualização da conexão de apresentação em tamanho nativo
+repetido), 0030 (ASTERUI2 RGBA8 opcional para cobertura de UI) e 0029
+(diagnóstico opcional de c255), e acrescenta 0033 (espera da fila de apresentação
+na retirada da swapchain). A integração do backend é 22. O módulo de requisitos e
+as opções independentes de gráficos continuam incluídos. Não altere o requisito
+de toolchain: Clang/C++23 e, no Windows, Build Tools/Windows SDK continuam
+necessários para GERAR o jogo, embora Python não seja necessário para ABRIR o
+launcher.
 
 Os hashes dos assets desta revisão são:
 
-- `AsterNative-linux-x86_64.AppImage` (48.486.904 bytes):
-  `a17367107334904bf1ce40a2a9baae1132732742f72c36de6f51fa24aa3fd85f`
-- `AsterNative-windows-x64.exe` (58.043.141 bytes):
-  `eaf34a23bdf80ad1b51479fd13d12d185932a377a1e29c45ceb84096e78079fa`
+- `AsterNative-linux-x86_64.AppImage` (53.148.152 bytes):
+  `d51e9a062d45f5ff9249f8d282fc27440142ed013268e51dd3138f21c819dda8`
+- `AsterNative-windows-x64.exe` (61.333.642 bytes):
+  `17c38e24517fdcde515b7e924f27a72e89163ddf25fdf0d7a0480fbe8a680f83`
 
 Trocar apenas o executável não atualiza o backend compilado. Use **Gerar
 port/Atualizar port** e preserve saves/cache; o build anterior permanece em

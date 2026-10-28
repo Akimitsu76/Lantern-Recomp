@@ -19,3 +19,4 @@ bool Window::OnActualSizeUpdate(uint32_t new_physical_width, uint32_t new_physic
   }
   return true;
 }
+

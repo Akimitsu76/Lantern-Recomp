@@ -190,6 +190,26 @@ def prepare_texture_pack(catalog, root, work, *, allow_download=False, cancel=No
     return output
 
 
+def validate_texture_pack_cached(directory, cache_directory, expected_xex_sha256=None, cancel=None, *, full=False):
+    """Reuse a stable validation receipt; ``validate_texture_pack`` always rehashes.
+
+    Callers choose a workspace cache outside the pack. Both dry-run and actual
+    startup can reuse this check without decoding images or rereading DDS bytes.
+    """
+    from .texture_validation import ValidationReceipt, safe_path
+    cancel = cancel or Cancellation()
+    path = safe_path(directory)
+    receipt = ValidationReceipt(cache_directory,
+        {'purpose': 'texture-pack-v1', 'directory': str(path),
+         'source_xex_sha256': expected_xex_sha256 or SOURCE_XEX_SHA256}, cancel)
+    previous = None if full else receipt.read()
+    if previous and previous.get('result') == str(path) and receipt.matches(previous, [path]):
+        return path
+    receipt.publish(str(path), [path],
+        lambda: validate_texture_pack(path, expected_xex_sha256, cancel))
+    return path
+
+
 def validate_texture_pack(directory, expected_xex_sha256=None, cancel=None):
     """Verify an entire batch (or a legacy single material) without running AI."""
     cancel = cancel or Cancellation()

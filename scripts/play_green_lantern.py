@@ -40,8 +40,11 @@ def digest(path):
 
 
 from native_port.locking import lock_session
-from native_port.native_build import read_install, verify_install, XEX_SHA256, backend_update_reason
+from native_port.native_build import read_install, verify_install, XEX_SHA256, backend_update_reason, INTEGRATION_VERSION
 from native_port.paths import external_env
+from native_port.shader_prepare import prepare_game_shaders
+from native_port.workspace import Workspace
+from native_port.errors import PortError
 
 
 def mode_paths(target):
@@ -277,9 +280,10 @@ def hd_texture_environment(directory, installation, env, parser):
             parser.error('Bibliotecas da campanha exigem atualizar o backend nativo no launcher.')
         if ((Path(directory) / 'pack.json').exists() or (Path(directory) / 'texture-pack.index').exists()) and '0009-multi-material-hd-pack.patch' not in patches:
             parser.error('Pacotes com vários materiais exigem atualizar o backend de texturas HD no launcher.')
-        from native_port.texture_pack import validate_texture_pack
+        from native_port.texture_pack import validate_texture_pack_cached
         try:
-            verified = validate_texture_pack(directory)
+            verified = validate_texture_pack_cached(directory,
+                Path(__file__).resolve().parent.parent / '.aster/cache/texture-validation')
             manifests = list(verified.glob('*/manifest.json')) if (verified / 'pack.json').exists() or (verified / 'library.json').exists() else [verified / 'manifest.json']
             if '0011-hd-texture-scales.patch' not in patches and any(
                     json.loads(path.read_text(encoding='utf8')).get('recipe', {}).get('host_scale') == 4 for path in manifests):
@@ -415,6 +419,13 @@ def main():
     if args.dry_run:
         print('Validação concluída. Comando de execução:\n' + shlex.join(command))
         return 0
+
+    if installation and graphics_data['shader_preload']:
+        try:
+            prepare_game_shaders(game, run, root, Workspace(root / '.aster', root), installation,
+                                 emit=lambda event: print(event.get('message', ''), flush=True))
+        except (OSError, PortError) as exc:
+            parser.error(str(exc))
 
     session_lock = None
     try:

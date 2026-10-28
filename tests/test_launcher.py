@@ -28,6 +28,68 @@ class LauncherTests(unittest.TestCase):
         self.app = Launcher(self.root)
         self.addCleanup(self.app.close)
 
+    def test_updates_tab_follows_diagnostics_and_fits_minimum_window(self):
+        self.root.geometry('1088x720')
+        self.root.update()
+        tabs = list(self.app.tabs.tabs())
+        self.assertEqual(tabs[tabs.index(str(self.app.diag_tab))+1], str(self.app.update_tab))
+        button = self.app.nav_buttons[str(self.app.update_tab)]
+        self.assertLessEqual(button.winfo_rootx()+button.winfo_width(), self.root.winfo_rootx()+self.root.winfo_width())
+
+    def test_update_check_runs_off_ui_thread_and_shows_badge_without_blocking_play(self):
+        started, release = threading.Event(), threading.Event()
+        main_thread = threading.get_ident()
+        def query(include):
+            self.assertNotEqual(threading.get_ident(), main_thread)
+            started.set();release.wait(3)
+            return {'tag':'v0.1.5','notes':'Nova interface'}
+        with patch('native_port.launcher.launcher_update.check_release', side_effect=query):
+            self.app.check_updates()
+            self.assertTrue(started.wait(2))
+            self.assertTrue(self.app.update_running)
+            self.assertFalse(self.app.update_installing)
+            release.set()
+            deadline = time.monotonic()+3
+            while self.app.update_running and time.monotonic()<deadline:
+                self.root.update();time.sleep(.01)
+        self.assertFalse(self.app.update_running)
+        self.assertIn('●',self.app.nav_buttons[str(self.app.update_tab)]['text'])
+        self.assertIn('v0.1.5',self.app.update_version.get())
+
+    def test_updater_does_not_install_during_game_or_other_task(self):
+        self.app.busy = True
+        self.app.update_release = {'tag':'v0.1.5'}
+        with patch('native_port.launcher.launcher_update.download_release') as download:
+            self.app.install_launcher_update()
+            download.assert_not_called()
+        self.app.busy = False
+
+    def test_update_cancel_button_cancels_current_download_not_old_token(self):
+        from native_port.tasks import Cancellation
+        started = threading.Event()
+        def download(release,cancel,emit):
+            started.set()
+            while True:
+                cancel.check();cancel.event.wait(.01)
+        self.app.update_release = {'tag':'v0.1.5'}
+        old = self.app.update_cancel
+        with patch('native_port.launcher.launcher_update.installed_executable', return_value=self.project/'Aster.AppImage'), \
+             patch('native_port.launcher.launcher_update.download_release', side_effect=download), \
+             patch('native_port.launcher.launcher_update.stage_install') as install:
+            self.app.install_launcher_update()
+            self.assertTrue(started.wait(2))
+            self.assertTrue(self.app.update_installing)
+            self.assertFalse(self.app.start(lambda: {},'unrelated'))
+            self.app.update_cancel_button.invoke()
+            deadline = time.monotonic()+3
+            while self.app.update_running and time.monotonic()<deadline:
+                self.root.update();time.sleep(.01)
+            install.assert_not_called()
+        self.assertFalse(old.event.is_set())
+        self.assertTrue(self.app.update_cancel.event.is_set())
+        self.assertFalse(self.app.update_installing)
+        self.assertIn('cancelada',self.app.update_message.get())
+
     def wait_task(self):
         deadline = time.monotonic() + 5
         while self.app.busy and time.monotonic() < deadline:
@@ -200,7 +262,7 @@ class LauncherTests(unittest.TestCase):
         if self.root.winfo_screenwidth() < w or self.root.winfo_screenheight() < h:
             self.skipTest('Xvfb menor que a janela; use -screen 0 1440x900x24 para o snapshot.')
         for button in (self.app.inspect_button, self.app.prepare_button, self.app.launch_button,
-                       self.app.experimental_button, self.app.stop_experimental_button,
+                       self.app.experimental_button,
                        self.app.folder_button, self.app.select_button):
             self.assertTrue(button.winfo_ismapped(), str(button))
             self.assertGreater(button.winfo_width(), 10)
@@ -243,9 +305,9 @@ class LauncherTests(unittest.TestCase):
         self.root.geometry('1088x696')
         self.root.update()
         x, y = self.app.play_tab.winfo_rootx(), self.app.play_tab.winfo_rooty()
-        for button in (self.app.inspect_button, self.app.prepare_button, self.app.launch_button,
-                       self.app.folder_button, self.app.select_button, self.app.experimental_button,
-                       self.app.stop_experimental_button, self.app.open_profile_button):
+        for button in (self.app.inspect_button, self.app.prepare_button,
+                       self.app.folder_button, self.app.select_button,
+                       self.app.open_profile_button, *self.app.home_combos):
             self.assertTrue(button.winfo_ismapped(), str(button))
             self.assertGreater(button.winfo_width(), 10)
             self.assertGreater(button.winfo_height(), 10)
@@ -253,6 +315,44 @@ class LauncherTests(unittest.TestCase):
             self.assertLessEqual(button.winfo_rooty()+button.winfo_height(), y+self.app.play_tab.winfo_height())
             parent = button.master
             self.assertLessEqual(button.winfo_y() + button.winfo_height(), parent.winfo_height())
+        # Play/save live in the persistent footer, accessible from every page.
+        bottom = self.root.winfo_rooty() + self.root.winfo_height()
+        for button in (self.app.play_button, self.app.quick_save_button):
+            self.assertTrue(button.winfo_ismapped())
+            self.assertLessEqual(button.winfo_rooty() + button.winfo_height(), bottom)
+        self.assertFalse(self.app.stop_experimental_button.winfo_ismapped())
+
+    def test_home_quick_choices_reach_real_launch_arguments(self):
+        from native_port import graphics
+        self.root.update()
+        self.app.home_preset.set(graphics.PRESET_LABELS['ultra'])
+        self.app.home_combos[0].event_generate('<<ComboboxSelected>>')
+        self.app.output_resolution.set('1920x1080')
+        self.app.home_combos[1].event_generate('<<ComboboxSelected>>')
+        self.app.home_display.set('Tela cheia')
+        self.app.home_combos[3].event_generate('<<ComboboxSelected>>')
+        data = self.app.config()['graphics']
+        self.assertEqual(data['texture_quality'], 'ultra')
+        self.assertEqual(data['render_scale'], 3)
+        self.assertEqual(data['output_resolution'], '1920x1080')
+        command = self.app.play_command('/tmp/fixture')
+        self.assertEqual(command[command.index('--fullscreen')+1], 'on')
+        self.assertEqual(command[command.index('--graphics-preset')+1], 'ultra')
+        self.assertFalse((self.project / '.aster/runtime').exists())
+
+    def test_overall_progress_keeps_stage_progress_separate(self):
+        self.app.build_running = True
+        for stage in ['dump', 'tools']:
+            self.app._build_event({'stage': stage, 'state': 'completed'})
+        self.app._build_event({'stage': 'cache', 'state': 'running',
+                              'completed': 50, 'total': 100, 'unit': 'targets'})
+        self.assertEqual(float(self.app.progress['value']), 50)
+        self.assertAlmostEqual(self.app.task_progress.get(), 100*2.5/6)
+        self.app._build_event({'stage': 'cache', 'state': 'completed'})
+        self.app._build_event({'stage': 'codegen', 'state': 'running'})
+        self.assertEqual(str(self.app.progress['mode']), 'indeterminate')
+        self.assertEqual(self.app.task_progress.get(), 50)
+        self.app.build_running = False
 
     def test_generation_controls_fit_and_full_hd_reaches_play_command(self):
         self.root.geometry('1088x720')
@@ -263,6 +363,13 @@ class LauncherTests(unittest.TestCase):
             self.assertTrue(widget.winfo_ismapped())
             self.assertGreaterEqual(widget.winfo_height(), 5 if widget == self.app.progress else 24)
             self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(), bottom)
+        for widgets in self.app.stage_widgets.values():
+            for widget in widgets:
+                self.assertTrue(widget.winfo_ismapped())
+                self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(), bottom)
+                parent = widget.master.master
+                self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
+                                     parent.winfo_rooty() + parent.winfo_height())
         self.app.output_resolution.set('1920x1080')
         command = self.app.play_command('/tmp/synthetic-dump')
         self.assertEqual(command[command.index('--output-resolution') + 1], '1920x1080')

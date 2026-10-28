@@ -1,0 +1,226 @@
+{
+  "schema": 1,
+  "baseline": "glibc2.27",
+  "sources": {
+    "tcl": {
+      "url": "https://codeload.github.com/tcltk/tcl/tar.gz/refs/tags/core-9-0-4",
+      "sha256": "8c01bac92a9a8ce271b63d3aa28f09cde2c6762d6719ca671cdc8aee25391234"
+    },
+    "tk": {
+      "url": "https://codeload.github.com/tcltk/tk/tar.gz/refs/tags/core-9-0-4",
+      "sha256": "ab9bd89fcff2e1248b7a9c097035f817fa0725285028c95686fdb92db65bc148"
+    }
+  },
+  "packages": {
+    "libbsd0": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libb/libbsd/libbsd0_0.8.7-1ubuntu0.1_amd64.deb",
+      "sha256": "a1e1900a51b56919113ac07ad873c25ad0f57a7042a054e5ed755d5d82871745",
+      "bytes": 41560,
+      "version": "0.8.7-1ubuntu0.1"
+    },
+    "libc6": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.27-3ubuntu1.5_amd64.deb",
+      "sha256": "c4af07dc8a2fdc9c4f25f103cd03bcca7231c19d9ac9171fa7eb5eecb7fc46d7",
+      "bytes": 2829792,
+      "version": "2.27-3ubuntu1.5"
+    },
+    "libc6-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6-dev_2.27-3ubuntu1.5_amd64.deb",
+      "sha256": "9bbf759782ac78b05d761d41ad258f243d5ac73cee03ee456d4e69179d07975d",
+      "bytes": 2586920,
+      "version": "2.27-3ubuntu1.5"
+    },
+    "libexpat1": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/e/expat/libexpat1_2.2.5-3ubuntu0.9_amd64.deb",
+      "sha256": "1d011da2ad0deb03ff8d2b61a76cb86956a8763d6cb947c7e1b1a0b3d0abaabe",
+      "bytes": 82796,
+      "version": "2.2.5-3ubuntu0.9"
+    },
+    "libexpat1-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/e/expat/libexpat1-dev_2.2.5-3ubuntu0.9_amd64.deb",
+      "sha256": "194bd6d1af8e8cd635d4d0023e97da355d9d5c1e1f431c6cbb96f37e47b71ef6",
+      "bytes": 123696,
+      "version": "2.2.5-3ubuntu0.9"
+    },
+    "libfontconfig1": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/f/fontconfig/libfontconfig1_2.12.6-0ubuntu2_amd64.deb",
+      "sha256": "647bb8f09e751a39d488b0260db6015ce1118c56114cc771dd5bf907180f0c80",
+      "bytes": 136732,
+      "version": "2.12.6-0ubuntu2"
+    },
+    "libfontconfig1-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/f/fontconfig/libfontconfig1-dev_2.12.6-0ubuntu2_amd64.deb",
+      "sha256": "ce4d63624128b06eef6ea0f2d04f0baa1cba22d7325fcbcce48ce5cbe2533b1a",
+      "bytes": 688928,
+      "version": "2.12.6-0ubuntu2"
+    },
+    "libfreetype6": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/f/freetype/libfreetype6_2.8.1-2ubuntu2.2_amd64.deb",
+      "sha256": "81b8338c2242051192741a3e8f09ad03a56cde983bc9edc53303b528b1d1cb89",
+      "bytes": 335148,
+      "version": "2.8.1-2ubuntu2.2"
+    },
+    "libfreetype6-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/f/freetype/libfreetype6-dev_2.8.1-2ubuntu2.2_amd64.deb",
+      "sha256": "2be69929b3c54e1bae20c95a734541d681be9a8a5cb5a985498847d9479aaa73",
+      "bytes": 2539488,
+      "version": "2.8.1-2ubuntu2.2"
+    },
+    "libpng-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libp/libpng1.6/libpng-dev_1.6.34-1ubuntu0.18.04.2_amd64.deb",
+      "sha256": "9e392411bccc5263ef72e6ea1b9cb860d9b93e81e4d86f3ce0acffc70b257a78",
+      "bytes": 176824,
+      "version": "1.6.34-1ubuntu0.18.04.2"
+    },
+    "libpng16-16": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libp/libpng1.6/libpng16-16_1.6.34-1ubuntu0.18.04.2_amd64.deb",
+      "sha256": "4d484ba67be62e7bb450ff41c88d06e65d564f9180daccc4a2640760493804bc",
+      "bytes": 175920,
+      "version": "1.6.34-1ubuntu0.18.04.2"
+    },
+    "libpthread-stubs0-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libp/libpthread-stubs/libpthread-stubs0-dev_0.3-4_amd64.deb",
+      "sha256": "fd572751e9b9106f90fcd701828ec26f0e1b825680eea9851ddc8c0e9221a4d7",
+      "bytes": 4068,
+      "version": "0.3-4"
+    },
+    "libuuid1": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/u/util-linux/libuuid1_2.31.1-0.4ubuntu3.7_amd64.deb",
+      "sha256": "c04350aa8dc1bd73712716f9826b0f02fa10b77058c990a406445020970c2eaa",
+      "bytes": 20116,
+      "version": "2.31.1-0.4ubuntu3.7"
+    },
+    "libx11-6": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libx11/libx11-6_1.6.4-3ubuntu0.4_amd64.deb",
+      "sha256": "4095f0a83f7d4ef87d8ddc96de641735c4d6de11495183ab6ec7b9c35671cffe",
+      "bytes": 571684,
+      "version": "2:1.6.4-3ubuntu0.4"
+    },
+    "libx11-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libx11/libx11-dev_1.6.4-3ubuntu0.4_amd64.deb",
+      "sha256": "fbd73cddc3913a18bb0a85188b710da421b953916d869bce039c503536dff1f6",
+      "bytes": 640932,
+      "version": "2:1.6.4-3ubuntu0.4"
+    },
+    "libx11-xcb1": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libx11/libx11-xcb1_1.6.4-3ubuntu0.4_amd64.deb",
+      "sha256": "a69a4e9396a13346523417d0fbed7cc2e0448ce0eab9a0919097c82f79fe0e44",
+      "bytes": 9720,
+      "version": "2:1.6.4-3ubuntu0.4"
+    },
+    "libxau-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxau/libxau-dev_1.0.8-1ubuntu1_amd64.deb",
+      "sha256": "f3480f13db87e776f4ae830fb2ce9385fdf4df08ca2601727ee20bdc29ee9d94",
+      "bytes": 9476,
+      "version": "1:1.0.8-1ubuntu1"
+    },
+    "libxau6": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxau/libxau6_1.0.8-1ubuntu1_amd64.deb",
+      "sha256": "fa1ae4072a6955195eb78e7ac1f0fd3fb525cfd33b340a99357a21bf6f94eb74",
+      "bytes": 7556,
+      "version": "1:1.0.8-1ubuntu1"
+    },
+    "libxcb1": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxcb/libxcb1_1.13-2~ubuntu18.04_amd64.deb",
+      "sha256": "9a29e9ff0598a2bde15de5f53152247607515183548b342eea7f397a5df4cf38",
+      "bytes": 45512,
+      "version": "1.13-2~ubuntu18.04"
+    },
+    "libxcb1-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxcb/libxcb1-dev_1.13-2~ubuntu18.04_amd64.deb",
+      "sha256": "3b308d513bdedf949b67b8a1679ff6093085c7cea34b339292902651108ab270",
+      "bytes": 79972,
+      "version": "1.13-2~ubuntu18.04"
+    },
+    "libxdmcp-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxdmcp/libxdmcp-dev_1.1.2-3_amd64.deb",
+      "sha256": "570a0a7afa81ab9deb66e8b46e97e0322659078137bbdb086697e2844929fbb7",
+      "bytes": 25062,
+      "version": "1:1.1.2-3"
+    },
+    "libxdmcp6": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxdmcp/libxdmcp6_1.1.2-3_amd64.deb",
+      "sha256": "8905e3441f5e408208b73817253504498c4488c7803ff4a8fb85e225f0757e55",
+      "bytes": 10728,
+      "version": "1:1.1.2-3"
+    },
+    "libxext-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxext/libxext-dev_1.3.3-1_amd64.deb",
+      "sha256": "a2f35c6a3571aefa523641c726fc44ed2ed58373f8fc2f37b7d2d44934a55a64",
+      "bytes": 82090,
+      "version": "2:1.3.3-1"
+    },
+    "libxext6": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxext/libxext6_1.3.3-1_amd64.deb",
+      "sha256": "05a861283b2aa54ee5f40e6844d0cc73f50c30440a28964da00302b7fbcecc9e",
+      "bytes": 29444,
+      "version": "2:1.3.3-1"
+    },
+    "libxft-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xft/libxft-dev_2.3.2-1_amd64.deb",
+      "sha256": "9afdcd41fc1467e490dc7d6b7a881b9a61c694b32a854aa50723b03b7f876e1b",
+      "bytes": 45694,
+      "version": "2.3.2-1"
+    },
+    "libxft2": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xft/libxft2_2.3.2-1_amd64.deb",
+      "sha256": "823ae2f0bb194376463fdf35518effc4c20a38120ed4b55b0b49440ec22a4075",
+      "bytes": 36120,
+      "version": "2.3.2-1"
+    },
+    "libxrender-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxrender/libxrender-dev_0.9.10-1_amd64.deb",
+      "sha256": "aeb7abe8409afbb484c06882c158e7e695743d678387064ef95bdb3d6edbce15",
+      "bytes": 24904,
+      "version": "1:0.9.10-1"
+    },
+    "libxrender1": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/libx/libxrender/libxrender1_0.9.10-1_amd64.deb",
+      "sha256": "bfda6dc44a39d6500ac2974b3113105477adce457699aadd99f022d5a4858c1c",
+      "bytes": 18706,
+      "version": "1:0.9.10-1"
+    },
+    "linux-libc-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/l/linux/linux-libc-dev_4.15.0-213.224_amd64.deb",
+      "sha256": "06d9f16644d3a1b2ab7dd01730e833d516b6f575d975855f496eea6463fef2f6",
+      "bytes": 983468,
+      "version": "4.15.0-213.224"
+    },
+    "uuid-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/u/util-linux/uuid-dev_2.31.1-0.4ubuntu3.7_amd64.deb",
+      "sha256": "513dd006f265969d3f508918d93987cd3f7848d58759affff33c75d75ab27208",
+      "bytes": 33180,
+      "version": "2.31.1-0.4ubuntu3.7"
+    },
+    "x11proto-core-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xorgproto/x11proto-core-dev_2018.4-4_all.deb",
+      "sha256": "c9c13b43604d175084a528ed5047d0c8a3af1ff4913f5fe4feebd99842e67dbe",
+      "bytes": 2620,
+      "version": "2018.4-4"
+    },
+    "x11proto-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xorgproto/x11proto-dev_2018.4-4_all.deb",
+      "sha256": "1797fb12c67d037fb530e7203bf38a2c94e1e239bf654432506181c9d43bda01",
+      "bytes": 250872,
+      "version": "2018.4-4"
+    },
+    "xtrans-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xtrans/xtrans-dev_1.3.5-1_all.deb",
+      "sha256": "ce600e85e353b770670ffbab7f213900f87fa3482255532aeea815a60e229da7",
+      "bytes": 70516,
+      "version": "1.3.5-1"
+    },
+    "zlib1g": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/z/zlib/zlib1g_1.2.11.dfsg-0ubuntu2.2_amd64.deb",
+      "sha256": "515c904330188cc53238ae38bf16fbaa774ac9d168d8e400003416eb05bc6a86",
+      "bytes": 56852,
+      "version": "1:1.2.11.dfsg-0ubuntu2.2"
+    },
+    "zlib1g-dev": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/z/zlib/zlib1g-dev_1.2.11.dfsg-0ubuntu2.2_amd64.deb",
+      "sha256": "33f5ec22778404069783abc5db2917d26d471d63dcb05448cd59b479c11142ab",
+      "bytes": 175640,
+      "version": "1:1.2.11.dfsg-0ubuntu2.2"
+    }
+  }
+}

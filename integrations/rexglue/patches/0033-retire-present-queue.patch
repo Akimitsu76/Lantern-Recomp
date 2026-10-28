@@ -1,0 +1,27 @@
+--- a/src/ui/vulkan/vulkan_presenter.cpp
++++ b/src/ui/vulkan/vulkan_presenter.cpp
+@@ -1428,6 +1428,24 @@
+ VkSwapchainKHR VulkanPresenter::PaintContext::PrepareForSwapchainRetirement() {
+   if (swapchain != VK_NULL_HANDLE) {
+     submission_tracker.AwaitAllSubmissionsCompletion();
++    // Rendering fences do not cover the queue operation of vkQueuePresentKHR.
++    // Drain the presentation queue as well before retiring its swapchain. This
++    // is the legacy WSI retirement path (swapchain_maintenance1 is not enabled).
++    // AcquireQueue serializes access with presentation, including separate
++    // graphics/present queue families. Never wait here during normal painting.
++    if (present_queue_family != UINT32_MAX) {
++      const VulkanDevice::Queue::Acquisition present_queue =
++          vulkan_device->AcquireQueue(present_queue_family, 0);
++      const auto queue_wait_idle = reinterpret_cast<PFN_vkQueueWaitIdle>(
++          vulkan_device->vulkan_instance()->functions().vkGetDeviceProcAddr(
++              vulkan_device->device(), "vkQueueWaitIdle"));
++      assert_not_null(queue_wait_idle);
++      const VkResult idle_result = queue_wait_idle(present_queue.queue());
++      if (idle_result != VK_SUCCESS) {
++        REXGPU_ERROR("Failed to wait for swapchain presentation retirement: {}",
++                     int32_t(idle_result));
++      }
++    }
+   }
+   const VulkanDevice::Functions& dfn = vulkan_device->functions();
+   const VkDevice device = vulkan_device->device();

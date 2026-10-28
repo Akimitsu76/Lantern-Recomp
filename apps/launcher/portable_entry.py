@@ -39,6 +39,10 @@ def main():
                 except OSError:
                     stream = open(os.devnull, 'w')
                 setattr(sys, name, stream)
+    # The copied helper must not install its older payload over the current app.
+    if len(sys.argv) == 3 and sys.argv[1] == '--aster-apply-update':
+        from native_port.launcher_update import apply_update
+        return apply_update(sys.argv[2])
     if getattr(sys, 'frozen', False):
         payload = Path(sys._MEIPASS) / 'aster-payload.zip'
         if payload.is_file():
@@ -57,19 +61,41 @@ def main():
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == '--smoke-test':
         from native_port.launcher import Launcher
+        from native_port import __version__
+        from native_port.launcher_fonts import load_fonts, BODY_FAMILY
+        from tkinter import font
+        fonts_registered = load_fonts()
         window = tkinter.Tk()
         # Do not call close(): smoke tests must not save launcher preferences.
         app = Launcher(window)
         window.update()
+        # Let the debounced artwork paint too: constructing widgets alone misses
+        # frozen-runtime font and Pillow/Tk failures.
+        window.after(180, window.quit)
+        window.mainloop()
+        small = font.Font(root=window, family=BODY_FAMILY, size=10)
+        large = font.Font(root=window, family=BODY_FAMILY, size=30)
+        small_width = small.measure('Green Lantern')
+        large_width = large.measure('Green Lantern')
+        scalable_fonts = large_width > small_width * 2
         result = {'platform': platform.system(), 'python': platform.python_version(),
+                  'version': __version__, 'updates_tab': str(app.tabs.tab(app.update_tab, 'text')),
                   'tk': tkinter.TkVersion, 'gui_created': True, 'project': str(root),
                   'build_button': str(app.compile_button['text']),
+                  'fonts_registered': fonts_registered,
+                  'font_family': large.actual('family'),
+                  'font_widths': [small_width, large_width],
+                  'scalable_fonts': scalable_fonts,
+                  'hero_image_ready': app.hero._image is not None,
+                  'hero_image_error': app.hero.image_error,
                   'game_launched': False}
         app.closed = True
         window.after_cancel(app.after_id)
+        app.footer_progress.stop()
+        app.progress.stop()
         window.destroy()
         print(json.dumps(result))
-        return 0
+        return 0 if scalable_fonts and result['hero_image_ready'] else 1
     if len(sys.argv) == 1:
         sys.argv.append('gui')
     from native_port.__main__ import main as application

@@ -21,6 +21,16 @@ spec.loader.exec_module(control)
 
 
 class ProbeControlTests(unittest.TestCase):
+    def test_timing_lookup_still_verifies_pid_without_reading_or_encoding_an_image(self):
+        import probe_rex_runtime as probe
+        with patch.object(probe.subprocess, 'run', side_effect=[
+                subprocess.CompletedProcess([], 0, '_NET_CLIENT_LIST(WINDOW): 0x12, 0x34', ''),
+                subprocess.CompletedProcess([], 0, '_NET_WM_PID(CARDINAL) = 77', ''),
+                subprocess.CompletedProcess([], 0, '_NET_WM_PID(CARDINAL) = 123', '')]) as run:
+            self.assertEqual(probe.capture_own_x11_window(123, None), {'pid': 123, 'window_id': '0x34'})
+            self.assertEqual(run.call_count, 3)
+            self.assertTrue(all(call.args[0][0] == 'xprop' for call in run.call_args_list))
+
     def test_completed_probe_rejects_input_without_creating_queue(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

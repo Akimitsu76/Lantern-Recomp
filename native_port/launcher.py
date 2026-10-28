@@ -17,6 +17,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from games.green_lantern import GreenLantern
+from . import __version__, launcher_update
 from . import graphics, settings
 from .native_build import build_native, read_install, backend_update_reason
 from .paths import project_root, python_command, external_env
@@ -28,13 +29,13 @@ from .tasks import Cancellation
 from .workspace import Workspace
 
 PROJECT = project_root(__file__)
-BG = '#0b0e12'
-PANEL = '#10151c'
-CARD = '#151c25'
-CARD_ALT = '#1c2632'
-LINE = '#293443'
+BG = '#090c0b'
+PANEL = '#101512'
+CARD = '#131a16'
+CARD_ALT = '#1c2721'
+LINE = '#2b3930'
 INK = '#f0f4f8'
-MUTED = '#94a3b7'
+MUTED = '#98a99f'
 ACCENT = '#b4ed74'
 ACCENT_DARK = '#263b25'
 WARN = '#ffcc66'
@@ -76,9 +77,11 @@ BUILD_STAGES = (
 
 class Launcher:
     def __init__(self, root):
+        from .launcher_fonts import load_fonts
+        load_fonts()
         self.root = root
         root.title('Aster Native | Green Lantern')
-        root.geometry('1160x800')
+        root.geometry('1200x820')
         root.minsize(1088, 720)
         root.configure(bg=BG)
         self.queue, self.events = queue.Queue(), []
@@ -86,6 +89,13 @@ class Launcher:
         self.last_result, self.last_environment = None, None
         self.selected_folder = None
         self.closed = False
+        self.update_release = None
+        self.update_running = False
+        self.update_installing = False
+        self.update_cancel = Cancellation()
+        self.update_helper = None
+        self.update_plan = None
+        self.update_started = None
         self.experimental_process = None
         self.experimental_lock = threading.Lock()
         self.settings_warning = None
@@ -124,6 +134,8 @@ class Launcher:
         self.custom_dither = tk.BooleanVar(value=cfg['graphics']['present_dither'])
         self._vsync_preference = bool(cfg['graphics']['vsync'])
         self.status = tk.StringVar(value='Pronto para selecionar o dump e revisar as opções gráficas.')
+        self.status_display = tk.StringVar(value=self.status.get())
+        self.status.trace_add('write', self._status_changed)
         self.environment_status = tk.StringVar(value='Ambiente / diagnóstico não executado')
         self.source_status = tk.StringVar(value='Jogo / entrada ainda não validada')
         self.output_status = tk.StringVar(value='Artefato / compilação integral ainda não validada')
@@ -133,12 +145,21 @@ class Launcher:
         self.quick_target = tk.StringVar(value='')
         self.quick_graphics = tk.StringVar(value='')
         self.quick_profile = tk.StringVar(value='')
+        self.home_preset = tk.StringVar()
+        self.home_fps = tk.StringVar()
+        self.home_display = tk.StringVar()
+        self.task_progress = tk.DoubleVar(value=0)
+        self.update_progress = tk.DoubleVar(value=0)
+        self.update_message = tk.StringVar(value='Consulte os releases publicados do projeto.')
+        self.update_version = tk.StringVar(value='Nenhuma consulta realizada')
+        self.update_prerelease = tk.BooleanVar(value=True)
+        self.build_percent = tk.StringVar(value='0%')
         self.report_path = tk.StringVar(value='Relatórios ficam dentro do diretório de trabalho.')
         self.preset_buttons, self.target_buttons = {}, {}
         self.stage_states = {key: 'pending' for key, *_ in BUILD_STAGES}
         self.active_stage = None
         self.build_heading = tk.StringVar(value='Seu dump. Uma versão para o seu PC.')
-        self.build_detail = tk.StringVar(value='Selecione a pasta do jogo na Biblioteca para começar.')
+        self.build_detail = tk.StringVar(value='Selecione a pasta do jogo no Início para começar.')
         self.build_count = tk.StringVar(value='0 de 6 etapas concluídas')
         self.build_measure = tk.StringVar(value='Aguardando início')
         self.build_elapsed = tk.StringVar(value='00:00')
@@ -188,7 +209,7 @@ class Launcher:
         style.map('TButton', background=[('active', '#29434d'), ('disabled', '#1b282e')],
                   foreground=[('disabled', '#6c8185')])
         style.configure('Accent.TButton', padding=(24, 16), background=ACCENT,
-                        foreground='#06231a', font=(FONT, 12, 'bold'))
+                        foreground='#06231a', font=('DejaVu Sans Condensed', 13, 'bold'))
         style.map('Accent.TButton', background=[('active', '#8af0c7'), ('disabled', '#29473e')],
                   foreground=[('disabled', '#6c8b81')])
         style.configure('Secondary.TButton', padding=(14, 10), background=CARD_ALT, foreground=INK)
@@ -240,191 +261,303 @@ class Launcher:
 
     # ------------------------------------------------------------------- shell
     def _build_shell(self):
-        shell = tk.Frame(self.root, bg=BG, padx=22, pady=12)
+        shell = tk.Frame(self.root, bg=BG)
         shell.pack(fill='both', expand=True)
-        header = tk.Frame(shell, bg=BG)
-        header.pack(fill='x', pady=(0, 8))
+        header = tk.Frame(shell, bg=BG, padx=26, pady=15)
+        header.pack(fill='x')
         brand = tk.Frame(header, bg=BG)
-        brand.pack(side='left', fill='x', expand=True)
-        tk.Label(brand, text='ASTER', bg=BG, fg=ACCENT,
-                 font=(FONT, 22, 'bold')).pack(side='left')
-        tk.Label(brand, text='  NATIVE   /   SUA BIBLIOTECA', bg=BG, fg=MUTED,
-                 font=(FONT, 9, 'bold')).pack(side='left', padx=(10, 0), pady=(8, 0))
-        badge = tk.Label(header, text='VERSÃO EXPERIMENTAL', bg=ACCENT_DARK,
-                         fg=ACCENT, font=(FONT, 8, 'bold'), padx=12, pady=7)
-        badge.pack(side='right')
-        tk.Frame(shell, bg=LINE, height=1).pack(fill='x', pady=(0, 6))
-        navigation = tk.Frame(shell, bg=BG)
-        navigation.pack(fill='x', pady=(0, 10))
+        brand.pack(side='left', padx=(0, 34))
+        tk.Label(brand, text='GREEN LANTERN', bg=BG, fg=INK,
+                 font=('DejaVu Sans Condensed', 20, 'bold')).pack(anchor='w')
+        tk.Label(brand, text='ASTER NATIVE  /  EXPERIMENTAL', bg=BG, fg=ACCENT,
+                 font=(FONT, 8, 'bold')).pack(anchor='w', pady=(2, 0))
+        navigation = tk.Frame(header, bg=BG)
+        navigation.pack(side='left', fill='y')
         self.tabs = ttk.Notebook(shell, style='Modern.TNotebook')
         self.tabs.pack(fill='both', expand=True)
-        self.play_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
-        self.build_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
-        self.graphics_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
+        self.play_tab = tk.Frame(self.tabs, bg=BG, padx=24, pady=10)
+        self.build_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
+        self.graphics_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
         self.hd_tab = tk.Toplevel(self.root, bg=BG, padx=18, pady=14)
         self.hd_tab.title('Aster · Ferramentas de texturas')
         self.hd_tab.geometry('900x330')
         self.hd_tab.withdraw()
         self.hd_tab.protocol('WM_DELETE_WINDOW', self.hd_tab.withdraw)
-        self.game_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
-        self.diag_tab = tk.Frame(self.tabs, bg=BG, padx=12, pady=14)
-        self.tabs.add(self.play_tab, text='Biblioteca')
-        self.tabs.add(self.build_tab, text='Gerar port')
-        self.tabs.add(self.graphics_tab, text='Gráficos')
-        self.tabs.add(self.game_tab, text='Jogo e arquivos')
-        self.tabs.add(self.diag_tab, text='Diagnóstico')
-        self.nav_buttons = {}
-        for page, title in [(self.play_tab, 'Biblioteca'), (self.build_tab, 'Gerar port'),
-                            (self.graphics_tab, 'Gráficos'),
-                            (self.game_tab, 'Jogo e arquivos'),
-                            (self.diag_tab, 'Diagnóstico')]:
-            button = tk.Button(navigation, text=title, bg=BG, fg=MUTED, activebackground=CARD,
-                               activeforeground=INK, relief='flat', bd=0, highlightthickness=0, padx=22, pady=11,
-                               font=(FONT, 10, 'bold'), cursor='hand2',
-                               command=lambda tab=page: self.tabs.select(tab))
-            button.pack(side='left', padx=(0, 4))
+        self.game_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
+        self.diag_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
+        self.update_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
+        self.nav_buttons, self.nav_lines = {}, {}
+        for page, title in [(self.play_tab, 'INÍCIO'), (self.graphics_tab, 'GRÁFICOS'),
+                            (self.build_tab, 'PREPARAR'), (self.game_tab, 'JOGO'),
+                            (self.diag_tab, 'DIAGNÓSTICO'), (self.update_tab, 'ATUALIZAÇÕES')]:
+            self.tabs.add(page, text=title)
+            item = tk.Frame(navigation, bg=BG)
+            item.pack(side='left', fill='y', padx=(0, 17))
+            button = tk.Button(item, text=title, bg=BG, fg=MUTED,
+                               activebackground=BG, activeforeground=INK,
+                               relief='flat', bd=0, highlightthickness=0,
+                               padx=0, pady=12, font=('DejaVu Sans Condensed', 12, 'bold'),
+                               cursor='hand2', command=lambda tab=page: self.tabs.select(tab))
+            button.pack(fill='both', expand=True)
+            line = tk.Frame(item, bg=BG, height=2)
+            line.pack(fill='x')
             self.nav_buttons[str(page)] = button
+            self.nav_lines[str(page)] = line
         def navigation_changed(_=None):
             selected = self.tabs.select()
             for page, button in self.nav_buttons.items():
-                button.configure(bg=CARD if selected == page else BG,
-                                 fg=ACCENT if selected == page else MUTED)
+                button.configure(fg=INK if selected == page else MUTED)
+                self.nav_lines[page].configure(bg=ACCENT if selected == page else BG)
         self.tabs.bind('<<NotebookTabChanged>>', navigation_changed)
-        navigation_changed()
+        tk.Frame(shell, bg=LINE, height=1).pack(fill='x', before=self.tabs)
+        footer = tk.Frame(shell, bg=BG, padx=26, pady=14)
+        footer.pack(side='bottom', fill='x', before=self.tabs)
+        actions = tk.Frame(footer, bg=BG)
+        actions.pack(side='right')
+        status = tk.Frame(footer, bg=BG)
+        self.status_bar = tk.Label(status, textvariable=self.status_display, bg=BG, fg=MUTED,
+                                   anchor='w', justify='left', font=(FONT, 10), wraplength=570)
+        self.status_bar.pack(fill='x', expand=True)
+        self.footer_progress = ttk.Progressbar(status, variable=self.task_progress,
+                                               mode='determinate', maximum=100)
+        self.footer_progress.pack(fill='x', pady=(9, 0))
+        status.bind('<Configure>', lambda e: self.status_bar.configure(wraplength=max(150, e.width-8)))
+        self.cancel_button = ttk.Button(actions, text='Cancelar', style='Ghost.TButton',
+                                        state='disabled', command=self.stop_experimental)
+        self.stop_experimental_button = ttk.Button(actions, text='Encerrar jogo',
+            style='Danger.TButton', state='disabled', command=self.stop_experimental)
+        self.quick_save_button = ttk.Button(actions, text='Salvar', style='Secondary.TButton',
+                                            command=self.save_settings)
+        self.quick_save_button.pack(side='left', padx=(0, 12))
+        self.play_button = ttk.Button(actions, text='JOGAR AGORA', style='Accent.TButton',
+                                      command=self.play)
+        self.play_button.pack(side='right', ipadx=10)
+        status.pack(side='left', fill='both', expand=True, padx=(0, 20))
+        self.launch_button = self.experimental_button = self.play_button
         self._build_play_tab()
         self._build_generation_tab()
         self._build_graphics_tab()
         self._build_game_tab()
         self._build_diag_tab()
-        footer = tk.Frame(shell, bg=BG)
-        footer.pack(side='bottom', fill='x', pady=(4, 0), before=self.tabs)
-        self.status_bar = tk.Label(footer, textvariable=self.status, bg=PANEL, fg=MUTED,
-                                   anchor='w', justify='left', padx=12, pady=8,
-                                   font=(FONT, 9), wraplength=800)
-        self.status_bar.pack(side='left', fill='x', expand=True)
-        tk.Label(footer, text='SEUS ARQUIVOS · SEU PC', bg=BG, fg=MUTED,
-                 font=(FONT, 8), padx=8).pack(side='right')
+        self._build_update_tab()
+        navigation_changed()
+        self.root.bind('<Control-o>', lambda _: self.select_folder() if not self.busy and not self.update_installing else None)
+        self.root.bind('<Control-s>', lambda _: self.save_settings() if not self.busy and not self.update_installing else None)
         self.widgets = [self.folder_button, self.select_button, self.inspect_button,
                         self.prepare_button, self.cancel_button, self.compile_button,
                         self.stop_experimental_button, self.open_profile_button, self.play_button,
                         self.source_entry, self.work_entry, self.jobs_spin, self.save_button,
-                        self.doctor_button, self.clear_button, self.export_button,
+                        self.quick_save_button, self.doctor_button, self.clear_button, self.export_button,
                         self.copy_button, self.restore_graphics_button, self.build_start_button,
-                        self.hd_select_button, self.hd_original_button, self.hd_catalog_button, self.hd_prepare_button, self.hd_auto_button, self.fullscreen_check, self.sharpness_spin, self.sharpness_balanced_button, self.shader_preload_check]
-        self._readonly_widgets = [self.build_combo, self.shader_combo, self.output_combo, self.upscaler_combo, self.antialiasing_combo]
+                        self.hd_select_button, self.hd_original_button, self.hd_catalog_button,
+                        self.hd_prepare_button, self.hd_auto_button, self.fullscreen_check,
+                        self.sharpness_spin, self.sharpness_balanced_button, self.shader_preload_check]
+        self._readonly_widgets = [self.build_combo, self.shader_combo, self.output_combo,
+            self.upscaler_combo, self.antialiasing_combo, *self.home_combos]
 
-    # -------------------------------------------------------------- play tab
+    def _build_update_tab(self):
+        tk.Label(self.update_tab, text='Atualizações do launcher', bg=BG, fg=INK,
+                 font=(FONT, 22, 'bold')).pack(anchor='w')
+        tk.Label(self.update_tab, text=f'Versão instalada: {__version__}  ·  Linux e Windows',
+                 bg=BG, fg=MUTED, font=(FONT, 10)).pack(anchor='w', pady=(6, 18))
+        card = self._card(self.update_tab, fill='x')
+        tk.Label(card, textvariable=self.update_version, bg=CARD, fg=ACCENT,
+                 font=(FONT, 16, 'bold')).pack(anchor='w', padx=20, pady=(18, 10))
+        tk.Label(card, textvariable=self.update_message, bg=CARD, fg=MUTED,
+                 wraplength=950, justify='left', font=(FONT, 10)).pack(anchor='w', padx=20)
+        ttk.Progressbar(card, variable=self.update_progress, maximum=100).pack(
+            fill='x', padx=20, pady=16)
+        actions = tk.Frame(card, bg=CARD)
+        actions.pack(fill='x', padx=20, pady=(0, 18))
+        self.update_check_button = ttk.Button(actions, text='Verificar agora',
+            style='Secondary.TButton', command=self.check_updates)
+        self.update_check_button.pack(side='left')
+        self.update_install_button = ttk.Button(actions, text='Baixar e instalar',
+            style='Accent.TButton', state='disabled', command=self.install_launcher_update)
+        self.update_install_button.pack(side='left', padx=10)
+        self.update_cancel_button = ttk.Button(actions, text='Cancelar download',
+            style='Ghost.TButton', state='disabled', command=lambda: self.update_cancel.cancel())
+        self.update_cancel_button.pack(side='left')
+        ttk.Checkbutton(self.update_tab, text='Incluir versões de teste (pré-releases)',
+            variable=self.update_prerelease).pack(anchor='w', pady=(16, 10))
+        tk.Label(self.update_tab, text='O download é conferido pelo SHA-256 publicado no release. '
+            'O launcher reinicia após instalar e guarda uma cópia da versão anterior. '
+            'Se a nova interface falhar ao abrir, a versão anterior é restaurada. '
+            'Saves, cache, preferências e dump continuam na pasta do usuário.',
+            bg=BG, fg=MUTED, font=(FONT, 10), wraplength=970, justify='left').pack(anchor='w', pady=(0, 16))
+        self.update_notes = tk.Text(self.update_tab, bg=PANEL, fg=INK, relief='flat',
+            font=(FONT, 10), wrap='word', height=6, padx=16, pady=14, state='disabled')
+        self.update_notes.pack(fill='both', expand=True)
+        result = launcher_update.previous_result()
+        if isinstance(result, dict):
+            self.update_message.set(f"Atualização concluída: {result.get('version', '')}" if result.get('success')
+                                    else 'A última atualização não foi concluída: ' + str(result.get('error', 'Tente novamente.')))
+
+    def check_updates(self):
+        if self.update_running or self.closed:
+            return
+        self.update_running = True
+        include = self.update_prerelease.get()
+        self.update_check_button.configure(state='disabled')
+        self.update_install_button.configure(state='disabled')
+        self.update_message.set('Consultando os releases do GitHub…')
+        def query():
+            try:
+                self.queue.put(('update-checked', '', launcher_update.check_release(include)))
+            except Exception as exc:
+                self.queue.put(('update-error', '', str(exc)))
+        threading.Thread(target=query, daemon=True).start()
+
+    def install_launcher_update(self):
+        if self.update_running or self.busy or not self.update_release:
+            return
+        target = launcher_update.installed_executable()
+        if not target:
+            self.update_message.set('A instalação automática funciona no EXE e AppImage oficiais. '
+                                    'Abra um desses arquivos para atualizar por aqui.')
+            return
+        if not self.save_settings(quiet=True):
+            self.update_message.set('Não foi possível salvar as preferências; instalação cancelada.')
+            return
+        self.update_running = True
+        self.update_installing = True
+        self._set_busy_controls(False)
+        self.update_cancel = Cancellation()
+        self.update_progress.set(0)
+        self.update_check_button.configure(state='disabled')
+        self.update_install_button.configure(state='disabled')
+        self.update_cancel_button.configure(state='normal')
+        self.update_message.set('Baixando a nova versão… O launcher reiniciará quando terminar.')
+        release = dict(self.update_release)
+        def download():
+            try:
+                result = launcher_update.download_release(release, self.update_cancel,
+                    emit=lambda event: self.queue.put(('update-progress', '', event)))
+                self.update_cancel.check()
+                self.queue.put(('update-downloaded', '', (result, target)))
+            except Exception as exc:
+                self.queue.put(('update-error', '', str(exc)))
+        threading.Thread(target=download, daemon=True).start()
+
+    def _update_event(self, state, value):
+        if state == 'update-progress':
+            self.update_progress.set(value['completed'] / value['total'] * 100)
+            self.update_message.set(f"Baixando: {value['completed']/1048576:.1f} de {value['total']/1048576:.1f} MB")
+            return
+        if state == 'update-downloaded':
+            self.update_cancel_button.configure(state='disabled')
+            try:
+                self.update_cancel.check()
+                self.update_plan, self.update_helper = launcher_update.stage_install(*value)
+                self.update_started = time.monotonic()
+                self.update_message.set('Download verificado. Preparando reinicialização…')
+            except Exception as exc:
+                self._update_event('update-error', str(exc))
+            return
+        self.update_running = False
+        if self.update_installing:
+            self.update_installing = False
+            self._set_busy_controls(not self.busy)
+        self.update_check_button.configure(state='normal')
+        self.update_cancel_button.configure(state='disabled')
+        if state == 'update-checked':
+            self.update_release = value
+            title = f"Nova versão: {value['tag']}" if value else 'Você está na versão mais recente disponível'
+            self.update_version.set(title)
+            self.update_message.set('Clique em Baixar e instalar para atualizar e reiniciar o launcher.' if value
+                                    else 'Nenhum release mais novo e compatível foi encontrado.')
+            self.nav_buttons[str(self.update_tab)].configure(text='ATUALIZAÇÕES ●' if value else 'ATUALIZAÇÕES')
+            self.update_notes.configure(state='normal')
+            self.update_notes.delete('1.0', 'end')
+            self.update_notes.insert('end', (value['notes'] if value else ''))
+            self.update_notes.configure(state='disabled')
+        else:
+            self.update_message.set('Atualização não concluída: ' + str(value))
+        self.update_install_button.configure(state='normal' if self.update_release and not self.busy else 'disabled')
+
+    def _poll_update_helper(self):
+        if not self.update_helper:
+            return False
+        ready = self.update_plan.parent / 'ready.json'
+        if ready.is_file():
+            try:
+                data = json.loads(ready.read_text(encoding='utf8'))
+                plan = json.loads(self.update_plan.read_text(encoding='utf8'))
+                if data.get('nonce') == plan['nonce']:
+                    self.close()
+                    return True
+            except (OSError, ValueError, KeyError):
+                pass
+        if self.update_helper.poll() is not None or time.monotonic() - self.update_started > 45:
+            launcher_update.stop_child(self.update_helper)
+            self.update_helper = None
+            self._update_event('update-error', 'Não foi possível iniciar o instalador. A versão atual foi mantida.')
+        return False
+
     def _build_play_tab(self):
-        hero = self._card(self.play_tab, fill='x')
-        art = tk.Canvas(hero, width=104, height=132, bg=CARD, highlightthickness=0)
-        art.pack(side='left', padx=(16, 0), pady=12)
-        for radius, color in [(43, LINE), (32, '#3d5936'), (21, ACCENT)]:
-            art.create_oval(52-radius, 66-radius, 52+radius, 66+radius, outline=color, width=2)
-        art.create_line(52, 10, 52, 38, fill=ACCENT, width=3)
-        art.create_line(52, 94, 52, 122, fill=ACCENT, width=3)
-        hero_left = tk.Frame(hero, bg=CARD)
-        hero_left.pack(side='left', fill='both', expand=True, padx=20, pady=17)
-        self._caps(hero_left, 'Xbox 360 · Port nativo experimental').pack(anchor='w')
-        tk.Label(hero_left, text='GREEN LANTERN', bg=CARD, fg=INK,
-                 font=(FONT, 25, 'bold')).pack(anchor='w', pady=(5, 0))
-        tk.Label(hero_left, text='RISE OF THE MANHUNTERS', bg=CARD, fg=MUTED,
-                 font=(FONT, 10, 'bold')).pack(anchor='w', pady=(0, 8))
-        tk.Label(hero_left, text='Transforme seu dump em uma versão local para PC.\n'
-                  'Depois, escolha como jogar.',
-                 bg=CARD, fg=MUTED, font=(FONT, 10), wraplength=430,
-                 justify='left').pack(anchor='w')
-        hero_right = tk.Frame(hero, bg=CARD)
-        hero_right.pack(side='right', padx=20, pady=16)
-        self.play_button = ttk.Button(hero_right, text='JOGAR AGORA', style='Accent.TButton',
-                                      command=self.play)
-        self.play_button.pack(fill='x')
-        tk.Label(hero_right, textvariable=self.quick_target, bg=CARD, fg=ACCENT,
-                 font=(FONT, 9, 'bold')).pack(anchor='e', pady=(7, 0))
-        self.launch_button = self.play_button
-        self.experimental_button = self.play_button
-
-        chips = tk.Frame(self.play_tab, bg=BG)
-        chips.pack(fill='x', pady=(10, 0))
-        for index, (caption, variable) in enumerate((
-                ('ALVO DE QUADROS', self.quick_target),
-                ('PRESET GRÁFICO', self.quick_graphics),
-                ('PERFIL DE SESSÃO', self.quick_profile))):
-            chips.columnconfigure(index, weight=1, uniform='chip')
-            card = tk.Frame(chips, bg=CARD, highlightthickness=1, highlightbackground=LINE)
-            card.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 5, 0))
-            tk.Label(card, text=caption, bg=CARD, fg=MUTED, font=(FONT, 8, 'bold'),
-                     anchor='w').pack(fill='x', padx=12, pady=(9, 0))
-            tk.Label(card, textvariable=variable, bg=CARD, fg=INK, font=(FONT, 10, 'bold'),
-                     anchor='w', wraplength=300, justify='left').pack(fill='x', padx=12, pady=(2, 9))
-
+        from .launcher_artwork import LanternHero
+        self.hero = LanternHero(self.play_tab)
+        self.hero.pack(fill='both', expand=True, pady=(0, 10))
         self.warning_frame = tk.Frame(self.play_tab, bg=WARN_BG,
                                       highlightthickness=1, highlightbackground='#5c4b24')
         self.warning_label = tk.Label(self.warning_frame, textvariable=self.warning_text,
-                                      bg=WARN_BG, fg=WARN, font=(FONT, 9), anchor='w',
-                                      justify='left', wraplength=1020, padx=12, pady=8)
+            bg=WARN_BG, fg=WARN, font=(FONT, 9), anchor='w', justify='left',
+            wraplength=1020, padx=12, pady=8)
         self.warning_label.pack(fill='x')
-
-        source_card = self.source_card = self._card(self.play_tab, fill='x', pady=(10, 0))
-        heading = tk.Frame(source_card, bg=CARD)
-        heading.pack(fill='x', padx=16, pady=(13, 0))
-        self._caps(heading, 'Pasta do jogo').pack(side='left')
-        tk.Label(heading, textvariable=self.engine_status, bg=CARD, fg=MUTED,
+        self.source_card = self._card(self.play_tab, side='bottom', fill='x', before=self.hero)
+        head = tk.Frame(self.source_card, bg=CARD)
+        head.pack(fill='x', padx=16, pady=(10, 5))
+        self._caps(head, 'Pasta do jogo').pack(side='left')
+        tk.Label(head, textvariable=self.engine_status, bg=CARD, fg=MUTED,
                  font=(FONT, 8)).pack(side='right')
-        row = tk.Frame(source_card, bg=CARD)
-        row.pack(fill='x', padx=16, pady=(6, 0))
+        row = tk.Frame(self.source_card, bg=CARD)
+        row.pack(fill='x', padx=16)
         self.source_entry = ttk.Entry(row, textvariable=self.source)
         self.source_entry.pack(side='left', fill='x', expand=True)
-        self.folder_button = ttk.Button(row, text='Selecionar pasta…', style='Secondary.TButton',
+        self.folder_button = ttk.Button(row, text='Escolher pasta…', style='Secondary.TButton',
                                         command=self.select_folder)
         self.folder_button.pack(side='left', padx=(8, 0))
-        self.select_button = ttk.Button(row, text='ISO / XEX…', style='Ghost.TButton',
-                                        command=self.select)
-        self.select_button.pack(side='left', padx=(5, 0))
-        actions = tk.Frame(source_card, bg=CARD)
-        actions.pack(fill='x', padx=16, pady=(8, 13))
-        self.inspect_button = ttk.Button(actions, text='Inspecionar dump', style='Secondary.TButton',
-                                         command=self.inspect)
+        self.select_button = ttk.Button(row, text='ISO / XEX…', style='Ghost.TButton', command=self.select)
+        self.select_button.pack(side='left', padx=(6, 0))
+        actions = tk.Frame(self.source_card, bg=CARD)
+        actions.pack(fill='x', padx=16, pady=(6, 8))
+        self.inspect_button = ttk.Button(actions, text='Conferir arquivos', style='Ghost.TButton', command=self.inspect)
         self.inspect_button.pack(side='left')
-        self.prepare_button = ttk.Button(actions, text='Preparar evidências', style='Ghost.TButton',
-                                         command=self.prepare)
-        self.prepare_button.pack(side='left', padx=(6, 0))
-        self.stop_experimental_button = ttk.Button(actions, text='Encerrar sessão',
-                                                   style='Danger.TButton', state='disabled',
-                                                   command=self.stop_experimental)
-        self.stop_experimental_button.pack(side='right')
-        self.open_profile_button = ttk.Button(actions, text='Abrir perfil', style='Ghost.TButton',
-                                              command=self.open_profile)
-        self.open_profile_button.pack(side='right', padx=(0, 6))
-        self.cancel_button = ttk.Button(actions, text='Cancelar tarefa', style='Ghost.TButton',
-                                        state='disabled', command=self.stop_experimental)
-        self.cancel_button.pack(side='right', padx=(0, 6))
-        track = tk.Frame(source_card, bg=CARD)
-        track.pack(fill='x', padx=16, pady=(0, 10))
-        tk.Label(track, textvariable=self.build_count, bg=CARD, fg=MUTED, font=(FONT, 9)).pack(side='left')
-        ttk.Button(track, text='Ver geração  →', style='Ghost.TButton',
+        self.prepare_button = ttk.Button(actions, text='Análise avançada', style='Ghost.TButton', command=self.prepare)
+        self.prepare_button.pack(side='left', padx=(5, 0))
+        self.open_profile_button = ttk.Button(actions, text='Meus saves', style='Ghost.TButton', command=self.open_profile)
+        self.open_profile_button.pack(side='left', padx=(5, 0))
+        ttk.Button(actions, text='Ver preparação  →', style='Ghost.TButton',
                    command=lambda: self.tabs.select(self.build_tab)).pack(side='right')
+        quick = tk.Frame(self.play_tab, bg=PANEL, padx=14, pady=10)
+        quick.pack(side='bottom', fill='x', pady=(10, 0), before=self.source_card)
+        self.home_combos = []
+        fields = [
+            ('QUALIDADE', self.home_preset, list(graphics.PRESET_LABELS.values()),
+             lambda: self.choose_preset(next(k for k,v in graphics.PRESET_LABELS.items() if v == self.home_preset.get()))),
+            ('RESOLUÇÃO DE SAÍDA', self.output_resolution, ['Automática', *graphics.OUTPUT_RESOLUTIONS[1:]],
+             self._refresh_graphics_ui),
+            ('LIMITE DE QUADROS', self.home_fps, list(graphics.TARGET_LABELS.values()),
+             lambda: self.choose_target(next(k for k,v in graphics.TARGET_LABELS.items() if v == self.home_fps.get()))),
+            ('EXIBIÇÃO', self.home_display, ['Em janela', 'Tela cheia'], self._home_display_changed),
+        ]
+        for col, (title, variable, values, callback) in enumerate(fields):
+            quick.columnconfigure(col, weight=1, uniform='quick')
+            cell = tk.Frame(quick, bg=PANEL)
+            cell.grid(row=0, column=col, sticky='ew', padx=(0 if col == 0 else 12, 0))
+            tk.Label(cell, text=title, bg=PANEL, fg=MUTED, font=(FONT, 8, 'bold')).pack(anchor='w', pady=(0, 5))
+            combo = ttk.Combobox(cell, textvariable=variable, values=values, state='readonly', width=16)
+            combo.pack(fill='x')
+            combo.bind('<<ComboboxSelected>>', lambda _, cb=callback: cb())
+            self.home_combos.append(combo)
 
-        notes = tk.Frame(self.play_tab, bg=BG)
-        notes.pack(fill='x', pady=(10, 0))
-        notes_data = (
-            ('Seu progresso, em qualquer modo',
-             '30, 60 e ilimitado compartilham o save deste usuário. Trocar FPS ou qualidade '
-             'não cria outra campanha.'),
-            ('Validação antes de abrir',
-             'O launcher confere dump, build, plugin e referência FSI com --validar antes de abrir '
-             'a sessão.'),
-            ('Experimental é opt-in',
-             '30 fps é o padrão. 60 e ilimitado pedem confirmação. O save continua o mesmo.'),
-        )
-        for index, (title, body) in enumerate(notes_data):
-            notes.columnconfigure(index, weight=1, uniform='note')
-            card = tk.Frame(notes, bg=CARD_ALT, highlightthickness=1,
-                            highlightbackground='#30464f')
-            card.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 7, 0))
-            tk.Label(card, text=title, bg=CARD_ALT, fg=ACCENT, font=(FONT, 9, 'bold'),
-                     anchor='w').pack(fill='x', padx=12, pady=(9, 1))
-            tk.Label(card, text=body, bg=CARD_ALT, fg=MUTED, font=(FONT, 8), anchor='w',
-                     justify='left', wraplength=280).pack(fill='x', padx=10, pady=(0, 9))
+    def _status_changed(self, *_):
+        message = self.status.get()
+        self.status_display.set(message if len(message) <= 190 else message[:187] + '…')
+
+    def _home_display_changed(self):
+        self.fullscreen.set(self.home_display.get() == 'Tela cheia')
+        self._refresh_graphics_ui()
 
     def _build_generation_tab(self):
         tk.Label(self.build_tab, text='Do seu dump ao PC', bg=BG, fg=INK,
@@ -449,24 +582,28 @@ class Launcher:
                      justify='left').pack(anchor='w')
         card = self._card(left, fill='x')
         head = tk.Frame(card, bg=CARD)
-        head.pack(fill='x', padx=18, pady=(12, 6))
+        head.pack(fill='x', padx=18, pady=(10, 5))
         tk.Label(head, textvariable=self.build_count, bg=CARD, fg=ACCENT,
                  font=(FONT, 9, 'bold')).pack(side='left')
+        tk.Label(head, textvariable=self.build_percent, bg=CARD, fg=ACCENT,
+                 font=('DejaVu Sans Condensed', 19, 'bold')).pack(side='right', padx=(10, 0))
         tk.Label(head, textvariable=self.build_elapsed, bg=CARD, fg=MUTED,
                  font=(MONO, 10)).pack(side='right')
         tk.Label(card, textvariable=self.build_heading, bg=CARD, fg=INK,
                  font=(FONT, 15, 'bold'), anchor='w', wraplength=650).pack(fill='x', padx=18)
         tk.Label(card, textvariable=self.build_detail, bg=CARD, fg=MUTED,
-                 font=(FONT, 9), wraplength=650, anchor='w', justify='left').pack(fill='x', padx=18, pady=(8, 12))
+                 font=(FONT, 9), wraplength=650, anchor='w', justify='left').pack(fill='x', padx=18, pady=(6, 8))
+        self.overall_progress = ttk.Progressbar(card, variable=self.task_progress, maximum=100)
+        self.overall_progress.pack(fill='x', padx=18, pady=(0, 8))
         self.progress = ttk.Progressbar(card, mode='determinate', value=0)
         self.progress.pack(fill='x', padx=18)
         tk.Label(card, textvariable=self.build_measure, bg=CARD, fg=MUTED,
-                 font=(FONT, 9), anchor='w').pack(fill='x', padx=18, pady=(8, 16))
+                 font=(FONT, 9), anchor='w').pack(fill='x', padx=18, pady=(6, 10))
         steps = self._card(left, fill='x', pady=(12, 0))
         self.stage_widgets = {}
         for index, (key, title, detail) in enumerate(BUILD_STAGES):
             row = tk.Frame(steps, bg=CARD)
-            row.pack(fill='x', padx=16, pady=3)
+            row.pack(fill='x', padx=16, pady=1)
             number = tk.Label(row, text=f'{index+1:02}', bg=CARD_ALT, fg=MUTED,
                               font=(MONO, 10, 'bold'), padx=8, pady=4)
             number.pack(side='left', padx=(0, 12))
@@ -492,7 +629,17 @@ class Launcher:
             label.configure(fg=INK if state in ('running', 'completed') else MUTED)
             badge.configure(fg=color, text={'pending': 'Aguardando', 'running': 'Em andamento',
                             'completed': 'Concluída', 'failed': 'Falhou', 'cancelled': 'Cancelada'}[state])
-        self.build_count.set(f"{sum(state == 'completed' for state in self.stage_states.values())} de 6 etapas concluídas")
+        completed = sum(state == 'completed' for state in self.stage_states.values())
+        self.build_count.set(f'{completed} de 6 etapas concluídas')
+        fraction = 0
+        if (self.active_stage and self.stage_states[self.active_stage] == 'running' and
+                str(self.progress['mode']) == 'determinate'):
+            fraction = max(0, min(1, float(self.progress['value']) / 100))
+        overall = (completed + fraction) / len(BUILD_STAGES) * 100
+        self.task_progress.set(overall)
+        self.build_percent.set(f'{int(overall)}%')
+        self.footer_progress.stop()
+        self.footer_progress.configure(mode='determinate')
 
     def _build_event(self, event):
         if event.get('task') == 'Port já compilado':
@@ -521,7 +668,7 @@ class Launcher:
                     amount += f' de {total / 1048576:.1f} MB'
                 self.build_measure.set('Download · ' + amount)
             elif event.get('unit') == 'targets' and total > 0:
-                self.build_measure.set(f'Compilação · {completed} de {total} tarefas ({min(100, completed*100//total)}% desta etapa)')
+                self.build_measure.set(f'Etapa atual · {completed} de {total} tarefas ({min(100, completed*100//total)}%)')
         elif state == 'completed':
             self.progress.stop()
             self.progress.configure(mode='determinate', value=100)
@@ -630,12 +777,12 @@ class Launcher:
         note(textures, 'Baixa/Média usam originais. Alta prepara materiais revisados em 2x; Ultra em 4x. A preparação ocorre antes de jogar e reutiliza a mesma inferência de IA. A cobertura HD é parcial; os demais materiais mantêm os originais.')
 
         performance = section('DESEMPENHO', 1, 1)
-        self.shader_preload_check = ttk.Checkbutton(performance, text='Pré-compilar shaders conhecidos antes de jogar', variable=self.shader_preload)
+        self.shader_preload_check = ttk.Checkbutton(performance, text='Preparar shaders antes de jogar', variable=self.shader_preload)
         self.shader_preload_check.pack(anchor='w', pady=4)
         combo(performance, 'Shaders novos', self.shader_mode, graphics.SHADER_MODES, 'shader_combo')
         self.dither_check = ttk.Checkbutton(performance, text='Dithering de apresentação', variable=self.custom_dither)
         self.dither_check.pack(anchor='w', pady=4)
-        note(performance, 'O cache de shaders fica guardado entre aberturas. A preparação cobre o que já foi encontrado; cenas inéditas e mudanças de driver ou gráficos podem exigir novas variantes. async compila pipelines novos em segundo plano; blocking aguarda. O primeiro uso ainda pode causar pausas.')
+        note(performance, 'O cache fica guardado entre aberturas. A preparação inclui estados revisados do dump e o cache aprendido. Shaders inéditos ou mudanças de driver podem exigir compilação. async usa segundo plano; blocking aguarda. O primeiro uso ainda pode causar pausas.')
         note(performance, 'Escala interna: 1x = 720p; 2x = 1440p; 3x = 4K. Escalas maiores aumentam a carga da GPU e exigem atualizar o port. Validação da campanha completa ainda está em andamento.')
         # MSAA follows guest state and is not offered as a misleading toggle.
         self.msaa_check = ttk.Checkbutton(performance, variable=self.custom_msaa)
@@ -866,6 +1013,9 @@ class Launcher:
         except (PortError, tk.TclError) as exc:
             data, text = None, str(exc)
         self.graphics_summary.set(text)
+        self.home_preset.set(graphics.PRESET_LABELS[self.graphics_preset.get()])
+        self.home_fps.set(graphics.TARGET_LABELS[self.fps_target.get()])
+        self.home_display.set('Tela cheia' if self.fullscreen.get() else 'Em janela')
         target = self.fps_target.get()
         preset = self.graphics_preset.get()
         if data:
@@ -884,15 +1034,13 @@ class Launcher:
             button.configure(style='PresetOn.TButton' if target_name == target else 'Preset.TButton')
         self.warning_frame.pack_forget()
         if target == '60':
-            self.warning_text.set('MODO 60 FPS EXPERIMENTAL · usa o save compartilhado do usuário. '
-                                  'O timestep foi medido, mas combate, física, animações, áudio e '
-                                  'campanha completa ainda não estão certificados.')
-            self.warning_frame.pack(fill='x', pady=(10, 0), before=self.source_card)
+            self.warning_text.set('60 FPS EXPERIMENTAL · Seus saves são compartilhados entre os modos. '
+                                  'A campanha completa ainda está em validação.')
+            self.warning_frame.pack(side='bottom', fill='x', pady=(0, 10), before=self.hero)
         elif target == 'unlimited':
-            self.warning_text.set('MODO ILIMITADO EXPERIMENTAL · remove a espera de pacing, desliga '
-                                  'VSync e usa apresentação imediata. Pode causar tearing, alto uso de '
-                                  'GPU e velocidade incorreta; use apenas para testar.')
-            self.warning_frame.pack(fill='x', pady=(10, 0), before=self.source_card)
+            self.warning_text.set('ILIMITADO EXPERIMENTAL · Pode aumentar a carga da GPU, causar tearing '
+                                  'ou alterar a velocidade do jogo. Seus saves continuam compartilhados.')
+            self.warning_frame.pack(side='bottom', fill='x', pady=(0, 10), before=self.hero)
         note = graphics.TARGET_DESCRIPTIONS[target]
         if target == 'unlimited':
             note += ' VSync fica desligado. O save pertence ao usuário.'
@@ -1030,17 +1178,20 @@ class Launcher:
         if self._backend_update_needed():
             self.engine_status.set(backend_update_reason(read_install(PROJECT)))
         elif binary.is_file() and report.is_file():
-            self.engine_status.set('Build e referência locais encontrados')
+            self.engine_status.set('Preparação local encontrada')
         elif binary.is_file():
-            self.engine_status.set('Build encontrado; falta o probe FSI de referência')
+            self.engine_status.set('Falta concluir a verificação do jogo')
         else:
-            self.engine_status.set('Build local ausente para esta opção')
+            self.engine_status.set('Jogo ainda não preparado')
         self._refresh_play_state()
 
     def _refresh_play_state(self):
         if self.busy:
             return
         ready = self._source_ready() and self._engine_ready()
+        self.hero.set_status('PRONTO PARA JOGAR · SAVE COMPARTILHADO DO USUÁRIO' if ready else
+                             'SELECIONE SEU DUMP PARA COMEÇAR' if not self._source_ready() else
+                             'PREPARE O JOGO UMA VEZ. REUTILIZE NAS PRÓXIMAS ABERTURAS.')
         self.play_button.configure(state='normal' if self._source_ready() else 'disabled',
                                    text='JOGAR AGORA' if ready else 'ATUALIZAR PORT' if self._backend_update_needed() else 'GERAR PORT NATIVO')
         self.compile_button.configure(state='normal' if self._source_ready() else 'disabled')
@@ -1057,6 +1208,16 @@ class Launcher:
         target = graphics.TARGET_LABELS[self.fps_target.get()]
         preset = graphics.PRESET_LABELS[self.graphics_preset.get()]
         return f'Pronto para abrir {target} com preset {preset}.'
+
+    def _sync_session_actions(self):
+        running = self.busy and self.experimental_process is not None
+        for widget, visible in ((self.cancel_button, self.busy and not running),
+                                (self.stop_experimental_button, running)):
+            if visible and not widget.winfo_manager():
+                widget.pack(side='left', padx=(0, 12), before=self.quick_save_button)
+            elif not visible and widget.winfo_manager():
+                widget.pack_forget()
+        self.stop_experimental_button.configure(state='normal' if running else 'disabled')
 
     def _set_busy_controls(self, enabled):
         for widget in self.widgets:
@@ -1183,7 +1344,22 @@ class Launcher:
                     'state': 'prepared', 'runtime_rendered': False}
         self.start(action, 'Preparar texturas HD')
 
+    def _task_progress_event(self, event):
+        if self.build_running:
+            return
+        if event.get('pid') or event.get('state') == 'completed':
+            self.footer_progress.stop()
+            self.footer_progress.configure(mode='determinate')
+            self.task_progress.set(100)
+            return
+        completed, total = event.get('completed'), event.get('total')
+        if isinstance(completed, (int, float)) and isinstance(total, (int, float)) and total > 0:
+            self.footer_progress.stop()
+            self.footer_progress.configure(mode='determinate')
+            self.task_progress.set(max(0, min(100, completed / total * 100)))
+
     def _hd_event(self, event):
+        self._task_progress_event(event)
         message = event.get('message') or event.get('task') or 'Preparando materiais HD…'
         self.status.set(message)
         self.hd_status.set(message)
@@ -1228,6 +1404,8 @@ class Launcher:
         self.save_settings(quiet=True)
         with self.experimental_lock:
             self.closed = True
+        self.footer_progress.stop()
+        self.update_cancel.cancel()
         self.cancel.cancel()
         self.stop_experimental()
         self.progress.stop()
@@ -1308,6 +1486,8 @@ class Launcher:
         return command
 
     def play(self):
+        if self.update_installing:
+            return
         if self.busy or self.closed:
             return
         target = self.fps_target.get()
@@ -1334,7 +1514,13 @@ class Launcher:
             return
         command = self.play_command(folder)
         texture_work = Workspace(self.workspace.get(), PROJECT)
+        installation = read_install(PROJECT)
         def action():
+            if installation and graphics_data['shader_preload']:
+                from .shader_prepare import prepare_game_shaders
+                prepare_game_shaders(folder, PROJECT / PROFILE_FILES[target], PROJECT,
+                    texture_work, installation, cancel=self.cancel,
+                    emit=lambda e: self.queue.put(('event', '', e)))
             from .texture_pipeline import ensure_graphics_textures
             prepared = ensure_graphics_textures(folder, graphics_data, PROJECT, texture_work,
                 cancel=self.cancel, emit=lambda e: self.queue.put(('hd-event', '', e)), allow_download=True)
@@ -1450,6 +1636,8 @@ class Launcher:
             self.status.set(f'Não foi possível abrir o perfil: {exc}')
 
     def start(self, action, kind):
+        if self.update_installing:
+            return False
         if self.busy:
             return False
         self.busy = True
@@ -1467,6 +1655,8 @@ class Launcher:
         self._set_busy_controls(False)
         self.progress.configure(mode='indeterminate')
         self.progress.start(15)
+        self.footer_progress.configure(mode='indeterminate')
+        self.footer_progress.start(18)
         self.task_started = time.monotonic()
         self.status.set('Tarefa em andamento…')
         self.log({'task': kind, 'state': 'running'})
@@ -1501,7 +1691,7 @@ class Launcher:
                    'Preparar')
 
     def generate_native(self):
-        if self.busy or self.closed:
+        if self.busy or self.closed or self.update_installing:
             return
         try:
             cfg = self.config()
@@ -1604,6 +1794,9 @@ class Launcher:
                 state, kind, value = self.queue.get_nowait()
             except queue.Empty:
                 break
+            if state.startswith('update-'):
+                self._update_event(state, value)
+                continue
             if state == 'hd-selection':
                 self.hd_texture_pack.set(value.get('pack') or '')
                 self.hd_material_count = value.get('material_count', 0)
@@ -1617,6 +1810,7 @@ class Launcher:
             if state == 'event':
                 self.log(value)
                 self._build_event(value)
+                self._task_progress_event(value)
                 self.status.set(value.get('message') or value.get('task') or self.build_heading.get())
                 continue
             self.busy = False
@@ -1625,6 +1819,9 @@ class Launcher:
                 self.hd_progress.stop()
                 self.hd_progress.configure(mode='determinate', value=100 if state == 'done' else 0)
             self.progress.stop()
+            self.footer_progress.stop()
+            self.footer_progress.configure(mode='determinate')
+            self.task_progress.set(100 if state == 'done' else 0)
             if kind == 'Gerar port':
                 self.build_running = False
                 if state == 'error':
@@ -1638,8 +1835,8 @@ class Launcher:
                 else:
                     self.stage_states = {key: 'completed' for key, *_ in BUILD_STAGES}
                     self.build_heading.set('Seu port está pronto')
-                    self.build_detail.set('Volte à Biblioteca e clique em Jogar agora para testar a inicialização.')
-                    self.build_measure.set('Build reutilizado · nenhuma recompilação' if self.build_reused else 'Geração concluída · arquivos verificados')
+                    self.build_detail.set('Volte ao Início e clique em Jogar agora para testar a inicialização.')
+                    self.build_measure.set('Arquivos prontos reutilizados · nenhuma recompilação' if self.build_reused else 'Geração concluída · arquivos verificados')
                     self.progress.configure(mode='determinate', value=100)
                 self._paint_build_steps()
             else:
@@ -1703,7 +1900,13 @@ class Launcher:
                                 else f"Relatório salvo • compilação bloqueada: {value.get('blocker', 'NO_NATIVE_BACKEND')}")
                 if kind == 'Preparar':
                     self.tabs.select(self.game_tab)
+        if self._poll_update_helper():
+            return
+        self.update_install_button.configure(state='normal' if self.update_release and not self.busy and not self.update_running else 'disabled')
         self._refresh_play_state()
+        if self.update_installing:
+            self.play_button.configure(state='disabled')
+        self._sync_session_actions()
         if self.build_running:
             elapsed = int(time.monotonic() - self.task_started)
             self.build_elapsed.set(f'{elapsed//60:02}:{elapsed%60:02}')
@@ -1711,10 +1914,19 @@ class Launcher:
 
 
 def main():
+    from .launcher_fonts import load_fonts
+    load_fonts()
     try:
         root = tk.Tk()
     except tk.TclError as exc:
         raise PortError('DISPLAY_UNAVAILABLE', 'Não foi possível abrir o display gráfico.',
                         reason=str(exc)) from exc
-    Launcher(root)
+    app = Launcher(root)
+    launcher_update.signal_started()
+    def query_updates():
+        if not app.closed:
+            app.check_updates()
+            root.after(30 * 60 * 1000, query_updates)
+    root.after(1800, query_updates)
+    root.after(30000, lambda: threading.Thread(target=launcher_update.cleanup_downloads, daemon=True).start())
     root.mainloop()

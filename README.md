@@ -32,6 +32,26 @@ missões e em recursos compartilhados.** Outros materiais mantêm os originais. 
 Linux/Windows; Wine valida o launcher, não certifica gameplay D3D12.
 Veja [texturas e limites](docs/HD_TEXTURES.md).
 
+## Launcher e atualização integrada — 28/10/2026
+
+A interface do launcher foi renovada com navegação Início/Gráficos/Preparar/Jogo/
+Diagnóstico/Atualizações, ajustes rápidos e ações de Salvar/Jogar no rodapé. A
+preparação mostra o avanço geral separado da etapa atual. As fontes DejaVu
+acompanham os executáveis; no Linux, o AppImage usa Tk 9.0.4 recompilado com Xft.
+
+A nova aba **Atualizações** consulta os releases públicos, avisa quando há versão
+maior, permite incluir pré-releases, baixa o AppImage/EXE da plataforma e confere
+tamanho, formato x64 e SHA-256 antes de instalar. O launcher guarda a versão
+anterior, reinicia e restaura o backup se a nova interface não iniciar. O backend
+do jogo não é atualizado automaticamente, e saves, cache, preferências e dump são
+preservados. Veja [launcher](docs/LAUNCHER.md),
+[atualizações](docs/LAUNCHER_UPDATES.md) e as
+[notas da v0.1.4-rc.3](docs/RELEASE_v0.1.4-rc.3.md).
+
+Esta é uma pré-release experimental do launcher, não stable. Ela não certifica a
+campanha, não corrige o tutorial do Disparo do Anel e não valida Windows nativo:
+o EXE foi exercitado sob Wine. O jogo segue pausado até confirmação do usuário.
+
 ## Revisão local de fontes e apresentação — 27/10/2026
 
 O FXAA Vulkan foi corrigido para preservar melhor os contornos das letras,
@@ -88,11 +108,11 @@ sem certificação; não há ganho acima de 60 FPS comprovado nem escala interna
 
 ## Launcher portátil e geração local
 
-Na pré-release v0.1.4-rc.2, os downloads diretos são
+Na pré-release v0.1.4-rc.3, os downloads diretos são
 `AsterNative-windows-x64.exe` e `AsterNative-linux-x86_64.AppImage`: cada um é um
 arquivo único, sem ZIP para extrair. Recursos e dados persistentes ficam na
 pasta de dados do usuário. Os formatos anteriores ZIP/TAR.GZ não são
-necessários para esta entrega. `SHA256SUMS` e `LEIA-ME-CANDIDATA.txt` acompanham
+necessários para esta entrega. `SHA256SUMS` e `LEIA-ME-ATUALIZACAO.md` acompanham
 os executáveis.
 
 O launcher gera e compila o host a partir da pasta extraída do jogo, verifica a
@@ -237,7 +257,10 @@ e BUILD_PIPELINE para reproduzir o experimento.
 
 ## Documentação
 
-- [Notas da candidata v0.1.4-rc.2](docs/RELEASE_v0.1.4-rc.2.md)
+- [Notas da v0.1.4-rc.3](docs/RELEASE_v0.1.4-rc.3.md)
+- [Launcher](docs/LAUNCHER.md)
+- [Atualização integrada](docs/LAUNCHER_UPDATES.md)
+- [Notas históricas da candidata v0.1.4-rc.2](docs/RELEASE_v0.1.4-rc.2.md)
 - [Notas históricas da candidata v0.1.4-rc.1](docs/RELEASE_v0.1.4-rc.1.md)
 - [Notas históricas da v0.1.3](docs/RELEASE_v0.1.3.md)
 - [Arquivos únicos para Releases](docs/SINGLE_FILE_RELEASE.md)

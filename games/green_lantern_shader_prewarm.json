@@ -1,0 +1,229 @@
+{
+  "schema": 1,
+  "scope": "Observed opening cinema filter and first-platform particle attack only; not full campaign coverage.",
+  "source_xex_sha256": "3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1",
+  "source_relative": "gl/x360/egraphics/shaders_xbox360.pak",
+  "source_sha256": "33ac49f3b1ad8f2bd0323428c48bd95eb409c42d7b54511a7305ebc1d77d12d0",
+  "decoded_sha256": "805ea14a43e8316582d1a32035d1383bc680fa374741b9cd4da8fa0318f9715e",
+  "decoded_size": 5621656,
+  "sdk_revision": "f5337cdc947ff6d4c4196737e2c807a48f2a1fc2",
+  "shaders": [
+    {
+      "hash": "3d5a82b5b890b037",
+      "stage": 0,
+      "source_offset": 340640,
+      "byte_count": 132,
+      "source_sha256": "2d78958daf958db21ce8f2773d31a8a010475262323e5670b6aa60a2ca7fb6a8",
+      "source_label": "M_Common_Misc\\VS_Thru",
+      "vertex_layout": [
+        {
+          "instruction_byte_offset": 36,
+          "fields": {
+            "prefetch_count": 4,
+            "dst_swizzle": 2696,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 57,
+            "stride": 5
+          }
+        },
+        {
+          "instruction_byte_offset": 48,
+          "fields": {
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 37,
+            "mini": 1,
+            "stride": 5,
+            "offset": 3
+          }
+        }
+      ]
+    },
+    {
+      "hash": "887f179dac6428dd",
+      "stage": 1,
+      "source_offset": 217104,
+      "byte_count": 252,
+      "source_sha256": "6a6d87821759f0e3caa6eb4109cbbec19279706fb227cf7b4f929ae131c2eee9",
+      "source_label": "BFX_CinemaFiltersMain\\PS_Main10100",
+      "vertex_layout": []
+    },
+    {
+      "hash": "9a62e744807f7a19",
+      "stage": 0,
+      "source_offset": 1661732,
+      "byte_count": 1404,
+      "source_sha256": "b6bdf7b8930b5f289afc7d2f5b761983bc51b3c44460e56550ae9828be598f43",
+      "source_label": "M_SOGLO_RB\\VS_ParticleLit",
+      "vertex_layout": [
+        {
+          "instruction_byte_offset": 180,
+          "fields": {
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "stride": 6
+          }
+        },
+        {
+          "instruction_byte_offset": 192,
+          "fields": {
+            "const_index_sel": 1,
+            "prefetch_count": 7,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "stride": 32
+          }
+        },
+        {
+          "instruction_byte_offset": 204,
+          "fields": {
+            "const_index_sel": 1,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "mini": 1,
+            "stride": 32,
+            "offset": 4
+          }
+        },
+        {
+          "instruction_byte_offset": 216,
+          "fields": {
+            "const_index_sel": 1,
+            "prefetch_count": 7,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "stride": 32,
+            "offset": 8
+          }
+        },
+        {
+          "instruction_byte_offset": 228,
+          "fields": {
+            "const_index_sel": 1,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "mini": 1,
+            "stride": 32,
+            "offset": 12
+          }
+        },
+        {
+          "instruction_byte_offset": 240,
+          "fields": {
+            "const_index_sel": 1,
+            "prefetch_count": 7,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "stride": 32,
+            "offset": 16
+          }
+        },
+        {
+          "instruction_byte_offset": 252,
+          "fields": {
+            "const_index_sel": 1,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "mini": 1,
+            "stride": 32,
+            "offset": 20
+          }
+        },
+        {
+          "instruction_byte_offset": 264,
+          "fields": {
+            "const_index_sel": 1,
+            "prefetch_count": 7,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 38,
+            "stride": 32,
+            "offset": 24
+          }
+        },
+        {
+          "instruction_byte_offset": 276,
+          "fields": {
+            "const_index_sel": 1,
+            "format": 6,
+            "mini": 1,
+            "stride": 32,
+            "offset": 28
+          }
+        },
+        {
+          "instruction_byte_offset": 288,
+          "fields": {
+            "const_index_sel": 1,
+            "format": 6,
+            "mini": 1,
+            "stride": 32,
+            "offset": 29
+          }
+        },
+        {
+          "instruction_byte_offset": 300,
+          "fields": {
+            "const_index_sel": 1,
+            "dst_swizzle": 3609,
+            "signed": 1,
+            "non_normalized": 1,
+            "format": 26,
+            "mini": 1,
+            "stride": 32,
+            "offset": 30
+          }
+        }
+      ]
+    },
+    {
+      "hash": "36c31299f9995ced",
+      "stage": 1,
+      "source_offset": 1665504,
+      "byte_count": 924,
+      "source_sha256": "51c6fd90f0d92d77c280a3a7d713810ab1931415576aff9ff29a80f04d1565d7",
+      "source_label": "M_SOGLO_RB\\PS_AParticleNoFog",
+      "vertex_layout": []
+    }
+  ],
+  "pipelines": [
+    {
+      "vertex_shader": "3d5a82b5b890b037",
+      "pixel_shader": "887f179dac6428dd",
+      "interpolator_mask": 1,
+      "pixel_dynamic_register_count": 0,
+      "topology": "triangle-strip",
+      "geometry_shader": "none",
+      "cull_mode": "none",
+      "front_clockwise": false,
+      "depth_clip": true,
+      "msaa_samples": 1,
+      "pixel_param_gen_enable": false,
+      "pixel_param_gen_interpolator": 0,
+      "pixel_param_gen_point": false
+    },
+    {
+      "vertex_shader": "9a62e744807f7a19",
+      "pixel_shader": "36c31299f9995ced",
+      "interpolator_mask": 511,
+      "pixel_dynamic_register_count": 0,
+      "topology": "triangle-list",
+      "geometry_shader": "none",
+      "cull_mode": "none",
+      "front_clockwise": false,
+      "depth_clip": true,
+      "msaa_samples": 1,
+      "pixel_param_gen_enable": true,
+      "pixel_param_gen_interpolator": 9,
+      "pixel_param_gen_point": false
+    }
+  ]
+}

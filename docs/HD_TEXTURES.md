@@ -62,6 +62,34 @@ remain experimental independently of texture preparation.
 
 ## What happens before play
 
+On the first launch after this update, preparation performs a complete check
+and stores a validation receipt in `.aster/cache/texture-validation/`, outside
+the game dump, texture libraries and saves. Later launches inventory filesystem
+metadata instead of repeatedly decoding all 253 originals, preparing every
+material and rehashing the entire library. The dry-run and game process share
+the library receipt, so validating before play does not repeat that full work.
+
+Receipts are separate for Alta 2x and Ultra 4x. They include the profile and
+source identity and snapshots of the selected source files, original caches and
+output tree: device, inode, byte count, modification/creation-change timestamps,
+and directory membership. An edit, replacement, addition/removal, moved source,
+profile change or missing receipt returns to complete validation. Symlinks and
+Windows reparse points are rejected. A failed or concurrently modified
+validation is never published as successful. A power loss can discard an
+unfinished receipt; existing game files and completed texture caches remain
+preserved.
+
+A cache hit is a **metadata check**, not a new cryptographic rehash of every
+texture and not authentication against a writer who can forge the user's
+receipt. For a complete check regardless of receipts, the existing
+`native_port.texture_pack.validate_texture_pack(directory)` and
+`native_port.texture_library.validate_texture_library(directory)` functions
+always validate all contents. Automatic preparation also accepts
+`ensure_graphics_textures(..., full_validation=True)` for diagnosis. The full
+check does not run inference unless a required prepared material is missing.
+This optimization covers HD verification; shader preparation and the runtime's
+own initial resource loading still take time.
+
 For each reviewed entry, the pipeline verifies the supported XEX and original
 container, decodes the bounded supported container layout, extracts the exact
 reviewed texture blocks and checks decoded pixels and DDS hashes. Original

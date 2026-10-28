@@ -24,6 +24,18 @@ Os nomes Green Lantern e Rise of the Manhunters identificam o jogo compatível;
 este launcher experimental não é uma distribuição do jogo nem uma versão
 oficial. É necessário fornecer os próprios arquivos do dump suportado.
 
+## Fontes da interface do launcher
+
+A interface inclui DejaVu Sans regular/negrito e DejaVu Sans Condensed negrito.
+As fontes DejaVu derivam de Bitstream Vera; as alterações DejaVu são de domínio
+público, e os glifos Arev têm os avisos de Tavmjong Bah indicados na licença.
+A licença integral acompanha `native_port/resources/fonts/LICENSE-DejaVu.txt`
+nas fontes e no payload, e `LICENSES/DejaVu-LICENSE.txt` no pacote portátil.
+Origem do projeto: https://dejavu-fonts.github.io/ . Os arquivos são registrados
+somente no processo do launcher, sem instalar fontes no perfil do usuário ou no
+sistema operacional. Essas fontes são da interface do launcher; não substituem
+fontes ou texturas do jogo.
+
 ## AMD FidelityFX Super Resolution 1
 
 A reconstrução EASU usa `ffx_a.h` e `ffx_fsr1.h` originais da AMD, sob licença MIT, revisão `a21ffb8f6c13233ba336352bdff293894c706575` de https://github.com/GPUOpen-Effects/FidelityFX-FSR. A licença integral acompanha `integrations/rexglue/presenter-filter/FSR-LICENSE.txt`; origem e hashes constam em `FSR-SOURCE.json`. Os shaders SPIR-V EASU compilados derivam desses headers e do adaptador original do projeto. Não são shaders extraídos do jogo.
