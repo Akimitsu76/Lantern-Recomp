@@ -1,6 +1,57 @@
 # Estado atual — 27/10/2026
 
-SDK com patches até 0028, integração 20. A correção 0027 evita que o fim da
+SDK local com patches até 0032, integração 21. A frente de qualidade de fontes
+identificou o FXAA simplificado do Vulkan como causa de erosão dos traços.
+0031 substitui esse filtro pelo FXAA Quality 3.11; o bytecode Quality já existente
+no D3D12 é preservado. Os testes 163–167 isolaram apresentação sem AA, FSR sem AA,
+bilinear com AA antigo e FSR/AA corrigido; o texto do menu ficou mais contínuo
+sem trocar sua fonte original. Capturas brutas e comparação privada estão em
+`.aster/reports/quality-2026-10-27`. Não é validação de todas as fontes/partículas.
+
+0029 registra opcionalmente os bits da constante pixel c255 junto ao diagnóstico
+limitado de transparência. 0030 acrescenta o canal ASTERUI2 RGBA8 sem recompressão
+BC3 do alpha; mantém ASTERUI1 e as métricas/UVs. É uma experiência CLI explícita,
+sem ativação automática nos presets. Os dois formatos passaram pelo carregador
+C++ real com dados sintéticos; os caminhos de imagem/view foram ajustados em
+Vulkan e D3D12. Compilação/GPU nativos Windows continuam para o workflow/OpenCode.
+
+168/169 repetiram combate a 60 FPS com SDK 0031. Entre 100–170 s, mediana de
+16,74/16,76 ms; o máximo caiu de 516,25 para 50,55 ms ao reutilizar o cache.
+Não houve fatal/destino não registrado/falha de renderização detectada.
+As capturas 167–169 têm barras laterais de aproximadamente 44 pixels no ambiente
+Niri/Xwayland. O patch 0032 corrige a conexão da superfície que ainda guardava o
+tamanho anterior ao mapeamento, mesmo após o Window saber do tamanho final.
+Uma notificação nativa de tamanho repetido agora atualiza o presenter sem reenviar
+listeners de resize. O teste C++ reproduz 1920x1030 em cache versus 1920x1080
+real; a sessão 174 voltou a preencher 1920x1080. A comparação recortada antiga
+continua ilustrativa, não uma métrica pixel a pixel.
+
+A criação inédita de pipeline ainda espera o driver mesmo em worker de fundo,
+retendo o quadro completo até ficar pronta. O experimento de desativar otimização
+do driver não eliminou a pausa (604,82/497,51 ms na criação). O ensaio privado de
+SPIR-V otimizado também foi rejeitado: 476,89 ms versus 489,88 ms na criação
+com código original, sem eliminar o engasgo e com custo adicional de preparação. Nenhuma promessa de zero stutter.
+
+Artefatos desta revisão: AppImage, EXE, SHA256SUMS e instruções, publicados como
+assets da pré-release `v0.1.4-rc.2`. As GUIs abriram com dados isolados; 126
+entradas públicas por plataforma foram comparadas com as fontes/payloads. A
+publicação é feita pelo OpenCode. O prompt atualizado e o estado detalhado estão
+em `.aster/reports/quality-2026-10-27/PROMPT_OPENCODE_GITHUB_QUALIDADE_2026-10-27.md`
+e `continuation.json`/`STATUS.md` no mesmo diretório. A instalação ativa é a do
+manifesto `.aster/config/native-install.json`; caminhos/builds antigos abaixo
+são históricos.
+
+Na revisão r4, launcher e comando de execução compartilham a verificação de
+versão/correções do backend em Linux/Windows. O log mostra a integração
+efetivamente instalada. r4 passou 398 testes Linux/2 skips e 372 Windows/Wine/32
+skips; os próprios AppImage/EXE rejeitaram um manifesto sintético de backend 20
+antes de abrir o jogo. O AppImage do usuário foi atualizado de 20 para 21 com 8
+arquivos verificados, saves preservados e o build anterior mantido; as novas
+legendas foram avaliadas com o renderer 21, sem apagar cache/save.
+
+## Histórico — revisão até 0028
+
+Histórico das correções anteriores: a correção 0027 evita que o fim da
 submissão Vulkan drene/espere a fila de pipelines no modo assíncrono; o caminho
 bloqueante e shaders com efeitos na memória guest mantêm a sincronização.
 Tradução de shaders inéditos e primeira leitura de DDS ainda podem pausar.
@@ -24,7 +75,7 @@ entradas da 153 com o cache aprendido: entre 100–170 s, máximo de 517,57 para
 33,90 ms, criações de pipeline de 1 para 0 e nenhum intervalo >50 ms. São cenas
 curtas; não certificam campanha, ausência de stutter ou ganho acima de 60 FPS.
 
-Suítes completas: 386 testes Linux (2 ignorados), 360 Windows/Wine (28
+Suítes desta revisão: 395 testes Linux (2 ignorados), 369 Windows/Wine (32
 ignorados), sem falhas. Wine não valida GPU/compilação nativa Windows. Os
 probes usam cópias de perfil e preservaram XEX/saves humanos. Evidências
 privadas em `.aster/reports/stability-2026-10-27` e sessões 145/146/153–156.

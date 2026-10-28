@@ -140,6 +140,11 @@ def parse_effects_metadata(lines, *, reviewed_sources=None):
         if (not isinstance(fetch_raw, list) or len(fetch_raw) != 6 or
                 any(type(v) is not int or not 0 <= v < 1 << 32 for v in fetch_raw)):
             raise ValueError('Invalid raw fetch constant.')
+        if 'pixel_float_constant_255_raw' in state:
+            constants = state['pixel_float_constant_255_raw']
+            if (not isinstance(constants, list) or len(constants) != 4 or
+                    any(type(v) is not int or not 0 <= v < 1 << 32 for v in constants)):
+                raise ValueError('Invalid raw pixel float4 constant.')
         registers = state.get('guest_registers_raw')
         required = ('RB_COLORCONTROL', 'RB_ALPHA_REF', 'RB_SURFACE_INFO',
                     'RB_BLENDCONTROL0', 'RB_BLENDCONTROL1', 'RB_BLENDCONTROL2', 'RB_BLENDCONTROL3',

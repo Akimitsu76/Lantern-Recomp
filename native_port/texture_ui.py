@@ -4,7 +4,7 @@ Color-texture AI and its mip encoder intentionally do not handle UI alpha. These
 helpers preserve normalized atlas coordinates and use bounded interpolation, not
 new glyph generation. A reviewed source and explicit alpha interpretation are
 required. Glyph rectangles must come from verified atlas metadata, not guesses.
-The separate ASTERUI1 runtime channel has demonstrated the reviewed font upload.
+The separate ASTERUI1/ASTERUI2 runtime channels have demonstrated the reviewed font upload.
 It remains an explicit CLI experiment; presets do not enable it automatically.
 Upload evidence does not by itself establish better in-game typography.
 """
@@ -17,6 +17,8 @@ from .errors import PortError
 from .tasks import Cancellation
 
 RECIPE = 'aster-ui-straight-linear-premult-bilinear-v1'
+RGBA_RECIPE = 'aster-ui-white-coverage-rgba8-bilinear-v2'
+RGBA_PATCH = '0030-ui-uncompressed-coverage.patch'
 
 
 def _geometry(size):
@@ -144,6 +146,32 @@ def encode_ui_mips(image, *, alpha_semantics, cancel=None):
     return bytes(header) + b''.join(chunks)
 
 
+def encode_ui_rgba_mips(image, *, cancel=None):
+    """Lossless white coverage DDS: exact 8-bit alpha, no BC3 re-quantization.
+
+    This changes storage only. Original glyph shapes/UVs/metrics remain intact;
+    it does not claim to recreate typography lost in the original bitmap.
+    """
+    from PIL import Image
+    cancel = cancel or Cancellation(); _geometry(image.size)
+    level = image.convert('RGBA'); chunks = []
+    if any(pixel[:3] != (255, 255, 255) for pixel in level.get_flattened_data()):
+        raise PortError('UI_ENCODING', 'RGBA de cobertura exige RGB branco.')
+    header = bytearray(128)
+    header[:4] = b'DDS '
+    # DDSD_CAPS|HEIGHT|WIDTH|PITCH|PIXELFORMAT|MIPMAPCOUNT.
+    struct.pack_into('<7I', header, 4, 124, 0x2100f, level.height, level.width, level.width * 4, 0, 0)
+    struct.pack_into('<8I', header, 76, 32, 0x41, 0, 32, 0xff, 0xff00, 0xff0000, 0xff000000)
+    struct.pack_into('<I', header, 108, 0x401008)
+    while True:
+        cancel.check(); chunks.append(level.tobytes())
+        if level.size == (1, 1): break
+        alpha = level.getchannel('A').resize((max(1, level.width // 2), max(1, level.height // 2)), Image.Resampling.BILINEAR)
+        level = Image.new('RGBA', alpha.size, 'white'); level.putalpha(alpha)
+    struct.pack_into('<I', header, 28, len(chunks))
+    return bytes(header) + b''.join(chunks)
+
+
 def glyph_index_bytes(glyphs, width, height):
     """Serialize checked original metrics. Source coordinates never get scaled."""
     if not isinstance(glyphs, list) or not 1 <= len(glyphs) <= 4096:
@@ -170,7 +198,7 @@ def glyph_index_bytes(glyphs, width, height):
     return ('\n'.join(lines) + '\n').encode('ascii')
 
 
-def prepare_ui_pack(original_dds, glyphs, destination, *, scale=2, reviewed=False, cancel=None):
+def prepare_ui_pack(original_dds, glyphs, destination, *, scale=2, reviewed=False, cancel=None, coverage_format='bc3'):
     """Write a separately opted-in UI pack from an exact, reviewed BC3 source.
 
     Does not install a runtime environment variable. The caller must pin source
@@ -183,6 +211,8 @@ def prepare_ui_pack(original_dds, glyphs, destination, *, scale=2, reviewed=Fals
     import xxhash
     from PIL import Image
     cancel = cancel or Cancellation(); cancel.check()
+    if coverage_format not in ('bc3', 'rgba8'):
+        raise PortError('UI_ENCODING', 'Formato de cobertura UI desconhecido.')
     source = Path(original_dds).absolute(); destination = Path(destination).absolute()
     if (any(p.is_symlink() for p in (source, *source.parents)) or not source.is_file() or
             source.stat().st_size > 4 * 1024**2):
@@ -205,11 +235,14 @@ def prepare_ui_pack(original_dds, glyphs, destination, *, scale=2, reviewed=Fals
     enhanced = prepare_reviewed_ui(original, scale=scale, classification='glyph-atlas', alpha_semantics='straight', reviewed=reviewed, glyph_rectangles=rects, cancel=cancel)
     coverage = enhanced.getchannel('A')
     enhanced.paste((255, 255, 255, 255), (0, 0, enhanced.width, enhanced.height)); enhanced.putalpha(coverage)
-    dds = encode_ui_mips(enhanced, alpha_semantics='straight', cancel=cancel)
+    dds = (encode_ui_rgba_mips(enhanced, cancel=cancel) if coverage_format == 'rgba8' else
+           encode_ui_mips(enhanced, alpha_semantics='straight', cancel=cancel))
+    recipe = RGBA_RECIPE if coverage_format == 'rgba8' else RECIPE
+    magic = 'ASTERUI2' if coverage_format == 'rgba8' else 'ASTERUI1'
     fingerprint = xxhash.xxh3_128_hexdigest(raw[128:])
-    index = f'ASTERUI1 20 {width} {height} {fingerprint} {xxhash.xxh3_128_hexdigest(dds)} reviewed-ui-straight {xxhash.xxh3_128_hexdigest(metrics)}\n'.encode('ascii')
+    index = f'{magic} 20 {width} {height} {fingerprint} {xxhash.xxh3_128_hexdigest(dds)} reviewed-ui-straight {xxhash.xxh3_128_hexdigest(metrics)}\n'.encode('ascii')
     files = {'texture.dds': dds, 'texture.index': index, 'ui-glyphs.index': metrics}
-    receipt = {'schema': 1, 'recipe': RECIPE, 'classification': 'reviewed-ui-straight', 'scale': scale,
+    receipt = {'schema': 1, 'recipe': recipe, 'classification': 'reviewed-ui-straight', 'scale': scale,
                'source_dds_sha256': hashlib.sha256(raw).hexdigest(), 'source_canonical_bc_xxh3_128': fingerprint,
                'glyph_count': len(glyphs), 'metrics_modified': False, 'runtime_rendered': False,
                'files': {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
@@ -252,7 +285,7 @@ def parse_font_metrics(metrics, width, height):
     return glyphs
 
 
-def prepare_game_ui(source, root, work, *, scale=2, cancel=None, emit=None, allow_download=False):
+def prepare_game_ui(source, root, work, *, scale=2, cancel=None, emit=None, allow_download=False, coverage_format='bc3'):
     """Reconstruct the reviewed font from an owned dump before isolated tests.
 
     Shared Linux/Windows path, exact source/decoded/block/metrics/DDS hashes. This
@@ -338,13 +371,14 @@ def prepare_game_ui(source, root, work, *, scale=2, cancel=None, emit=None, allo
         if result['returncode']: raise PortError('UI_SOURCE', 'Falha ao converter atlas original.')
     if sha(dds_file, cancel) != profile['original_dds_sha256']:
         raise PortError('UI_CACHE_CHANGED', 'Atlas DDS original em cache alterado; preservado.')
-    key = hashlib.sha256((sha(profile_path, cancel) + RECIPE + str(scale)).encode()).hexdigest()
+    recipe = RGBA_RECIPE if coverage_format == 'rgba8' else RECIPE
+    key = hashlib.sha256((sha(profile_path, cancel) + recipe + str(scale)).encode()).hexdigest()
     emit({'stage': 'ui', 'message': 'Preparando fonte original com cobertura alpha e métricas preservadas.'})
     return prepare_ui_pack(dds_file, glyphs, work.path('textures/ui-packs/' + key),
-                           scale=scale, reviewed=True, cancel=cancel)
+                           scale=scale, reviewed=True, cancel=cancel, coverage_format=coverage_format)
 
 
-def validate_ui_pack(path):
+def validate_ui_pack(path, *, available_patches=None):
     """Bounded receipt/index/metrics/BC3-chain validation before runtime opt-in."""
     import hashlib, json
     import xxhash
@@ -363,7 +397,7 @@ def validate_ui_pack(path):
         files[name] = candidate.read_bytes()
     try:
         record = json.loads(files['ui-pack.json'])
-        if (record.get('schema') != 1 or record.get('recipe') != RECIPE or
+        if (record.get('schema') != 1 or record.get('recipe') not in (RECIPE, RGBA_RECIPE) or
                 record.get('classification') != 'reviewed-ui-straight' or
                 record.get('metrics_modified') is not False or record.get('runtime_rendered') is not False or
                 set(record.get('files', {})) != expected_files - {'ui-pack.json'}):
@@ -371,7 +405,7 @@ def validate_ui_pack(path):
         for name, digest in record['files'].items():
             if hashlib.sha256(files[name]).hexdigest() != digest: raise ValueError('file hash')
         tokens = files['texture.index'].decode('ascii').split()
-        if len(tokens) != 8 or tokens[0] != 'ASTERUI1' or tokens[1] != '20' or tokens[6] != 'reviewed-ui-straight':
+        if len(tokens) != 8 or tokens[0] != ('ASTERUI2' if record['recipe'] == RGBA_RECIPE else 'ASTERUI1') or tokens[1] != '20' or tokens[6] != 'reviewed-ui-straight':
             raise ValueError('UI index')
         width, height = map(int, tokens[2:4])
         if any(n < 64 or n > 1024 or n & (n - 1) for n in (width, height)): raise ValueError('geometry')
@@ -392,19 +426,30 @@ def validate_ui_pack(path):
             glyphs.append(dict(zip(keys, values)))
         if glyph_index_bytes(glyphs, width, height) != files['ui-glyphs.index']: raise ValueError('canonical metrics')
         raw = files['texture.dds']
-        if len(raw) < 128 or raw[:4] != b'DDS ' or raw[84:88] != b'DXT5' or struct.unpack_from('<I', raw, 4)[0] != 124:
+        rgba = record['recipe'] == RGBA_RECIPE
+        if rgba and available_patches is not None and RGBA_PATCH not in available_patches:
+            raise ValueError('Backend lacks RGBA coverage capability')
+        if (len(raw) < 128 or raw[:4] != b'DDS ' or struct.unpack_from('<I', raw, 4)[0] != 124 or
+                struct.unpack_from('<I', raw, 112)[0] != 0):
             raise ValueError('DDS')
+        if rgba:
+            if struct.unpack_from('<8I', raw, 76) != (32, 0x41, 0, 32, 0xff, 0xff00, 0xff0000, 0xff000000):
+                raise ValueError('RGBA coverage layout')
+        elif struct.unpack_from('<3I', raw, 76) != (32, 4, 0x35545844):
+            raise ValueError('BC3 coverage layout')
         host_h, host_w = struct.unpack_from('<II', raw, 12)
         scale = record.get('scale')
         if type(scale) is not int or scale not in (2, 4) or (host_w, host_h) != (width * scale, height * scale):
             raise ValueError('DDS geometry')
         count = 0; expected = 128; w, h = host_w, host_h
         while True:
-            expected += ((w + 3) // 4) * ((h + 3) // 4) * 16; count += 1
+            expected += w * h * 4 if rgba else ((w + 3) // 4) * ((h + 3) // 4) * 16
+            count += 1
             if (w, h) == (1, 1): break
             w, h = max(1, w // 2), max(1, h // 2)
         if len(raw) != expected or struct.unpack_from('<I', raw, 28)[0] != count: raise ValueError('DDS mip chain')
-        if any(raw[i + component] != 255 for i in range(128, len(raw), 16) for component in range(8, 12)):
+        if any(raw[i + component] != 255 for i in range(128, len(raw), 4 if rgba else 16)
+               for component in (range(3) if rgba else range(8, 12))):
             raise ValueError('white coverage contract')
         from PIL import Image
         with Image.open(io.BytesIO(raw)) as atlas:

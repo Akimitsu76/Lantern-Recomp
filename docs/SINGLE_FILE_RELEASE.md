@@ -1,6 +1,6 @@
 # Arquivos únicos para Releases
 
-Os assets da pré-release experimental v0.1.4-rc.1 são:
+Os assets da pré-release experimental v0.1.4-rc.2 são:
 
 - `AsterNative-windows-x64.exe` — executável Windows com recursos embutidos.
 - `AsterNative-linux-x86_64.AppImage` — AppImage Linux com recursos embutidos.
@@ -52,14 +52,29 @@ auditoria inclui `native_port/`, `apps/`, `scripts/`, `integrations/rexglue/`,
 dumps, saves, texturas extraídas/HD, código gerado do jogo e executáveis de build
 nunca entram no repositório.
 
-A pré-release v0.1.4-rc.1 preserva os patches 0024 (profundidade em 2x/3x),
-0025 (pré-compilação de shaders conhecidos) e 0026 (cache de formato do pipeline
-do presenter Vulkan), e acrescenta 0027 (submissão Vulkan assíncrona sem drenar
-workers) e 0028 (uma repetição do pedido de tela cheia no primeiro foco). O
-módulo de requisitos e as opções independentes de gráficos continuam incluídos.
-Não altere o requisito de toolchain: Clang/C++23 e, no Windows, Build
-Tools/Windows SDK continuam necessários para GERAR o jogo, embora Python não seja
-necessário para ABRIR o launcher.
+A pré-release v0.1.4-rc.2 preserva os patches 0024 (profundidade em 2x/3x),
+0025 (pré-compilação de shaders conhecidos), 0026 (cache de formato do pipeline
+do presenter Vulkan), 0027 (submissão Vulkan assíncrona sem drenar workers) e
+0028 (uma repetição do pedido de tela cheia no primeiro foco), e acrescenta:
+0031 (FXAA Quality 3.11 no Vulkan), 0032 (atualização da conexão de apresentação
+em tamanho nativo repetido), 0030 (ASTERUI2 RGBA8 opcional para cobertura de UI)
+e 0029 (diagnóstico opcional de c255). A integração do backend é 21. O módulo de
+requisitos e as opções independentes de gráficos continuam incluídos. Não altere
+o requisito de toolchain: Clang/C++23 e, no Windows, Build Tools/Windows SDK
+continuam necessários para GERAR o jogo, embora Python não seja necessário para
+ABRIR o launcher.
+
+Os hashes dos assets desta revisão são:
+
+- `AsterNative-linux-x86_64.AppImage` (48.486.904 bytes):
+  `a17367107334904bf1ce40a2a9baae1132732742f72c36de6f51fa24aa3fd85f`
+- `AsterNative-windows-x64.exe` (58.043.141 bytes):
+  `eaf34a23bdf80ad1b51479fd13d12d185932a377a1e29c45ceb84096e78079fa`
+
+Trocar apenas o executável não atualiza o backend compilado. Use **Gerar
+port/Atualizar port** e preserve saves/cache; o build anterior permanece em
+outra pasta. Atualize também atalhos/Steam que ainda apontem para o arquivo
+anterior.
 
 A validação local de empacotamento fica em `.aster/` (privado) e não é enviada.
 Windows foi testado via Wine; o jogo em Windows real continua sem validação.

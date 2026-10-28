@@ -114,10 +114,21 @@ FSR1 espacial e FXAA são opções do SDK compartilhado. Filtrar a imagem de sa�
 não acrescenta detalhes aos arquivos originais. As texturas HD usam recursos
 preparados localmente do próprio dump; seu custo é independente da resolução.
 
-Após atualizar o AppImage, use **Atualizar port** para gerar o backend novo.
+Após substituir o AppImage ou o `.exe`, use **Atualizar port** para gerar o backend novo.
 Saves e o cache do usuário são preservados; o build anterior permanece em outra
 pasta. A biblioteca de apresentação é compilada localmente contra o SDK Linux
 0.10.0 fixado e carregada somente no processo do jogo.
+O launcher e o comando de execução verificam a versão do backend e as correções
+de apresentação exigidas para Vulkan/D3D12. A versão instalada aparece no log;
+baixar um launcher novo, sozinho, não recompila um backend antigo. Atualize
+também o caminho de atalhos/Steam se eles ainda abrirem o arquivo anterior.
+
+Memória de vídeo ocupada e utilização da GPU são medidas diferentes. O backend
+já mantém texturas em memória preferencialmente local à GPU. Um cache maior
+pode evitar descarte de texturas reutilizadas, mas não elimina o custo de
+compilar pipelines inéditos. Não é necessário preencher a VRAM para melhorar
+o desempenho; a resolução interna, os efeitos e a carga de renderização também
+determinam o uso da GPU.
 
 **Pré-compilar shaders conhecidos antes de jogar** fica ligada por padrão e
 pode ser desmarcada. Desmarcar preserva o cache; não impede a preparação sob

@@ -1,0 +1,118 @@
+--- a/include/rex/graphics/pipeline/texture/hd_override.h
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -42,6 +42,13 @@
+   std::vector<uint8_t> bytes;
+   std::vector<Mip> mips;
+ };
++// ASTERUI2 uses the existing mip geometry to identify uncompressed coverage.
++// A validated BC3 mip can never have one row per texel and width*4 row bytes.
++// No new fields are added to the shared replacement ABI.
++inline bool HDIsRGBA8Coverage(const HDTextureReplacement& image) {
++  return !image.mips.empty() && image.mips.front().rows == image.height &&
++      image.mips.front().row_bytes == image.width * 4;
++}
+ inline bool IsHDFingerprint(const std::string& value) {
+   return value.size() == 32 && value.find_first_not_of("0123456789abcdef") == std::string::npos;
+ }
+@@ -144,7 +151,7 @@
+             expected_dds_hash >> classification)) return {};
+       if (ui_atlas && !(index >> glyphs_hash)) return {};
+       if ((index >> trailing) ||
+-          (ui_atlas ? (magic != "ASTERUI1" || classification != "reviewed-ui-straight" ||
++          (ui_atlas ? ((magic != "ASTERUI1" && magic != "ASTERUI2") || classification != "reviewed-ui-straight" ||
+                        result->source_format != 20) :
+                       (magic != "ASTERHD1" || classification != "reviewed-color-opaque")) ||
+           (result->source_format != 18 && result->source_format != 20) ||
+@@ -168,8 +175,9 @@
+       if (!file || rex::hash_bytes(std::string_view(
+           reinterpret_cast<const char*>(dds.data()), dds.size())) != expected_dds_hash)
+         return {};
++      const bool rgba_coverage = ui_atlas && magic == "ASTERUI2";
+       if (HDReadWord(dds, 0) != 0x20534444 || HDReadWord(dds, 4) != 124 ||
+-          HDReadWord(dds, 76) != 32 || HDReadWord(dds, 80) != 4 ||
++          HDReadWord(dds, 76) != 32 || HDReadWord(dds, 80) != (rgba_coverage ? 0x41u : 4u) ||
+           HDReadWord(dds, 112) != 0) return {};  // No cubes/volume/DX10 extensions.
+       result->width = HDReadWord(dds, 16); result->height = HDReadWord(dds, 12);
+       const uint32_t format = HDReadWord(dds, 84);
+@@ -178,12 +186,16 @@
+           result->width != result->source_width * scale ||
+           result->height != result->source_height * scale ||
+           result->width > 8192 || result->height > 8192 ||
+-          format != (result->source_format == 18 ? 0x31545844u : 0x35545844u)) return {};
++          (rgba_coverage ? (format != 0 || HDReadWord(dds, 88) != 32 ||
++              HDReadWord(dds, 92) != 0xff || HDReadWord(dds, 96) != 0xff00 ||
++              HDReadWord(dds, 100) != 0xff0000 || HDReadWord(dds, 104) != 0xff000000) :
++              format != (result->source_format == 18 ? 0x31545844u : 0x35545844u))) return {};
+       uint32_t w = result->width, h = result->height, count = 0;
+       size_t offset = 0;
+       const uint32_t block_bytes = result->source_format == 18 ? 8 : 16;
+       do {
+-        const uint32_t row = ((w + 3) / 4) * block_bytes, rows = (h + 3) / 4;
++        const uint32_t row = rgba_coverage ? w * 4 : ((w + 3) / 4) * block_bytes;
++        const uint32_t rows = rgba_coverage ? h : (h + 3) / 4;
+         const size_t size = size_t(row) * rows;
+         result->mips.push_back({w, h, row, rows, offset, size});
+         offset += size; ++count;
+@@ -192,7 +204,19 @@
+       } while (count < 14);
+       if (HDReadWord(dds, 28) != count || offset + 128 != dds.size() ||
+           result->mips.back().width != 1 || result->mips.back().height != 1) return {};
+-      if (ui_atlas) {
++      if (rgba_coverage) {
++        // White RGB (including hidden texels) and exact 8-bit alpha. Reject
++        // colored UI/effects, all-empty and all-opaque images in this channel.
++        bool transparent = false, covered = false;
++        for (size_t texel = 128; texel < dds.size(); texel += 4) {
++          if (dds[texel] != 255 || dds[texel + 1] != 255 || dds[texel + 2] != 255) return {};
++          if (texel < 128 + result->mips.front().size) {
++            transparent |= dds[texel + 3] < 255;
++            covered |= dds[texel + 3] > 0;
++          }
++        }
++        if (!transparent || !covered) return {};
++      } else if (ui_atlas) {
+         // First UI contract is a monochrome white coverage atlas only. All BC3
+         // color endpoints stay white, including hidden RGB, preventing fringes.
+         bool transparent = false, covered = false;
+--- a/src/graphics/vulkan/texture_cache.cpp
++++ b/src/graphics/vulkan/texture_cache.cpp
+@@ -1187,6 +1187,10 @@
+     }
+   }
+   if (replacement && !host_format.format_unsigned.block_compressed) return nullptr;
++  if (replacement && HDIsRGBA8Coverage(*replacement)) {
++    formats[0] = VK_FORMAT_R8G8B8A8_UNORM;
++    formats[1] = VK_FORMAT_UNDEFINED;
++  }
+   if (formats[0] == VK_FORMAT_UNDEFINED) {
+     unsupported_format_features_used_[uint32_t(key.format)] |= kUnsupportedResourceBit;
+     return nullptr;
+@@ -1971,6 +1975,8 @@
+   const HostFormatPair& host_format_pair = vulkan_texture_cache.GetHostFormatPair(key());
+   VkFormat format =
+       (is_signed ? host_format_pair.format_signed : host_format_pair.format_unsigned).format;
++  if (hd_replacement() && HDIsRGBA8Coverage(*hd_replacement()))
++    format = VK_FORMAT_R8G8B8A8_UNORM;
+   if (format == VK_FORMAT_UNDEFINED) {
+     return VK_NULL_HANDLE;
+   }
+--- a/src/graphics/d3d12/texture_cache.cpp
++++ b/src/graphics/d3d12/texture_cache.cpp
+@@ -1532,6 +1532,8 @@
+   desc.Format = GetDXGIResourceFormat(key);
+   if (replacement && desc.Format != DXGI_FORMAT_BC1_UNORM && desc.Format != DXGI_FORMAT_BC3_UNORM)
+     return nullptr;
++  if (replacement && HDIsRGBA8Coverage(*replacement))
++    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+   if (desc.Format == DXGI_FORMAT_UNKNOWN) {
+     unsupported_format_features_used_[uint32_t(key.format)] |= kUnsupportedResourceBit;
+     return nullptr;
+@@ -2128,6 +2130,8 @@
+   } else {
+     desc.Format = GetDXGIUnormFormat(texture_key);
+   }
++  if (texture.hd_replacement() && HDIsRGBA8Coverage(*texture.hd_replacement()))
++    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+   if (desc.Format == DXGI_FORMAT_UNKNOWN) {
+     unsupported_format_features_used_[uint32_t(format)] |=
+         is_signed ? kUnsupportedSnormBit : kUnsupportedUnormBit;

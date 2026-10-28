@@ -1,0 +1,16 @@
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -440,6 +440,13 @@
+         if (word) state << ',';
+         state << value;
+       }
++      // Guest pixel constants occupy the upper 256 float4 registers. Keep raw
++      // bits (including non-finite values) and never infer the shader cutoff.
++      state << "],\"pixel_float_constant_255_raw\":[";
++      for (uint32_t component = 0; component < 4; ++component) {
++        if (component) state << ',';
++        state << regs[XE_GPU_REG_SHADER_CONSTANT_000_X + (256 + 255) * 4 + component];
++      }
+       state << "],\"guest_registers_raw\":{";
+       first = true;
+ #define ASTER_EFFECTS_REG(name) do { \

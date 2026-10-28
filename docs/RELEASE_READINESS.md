@@ -1,5 +1,50 @@
 # Preparação da release
 
+## Revisão local de qualidade — patches 0029–0032, integração 21
+
+**Candidata experimental, ainda sem aprovação stable.** A publicação desta
+revisão é feita pelo OpenCode, conforme escolha do usuário. Os pacotes desta
+revisão são os assets da pré-release `v0.1.4-rc.2`; hashes e smoke são
+registrados junto aos artefatos e no relatório privado de qualidade. O histórico
+de v0.1.4-rc.1 abaixo continua descrevendo a revisão anterior, até 0028.
+
+- A revisão r4 verifica a versão/correções do backend tanto no launcher como
+  no comando de execução, em Linux e Windows. Evita usar silenciosamente um
+  renderizador anterior depois de substituir o AppImage/EXE; preserva saves/cache.
+- 0031 substitui o FXAA simplificado Vulkan por FXAA Quality 3.11. Comparações
+  separaram FSR e FXAA e mostraram contornos de texto mais contínuos com a
+  fonte original e FSR ainda ligado. O bytecode D3D12 Quality permanece intacto.
+- 0032 reconecta o presenter quando uma notificação nativa repete o tamanho já
+  conhecido pelo Window. O contrato C++ reproduz uma superfície que ficou em
+  1920x1030 e confirma sua atualização para 1920x1080 sem duplicar listeners.
+  A sessão 174 confirmou o preenchimento da janela 1920x1080 sem as barras
+  laterais vistas na revisão 0031. Não é validação de todos os monitores/DPI.
+- 0029 acrescenta diagnóstico opcional e limitado de c255/transparência;
+  não altera shaders, alpha ou memória do jogo. 0030 oferece ASTERUI2 RGBA8
+  opcional, sem recompressão BC3 do alpha nem mudança de métricas/UVs. Os
+  formatos antigo e novo passaram pelo carregador C++ real com dados sintéticos.
+- Abertura/combate da revisão 0031 em 60 FPS: medianas 16,74/16,76 ms entre
+  100–170 s, máximos 516,25/50,55 ms antes/depois de reutilizar cache. O primeiro
+  pipeline novo continua podendo reter o quadro. Não confundir timestamps de
+  apresentação com tempo de GPU, conteúdo único ou certificação de campanha.
+- A sessão 175, mais recente, mediu 190,38 s em combate a 60 FPS; entre 100–170 s,
+  mediana 16,75 ms, máximo 35,18 ms e zero intervalos acima de 50 ms com cache
+  aprendido. A sessão 178 teve uma pausa de 334,67 ms entre 175–225 s, sem
+  destruição de imagens Vulkan observada nesse intervalo. Não atribuir todo
+  stutter à falta de VRAM nem prometer eliminação nesta release.
+- As experiências privadas de desativar otimização do driver e pré-otimizar
+  SPIR-V não eliminaram a pausa de cerca de 0,5 s e não fazem parte desta receita.
+- Suíte Linux r4: 398 testes, 2 ignorados, sem falhas, incluindo o carregador
+  nativo. Windows/Wine r4: 372 testes, 32 ignorados, sem falhas. Wine não valida
+  SDK/D3D12 nem gameplay Windows nativo. O workflow Windows inclui os novos
+  contratos; só produz evidência se for publicado/executado. Sem escopo
+  `workflow`, o arquivo permanece local para inclusão manual e não há CI aprovado.
+
+Continuam pendentes a revisão completa de rastros/partículas/legendas, a redução
+do custo de pipelines realmente inéditos, campanha prolongada e GPU Windows
+nativa. A revisão corrige um defeito de apresentação; não é um remaster completo.
+As notas publicadas estão em `docs/RELEASE_v0.1.4-rc.2.md`.
+
 ## Candidata v0.1.4-rc.1 — 27/10/2026
 
 **Ainda não aprovada como stable.** Esta seção descreve a candidata publicada

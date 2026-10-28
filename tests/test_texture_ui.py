@@ -88,6 +88,36 @@ class UIPackTests(unittest.TestCase):
         prepare_ui_pack(self.source, self.glyphs, target, reviewed=True)
         self.assertEqual((target / 'texture.dds').stat().st_mtime_ns, before)
 
+    def test_rgba_coverage_roundtrip_is_exact_and_requires_new_backend(self):
+        from native_port.texture_ui import encode_ui_rgba_mips, prepare_ui_pack, validate_ui_pack, RGBA_PATCH
+        image = Image.new('RGBA', (64, 64), 'white')
+        image.putalpha(Image.frombytes('L', image.size, bytes(range(256)) * 16))
+        raw = encode_ui_rgba_mips(image)
+        with Image.open(io.BytesIO(raw)) as decoded:
+            self.assertEqual(decoded.convert('RGBA').tobytes(), image.tobytes())
+        # Values that BC3 cannot represent within one block remain distinct.
+        self.assertEqual(len(set(raw[131:131 + 256*4:4])), 256)
+        target = prepare_ui_pack(self.source, self.glyphs, self.root / 'rgba', reviewed=True, coverage_format='rgba8')
+        self.assertTrue((target / 'texture.index').read_text().startswith('ASTERUI2 '))
+        self.assertEqual(validate_ui_pack(target, available_patches={RGBA_PATCH}), target)
+        with self.assertRaises(PortError): validate_ui_pack(target, available_patches={'0016-reviewed-ui-alpha-atlas.patch'})
+
+    def test_rgba_header_and_hidden_color_are_validated_even_with_updated_hashes(self):
+        import hashlib, json, xxhash
+        from native_port.texture_ui import prepare_ui_pack, validate_ui_pack
+        target = prepare_ui_pack(self.source, self.glyphs, self.root / 'rgba', reviewed=True, coverage_format='rgba8')
+        original = (target / 'texture.dds').read_bytes()
+        for offset, value in ((92, 0), (128, 0), (112, 1)):
+            raw = bytearray(original); raw[offset] = value
+            (target / 'texture.dds').write_bytes(raw)
+            tokens = (target / 'texture.index').read_text().split(); tokens[5] = xxhash.xxh3_128_hexdigest(raw)
+            index = (' '.join(tokens) + '\n').encode(); (target / 'texture.index').write_bytes(index)
+            receipt = json.loads((target / 'ui-pack.json').read_text())
+            receipt['files']['texture.dds'] = hashlib.sha256(raw).hexdigest()
+            receipt['files']['texture.index'] = hashlib.sha256(index).hexdigest()
+            (target / 'ui-pack.json').write_text(json.dumps(receipt))
+            with self.subTest(offset=offset), self.assertRaises(PortError): validate_ui_pack(target)
+
     def test_mutation_preserved_and_rejected(self):
         from native_port.texture_ui import prepare_ui_pack, validate_ui_pack
         target = prepare_ui_pack(self.source, self.glyphs, self.root / 'pack', reviewed=True)

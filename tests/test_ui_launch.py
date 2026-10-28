@@ -28,7 +28,7 @@ class UILaunchTests(unittest.TestCase):
         verified = Path('reviewed-font').resolve()
         with patch('native_port.texture_ui.validate_ui_pack', return_value=verified) as validate:
             result = play.ui_texture_environment(Path('input'), installation, {}, argparse.ArgumentParser())
-        validate.assert_called_once_with(Path('input'))
+        validate.assert_called_once_with(Path('input'), available_patches=installation['recipe']['sdk_spatial']['patches'])
         self.assertEqual(result['ASTER_UI_TEXTURE_PACK_DIR'], str(verified))
 
     def test_balanced_default_does_not_discard_an_explicit_sharpness(self):

@@ -78,3 +78,41 @@
 Próximo marco: ampliar geração/análise e validar a compilação experimental
 (combate, física, áudio, campanha e outras GPUs) antes de tratar o backend como
 completo. Não simular sucesso de serviços ausentes para habilitar execução.
+
+## Revisão de fontes/efeitos em 27/10 (SDK 0031–0032, integração 21)
+
+O FXAA simplificado do Vulkan desgastava contornos finos de texto. O patch 0031
+adota FXAA Quality 3.11 para acompanhar o caminho já existente no D3D12; a
+comparação do parágrafo do menu manteve FSR e a fonte original, com contornos
+mais contínuos. Isso corrige uma etapa de apresentação, não torna todos os atlas
+originais HD. O formato opcional ASTERUI2 preserva alpha de 8 bits sem nova
+compressão BC3; continua experimental, exige backend 0030 e não é ativado
+automaticamente por presets.
+
+Os logs 166 associaram uma fonte de efeitos ao seu estado de shader/sampler e
+registraram c255. Essa observação não cobre todos os rastros nem autoriza alterar
+seus recortes de profundidade/transparência. A qualidade de todas as partículas
+e legendas durante a campanha ainda precisa de validação.
+
+Pipelines inéditos ainda podem reter um quadro por cerca de meio segundo; os
+workers e o cache persistente não garantem ausência dessa pausa na primeira vez.
+Experimentos privados de compilação não fazem parte da receita pública.
+No Niri/Xwayland, capturas da revisão 0031 mostraram barras laterais de cerca de
+44 pixels em uma janela 1920x1080. O patch 0032 atualiza a conexão da superfície
+mesmo quando a janela recebe um tamanho já conhecido; o teste 174 voltou a
+preencher 1920x1080. Isso não certifica todas as configurações de monitor/DPI.
+
+A sessão 175 (190,38 s de combate a 60 FPS) teve, entre 100–170 s, mediana de
+16,75 ms, máximo de 35,18 ms e zero intervalos de apresentação acima de 50 ms
+com cache aprendido. Isso não prova campanha, tempo de GPU, conteúdo único ou
+FPS constante em todos os trechos. A sessão 178 teve uma pausa de 334,67 ms entre
+175–225 s; não foi observada destruição de imagens Vulkan nesse intervalo. Não
+atribuir todo stutter à falta de VRAM nem prometer sua eliminação nesta release.
+As legendas 176/178 ficaram visualmente mais contínuas, mas a comparação não é
+uma métrica pixel a pixel e não certifica todas as legendas/cenas.
+
+O EXE foi exercitado somente sob Wine, que valida launcher/contratos, não
+compilação ou gameplay D3D12 nativos. Windows nativo com GPU/D3D12 continua sem
+validação. O workflow Windows foi atualizado, mas só produz evidência se for
+publicado/executado; sem escopo `workflow`, ele permanece local para inclusão
+manual e não há resultado de CI a anunciar.

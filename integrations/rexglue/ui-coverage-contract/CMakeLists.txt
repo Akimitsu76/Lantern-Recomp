@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.25)
+project(AsterUICoverageContract LANGUAGES CXX)
+find_package(rexglue 0.10.0 EXACT CONFIG REQUIRED)
+add_executable(aster_ui_coverage_contract main.cpp)
+target_compile_features(aster_ui_coverage_contract PRIVATE cxx_std_23)
+target_link_libraries(aster_ui_coverage_contract PRIVATE rex::runtime)

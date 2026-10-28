@@ -40,7 +40,7 @@ def digest(path):
 
 
 from native_port.locking import lock_session
-from native_port.native_build import read_install, verify_install, XEX_SHA256
+from native_port.native_build import read_install, verify_install, XEX_SHA256, backend_update_reason
 from native_port.paths import external_env
 
 
@@ -300,7 +300,7 @@ def ui_texture_environment(directory, installation, env, parser):
             parser.error('Fontes revisadas exigem atualizar o backend nativo no launcher.')
         from native_port.texture_ui import validate_ui_pack
         try:
-            env['ASTER_UI_TEXTURE_PACK_DIR'] = str(validate_ui_pack(directory))
+            env['ASTER_UI_TEXTURE_PACK_DIR'] = str(validate_ui_pack(directory, available_patches=patches))
         except Exception as exc:
             parser.error(str(exc))
     return env
@@ -338,6 +338,9 @@ def main():
     root = Path(__file__).resolve().parent.parent
     binary_rel, report_rel, runtime_rel = mode_paths(target)
     installation = read_install(root)
+    update_reason = backend_update_reason(installation)
+    if update_reason:
+        parser.error(update_reason)
     if graphics_data['upscaler'] == 'fsr1' and (not installation or installation.get('recipe', {}).get('integration', 0) < 6):
         parser.error('FSR 1 EASU exige atualizar o port: use Gerar port/Atualizar port no launcher.')
     if installation:
@@ -394,6 +397,9 @@ def main():
         print('Se o jogo parecer acelerado ou instável, volte para 30 fps.', flush=True)
     print('Compilação experimental local; campanha completa e qualidade do áudio ainda sem validação.', flush=True)
     print(f'Gráficos: {graphics.summary(graphics_data)}', flush=True)
+    if installation:
+        print(f'Backend instalado: {installation["recipe"]["integration"]} | '
+              f'{installation["renderer"]}', flush=True)
     print(f'Próxima sessão: alvo={target} | VSync={"on" if graphics_data["vsync"] else "off"} | '
           f'apresentação={present_mode} | shaders={graphics_data["shader_mode"]}', flush=True)
     if not graphics_data['vsync']:

@@ -67,6 +67,17 @@ class EffectsParserTests(unittest.TestCase):
         self.assertEqual(len(parse_effects_metadata(records[:32])), 32)
         with self.assertRaises(ValueError): parse_effects_metadata(records)
 
+    def test_optional_pixel_constant_bits_preserve_nonfinite_values_and_old_logs(self):
+        record = fixture()
+        bits = [0x7fc00001, 0xff800000, 0x3f000000, 0x80000000]
+        record['state']['pixel_float_constant_255_raw'] = bits
+        self.assertEqual(parse_effects_metadata([line(record)])[0]['state']['pixel_float_constant_255_raw'], bits)
+        self.assertEqual(len(parse_effects_metadata([line(fixture())])), 1)
+        for value in (None, [], [0]*3, [0]*5, [0, 0, True, 0], [0, -1, 0, 0], [0, 1 << 32, 0, 0]):
+            record['state']['pixel_float_constant_255_raw'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_effects_metadata([line(record)])
+
     def test_partial_and_oversize_json_rejected(self):
         for payload in ('{', '[]', 'x'*65537):
             with self.subTest(size=len(payload)), self.assertRaises(ValueError):

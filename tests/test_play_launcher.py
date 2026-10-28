@@ -260,8 +260,10 @@ class PlayLauncherTests(unittest.TestCase):
                     patch.object(launcher, 'read_install', return_value={
                         'binary': str(binary.relative_to(root)), 'game_root': str(game),
                         'renderer': 'vulkan-fsi', 'presentation_backend': 'sdk-spatial-fsr1',
-                        'recipe': {'integration': 7, 'sdk_spatial': {'revision': 'verified',
-                                   'patches': {launcher.graphics.SCALED_PIXEL_CENTER_PATCH: 'verified'}}}}), \
+                        'recipe': {'integration': 21, 'sdk_spatial': {'revision': 'verified',
+                                   'patches': {launcher.graphics.SCALED_PIXEL_CENTER_PATCH: 'verified',
+                                              '0031-vulkan-fxaa-quality-parity.patch': 'verified',
+                                              '0032-refresh-unchanged-surface-size.patch': 'verified'}}}}), \
                     patch.object(launcher, 'verify_install'), \
                     patch('sys.argv', ['play_green_lantern.py', '--dry-run', '--graphics-preset',
                                        'high', str(game)]), \
@@ -490,7 +492,9 @@ class SharedDisplayControlsTests(unittest.TestCase):
     def test_fullscreen_and_fsr_sharpness_use_real_shared_runtime_flags(self):
         import argparse
         installation = {'presentation_backend': 'sdk-spatial-fsr1', 'recipe': {'sdk_spatial': {
-            'patches': {launcher.graphics.SCALED_PIXEL_CENTER_PATCH: 'verified'}}}}
+            'patches': {launcher.graphics.SCALED_PIXEL_CENTER_PATCH: 'verified',
+                                              '0031-vulkan-fxaa-quality-parity.patch': 'verified',
+                                              '0032-refresh-unchanged-surface-size.patch': 'verified'}}}}
         for strength, reduction in [(0, '2'), (75, '0.5'), (100, '0')]:
             parser, args = launcher.parse_arguments(['--graphics-preset', 'high', '--fullscreen', 'on', '--fsr-sharpness', str(strength)])
             data = launcher.resolve_graphics(parser, args, '30')

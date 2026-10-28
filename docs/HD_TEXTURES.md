@@ -197,3 +197,16 @@ gameplay, native Windows D3D12 and60FPS visual certification remain pending.
 - [Real-ESRGAN, BSD 3-Clause](https://github.com/xinntao/Real-ESRGAN)
 - [NCNN Vulkan executable, MIT](https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan)
 - [Official packages](https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.2.5.0)
+
+## Explicit font coverage experiment (patch 0030)
+
+The reviewed Domyouji36 font can also be prepared with
+`python -m native_port texture-ui-prepare /path/to/dump --scale 4 --coverage-format rgba8`.
+This ASTERUI2 channel stores white RGB and lossless 8-bit coverage in RGBA8,
+preserving original glyph rectangles, advances, normalized UVs and source
+fingerprints. It avoids another BC3 alpha quantization step; it does not recover
+lost font outlines, replace baked menu images, or establish better typography
+by upload alone. Existing ASTERUI1/BC3 packs remain supported. Both Vulkan and
+D3D12 select matching RGBA8 resource/view formats and expose only mip0 for the
+observed base-only source. The launcher rejects ASTERUI2 on an older backend.
+This remains an explicit experiment; graphics presets do not enable it.

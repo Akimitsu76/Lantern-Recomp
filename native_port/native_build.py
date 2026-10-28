@@ -24,7 +24,7 @@ from .workspace import Workspace
 
 XEX_SHA256 = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 SDK_VERSION = '0.10.0'
-INTEGRATION_VERSION = 20
+INTEGRATION_VERSION = 21
 SDK_ASSETS = {
     'linux-amd64': '0388edb3f8fb1444f1b0ad5d440cb02d9690ac20a76b04fd6b7dcc19f59328a6',
     'win-amd64': 'ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b',
@@ -195,6 +195,31 @@ def read_install(root):
         raise PortError('BUILD_MANIFEST', 'Manifesto do build local inválido: ' + str(exc)) from exc
 
 
+def backend_update_reason(data):
+    """Use the same backend compatibility gate in the GUI and play script.
+
+    Replacing a launcher does not replace a previously compiled renderer.
+    The Linux quality filter and the shared surface fix must actually be in
+    the installed SDK; D3D12 already uses the quality filter.
+    """
+    if not data:
+        return ''
+    recipe = data.get('recipe', {})
+    version = recipe.get('integration', 0)
+    if type(version) is not int or version < INTEGRATION_VERSION:
+        return (f'Backend {version} instalado; este launcher exige backend '
+                f'{INTEGRATION_VERSION}. Use Gerar port/Atualizar port.')
+    if data.get('presentation_backend') != 'sdk-spatial-fsr1':
+        return 'Atualize o backend espacial em Gerar port/Atualizar port.'
+    patches = recipe.get('sdk_spatial', {}).get('patches', {})
+    required = {'0032-refresh-unchanged-surface-size.patch'}
+    if data.get('renderer') == 'vulkan-fsi':
+        required.add('0031-vulkan-fxaa-quality-parity.patch')
+    if required.difference(patches):
+        return 'Faltam correções de texto/apresentação no backend. Use Gerar port/Atualizar port.'
+    return ''
+
+
 def verify_install(root, data):
     if data.get('platform') != host_platform():
         raise PortError('BUILD_PLATFORM', 'Este port foi compilado para outro sistema operacional.')
@@ -211,6 +236,14 @@ def cpu_sdk_identity(recipe):
     declaration and GPU-only selection branches, with no existing ABI change.
     Patch 0027 changes Vulkan submission scheduling and protects memory exports;
     no declarations, data members or layouts change.
+    Patch 0032 refreshes the existing presenter connection on repeated native
+    size notifications, within window.cpp; no header/ABI change.
+    Patch 0031 replaces Vulkan postprocess shader source only; all existing
+    types, layouts and shader descriptors stay unchanged.
+    Patch 0030 adds inline UI storage validation/selection without fields, types
+    or virtual function changes; existing replacement/mip layouts are unchanged.
+    Patch 0029 adds optional raw pixel constants to an existing bounded diagnostic
+    in texture/cache.cpp; no public type changes.
     Patch 0028 stores a once-only window retry in SDL properties, changing only
     the focus event implementation and no class layout.
     Patch 0026 only stores an existing presenter's pipeline format after creation;
@@ -233,7 +266,11 @@ def cpu_sdk_identity(recipe):
                 '0025-known-shader-preload-selection.patch',
                 '0026-presenter-pipeline-format-cache.patch',
                 '0027-worker-only-async-submissions.patch',
-                '0028-startup-fullscreen-focus-retry.patch'}
+                '0028-startup-fullscreen-focus-retry.patch',
+                '0029-effects-pixel-constants.patch',
+                '0030-ui-uncompressed-coverage.patch',
+                '0031-vulkan-fxaa-quality-parity.patch',
+                '0032-refresh-unchanged-surface-size.patch'}
     result['patches'] = {name: digest for name, digest in recipe.get('patches', {}).items() if name not in gpu_only}
     return result
 
@@ -298,7 +335,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
         candidate = root / current['binary']
         if (all(previous.get(key) == recipe[key] for key in host_fields)
                 and cpu_sdk_identity(previous.get('sdk_spatial')) == cpu_sdk_identity(recipe.get('sdk_spatial'))
-                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
                 and candidate.is_file()
                 and current.get('files', {}).get(current['binary']) == file_hash(candidate)):
             reusable_host = candidate

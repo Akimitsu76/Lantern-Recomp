@@ -44,6 +44,7 @@ def main():
     ui.add_argument('source', type=Path)
     ui.add_argument('--scale', type=int, choices=(2, 4), default=2)
     ui.add_argument('--download-tools', action='store_true')
+    ui.add_argument('--coverage-format', choices=('bc3', 'rgba8'), default='bc3', help='RGBA8 preserva cobertura alpha sem recompressão; requer backend 0030.')
     helpers = sub.add_parser('texture-tools', help='Compilar helpers públicos sem assets do jogo')
     helpers.add_argument('--download-sdk', action='store_true')
     args = parser.parse_args()
@@ -65,7 +66,7 @@ def main():
         elif args.command == 'texture-ui-prepare':
             from .texture_ui import prepare_game_ui
             folder = prepare_game_ui(args.source, PROJECT, Workspace(PROJECT / '.aster', PROJECT),
-                scale=args.scale, allow_download=args.download_tools,
+                scale=args.scale, allow_download=args.download_tools, coverage_format=args.coverage_format,
                 emit=lambda event: print(json.dumps(event, ensure_ascii=False), file=sys.stderr))
             result = {'state': 'prepared', 'ui_pack': str(folder), 'scale': args.scale, 'runtime_rendered': False}
         elif args.command == 'texture-preset-prepare':

@@ -32,6 +32,27 @@ missões e em recursos compartilhados.** Outros materiais mantêm os originais. 
 Linux/Windows; Wine valida o launcher, não certifica gameplay D3D12.
 Veja [texturas e limites](docs/HD_TEXTURES.md).
 
+## Revisão local de fontes e apresentação — 27/10/2026
+
+O FXAA Vulkan foi corrigido para preservar melhor os contornos das letras,
+com FSR ainda ligado. O caminho D3D12 mantém seu FXAA Quality já existente.
+A conexão de apresentação também passou a atualizar tamanhos nativos repetidos,
+resolvendo no teste local as barras laterais indevidas após entrar em tela cheia.
+O backend atualizado usa os patches até 0032, integração 21; instalações anteriores
+precisam de **Gerar port/Atualizar port** para receber a correção, além de trocar
+o executável do launcher. A revisão r4 verifica a versão/correções tanto
+na interface quanto no comando de execução em Linux/Windows, e informa no log
+o backend efetivamente instalado.
+
+A fonte original ganhou um formato RGBA8 opcional que preserva o alpha sem nova
+compressão BC3; continua uma experiência CLI. Todos os efeitos e legendas da
+campanha ainda precisam de revisão. Pipelines inéditos continuam podendo pausar
+no primeiro uso; as experiências de compilação que não trouxeram ganho útil foram
+mantidas fora da produção. Veja [estado e limitações](docs/RESUME_CHECKPOINT.md)
+e as [notas da candidata v0.1.4-rc.2](docs/RELEASE_v0.1.4-rc.2.md).
+Os pacotes desta revisão são os assets da pré-release experimental v0.1.4-rc.2;
+ela não é stable.
+
 ## Candidata v0.1.4-rc.1 — 27/10/2026
 
 Esta é uma **pré-release experimental**, não stable. O patch 0027 remove uma
@@ -67,7 +88,7 @@ sem certificação; não há ganho acima de 60 FPS comprovado nem escala interna
 
 ## Launcher portátil e geração local
 
-Na pré-release v0.1.4-rc.1, os downloads diretos são
+Na pré-release v0.1.4-rc.2, os downloads diretos são
 `AsterNative-windows-x64.exe` e `AsterNative-linux-x86_64.AppImage`: cada um é um
 arquivo único, sem ZIP para extrair. Recursos e dados persistentes ficam na
 pasta de dados do usuário. Os formatos anteriores ZIP/TAR.GZ não são
@@ -216,7 +237,8 @@ e BUILD_PIPELINE para reproduzir o experimento.
 
 ## Documentação
 
-- [Notas da candidata v0.1.4-rc.1](docs/RELEASE_v0.1.4-rc.1.md)
+- [Notas da candidata v0.1.4-rc.2](docs/RELEASE_v0.1.4-rc.2.md)
+- [Notas históricas da candidata v0.1.4-rc.1](docs/RELEASE_v0.1.4-rc.1.md)
 - [Notas históricas da v0.1.3](docs/RELEASE_v0.1.3.md)
 - [Arquivos únicos para Releases](docs/SINGLE_FILE_RELEASE.md)
 - [Progresso nativo e evidências atuais](docs/NATIVE_PROGRESS.md)

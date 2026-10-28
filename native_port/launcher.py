@@ -18,7 +18,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from games.green_lantern import GreenLantern
 from . import graphics, settings
-from .native_build import build_native, read_install, INTEGRATION_VERSION
+from .native_build import build_native, read_install, backend_update_reason
 from .paths import project_root, python_command, external_env
 from .diagnostics import diagnostics
 from .errors import PortError
@@ -1016,8 +1016,7 @@ class Launcher:
             installation = read_install(PROJECT)
         except PortError:
             return False
-        return bool(installation and (installation.get('recipe', {}).get('integration', 0) < INTEGRATION_VERSION
-                    or installation.get('presentation_backend') != 'sdk-spatial-fsr1'))
+        return bool(backend_update_reason(installation))
 
     def _engine_ready(self, target=None):
         if self._backend_update_needed():
@@ -1029,7 +1028,7 @@ class Launcher:
         target = self.fps_target.get()
         binary, report = self._engine_paths(target)
         if self._backend_update_needed():
-            self.engine_status.set('Atualize o backend em Gerar port para ativar shaders e filtros novos')
+            self.engine_status.set(backend_update_reason(read_install(PROJECT)))
         elif binary.is_file() and report.is_file():
             self.engine_status.set('Build e referência locais encontrados')
         elif binary.is_file():

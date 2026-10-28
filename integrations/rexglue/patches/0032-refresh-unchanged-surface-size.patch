@@ -1,0 +1,17 @@
+--- a/src/ui/window.cpp
++++ b/src/ui/window.cpp
+@@ -549,7 +549,13 @@
+                                 WindowDestructionReceiver& destruction_receiver) {
+   if (actual_physical_width_ == new_physical_width &&
+       actual_physical_height_ == new_physical_height) {
+-    return false;
++    // The window may already know its final size while its presenter connected
++    // to the pre-map surface size. A later identical native size event must
++    // still refresh that connection (not resend logical resize listeners).
++    if (presenter_surface_) {
++      presenter_->OnSurfaceResizeFromUIThread();
++    }
++    return destruction_receiver.IsWindowDestroyed();
+   }
+   actual_physical_width_ = new_physical_width;
+   actual_physical_height_ = new_physical_height;
