@@ -45,7 +45,8 @@ PATCHES = ('integrations/rexglue/patches/0004-embedded-spatial-sdk.patch',
            'integrations/rexglue/patches/0030-ui-uncompressed-coverage.patch',
            'integrations/rexglue/patches/0031-vulkan-fxaa-quality-parity.patch',
            'integrations/rexglue/patches/0032-refresh-unchanged-surface-size.patch',
-           'integrations/rexglue/patches/0033-retire-present-queue.patch')
+           'integrations/rexglue/patches/0033-retire-present-queue.patch',
+           'integrations/rexglue/patches/0034-bounded-hd-source-cache.patch')
 CAPABILITY = 'sdk-spatial-fsr1'
 # Bump only when build semantics change. Logging/comments must not invalidate
 # gigabytes of correctly compiled source or force another source download.

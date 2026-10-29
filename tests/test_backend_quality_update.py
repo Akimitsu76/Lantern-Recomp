@@ -13,7 +13,8 @@ def current_manifest(renderer):
     return {'recipe': {'integration': INTEGRATION_VERSION, 'sdk_spatial': {'patches': {
         '0031-vulkan-fxaa-quality-parity.patch': 'verified',
         '0032-refresh-unchanged-surface-size.patch': 'verified',
-        '0033-retire-present-queue.patch': 'verified'}}},
+        '0033-retire-present-queue.patch': 'verified',
+        '0034-bounded-hd-source-cache.patch': 'verified'}}},
         'renderer': renderer, 'presentation_backend': 'sdk-spatial-fsr1'}
 
 
@@ -44,6 +45,12 @@ class QualityUpdateTests(unittest.TestCase):
         manifest = current_manifest('vulkan-fsi')
         del manifest['recipe']['sdk_spatial']['patches']['0033-retire-present-queue.patch']
         self.assertIn('correções', backend_update_reason(manifest))
+
+    def test_missing_hd_source_retention_requires_new_shared_backend(self):
+        for renderer in ('vulkan-fsi', 'd3d12-rov'):
+            manifest = current_manifest(renderer)
+            del manifest['recipe']['sdk_spatial']['patches']['0034-bounded-hd-source-cache.patch']
+            self.assertIn('correções', backend_update_reason(manifest))
 
     def test_vulkan_quality_filter_required_but_d3d12_uses_existing_quality_shader(self):
         manifest = current_manifest('vulkan-fsi')

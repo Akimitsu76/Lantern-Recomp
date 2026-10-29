@@ -116,3 +116,24 @@ compilação ou gameplay D3D12 nativos. Windows nativo com GPU/D3D12 continua se
 validação. O workflow Windows foi atualizado, mas só produz evidência se for
 publicado/executado; sem escopo `workflow`, ele permanece local para inclusão
 manual e não há resultado de CI a anunciar.
+
+## Integração 23 e cache de texturas — 29/10/2026
+
+O patch 0034 mantém até 128 MiB de DDS e metadados de mip já validados em cache
+LRU. Ele evita repetir leitura e hash quando a textura perde todos os donos na
+GPU e a fonte ainda cabe no cache. Não amplia VRAM, não carrega a biblioteca
+inteira, não elimina a primeira leitura nem o upload para a GPU. A criação de
+um pipeline inédito ainda pode interromper a apresentação; não está declarada
+resolvida.
+
+Os controles 197/198/201 mediram 100–170 s com medianas de apresentação de
+16,830/16,833/16,833 ms, máximos abaixo de 18 ms e zero intervalos acima de
+25 ms. São timestamps de apresentação, não tempo de GPU, conteúdo único ou prova
+de campanha. O experimento 202 eliminou o teto do título, mas ficou preso em
+“Press START”; não foi integrado. A interface/legendas em resolução própria
+continua um protótipo privado, sem instalação no backend público.
+
+A integração 23 exige host CPU novo. O launcher e o comando de execução rejeitam
+o backend 22 em vez de usar o renderizador anterior. Saves, cache e preferências
+são preservados; use **Gerar port/Atualizar port**. Windows nativo/D3D12, a
+campanha completa e o tutorial do Disparo do Anel continuam sem validação.

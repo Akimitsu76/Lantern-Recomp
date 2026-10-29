@@ -12,6 +12,29 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
+## Integração 23 e cache de texturas — v0.1.4-rc.4, 29/10/2026
+
+Esta pré-release experimental reúne o launcher da rc.3 e o backend de integração
+23, com o patch 0034. O patch mantém até 128 MiB de DDS e metadados de mip já
+validados em um cache LRU em RAM. Ele evita repetir leitura e hash quando uma
+textura perde todos os donos na GPU e sua fonte ainda cabe no cache. Não amplia
+VRAM, não carrega a biblioteca inteira, não elimina o primeiro carregamento nem
+o upload para a GPU, e a criação de um pipeline inédito ainda pode pausar a
+apresentação. Veja as [notas da rc.4](docs/RELEASE_v0.1.4-rc.4.md) e o
+[progresso gráfico](docs/GRAPHICS_PROGRESS_2026-10-29.md).
+
+Os controles 197/198/201, entre 100–170 s, tiveram medianas de apresentação de
+16,830/16,833/16,833 ms, máximos abaixo de 18 ms e nenhum intervalo acima de
+25 ms. São timestamps de apresentação, não tempo de GPU nem prova de campanha.
+O experimento 202 eliminou o teto do título, mas ficou preso em “Press START”;
+não foi integrado. A interface/legendas em resolução própria continua um
+protótipo privado, sem instalação no backend público.
+
+Quem vem da rc.3 precisa trocar o launcher e usar **Gerar port/Atualizar port**
+para receber a integração 23; saves, cache e preferências são preservados. A
+suíte completa passou com 474 testes e 3 skips opcionais. Windows nativo/D3D12, campanha
+completa e o tutorial do Disparo do Anel continuam sem validação; não é stable.
+
 ## Histórico de FPS e portabilidade — 24/10/2026
 
 Naquela revisão experimental, 60 FPS voltou a alcançar a fase no Linux, mas havia
@@ -108,7 +131,7 @@ sem certificação; não há ganho acima de 60 FPS comprovado nem escala interna
 
 ## Launcher portátil e geração local
 
-Na pré-release v0.1.4-rc.3, os downloads diretos são
+Na pré-release v0.1.4-rc.4, os downloads diretos são
 `AsterNative-windows-x64.exe` e `AsterNative-linux-x86_64.AppImage`: cada um é um
 arquivo único, sem ZIP para extrair. Recursos e dados persistentes ficam na
 pasta de dados do usuário. Os formatos anteriores ZIP/TAR.GZ não são
@@ -257,7 +280,8 @@ e BUILD_PIPELINE para reproduzir o experimento.
 
 ## Documentação
 
-- [Notas da v0.1.4-rc.3](docs/RELEASE_v0.1.4-rc.3.md)
+- [Notas da v0.1.4-rc.4](docs/RELEASE_v0.1.4-rc.4.md)
+- [Notas históricas da v0.1.4-rc.3](docs/RELEASE_v0.1.4-rc.3.md)
 - [Launcher](docs/LAUNCHER.md)
 - [Atualização integrada](docs/LAUNCHER_UPDATES.md)
 - [Notas históricas da candidata v0.1.4-rc.2](docs/RELEASE_v0.1.4-rc.2.md)

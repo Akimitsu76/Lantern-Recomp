@@ -24,7 +24,7 @@ from .workspace import Workspace
 
 XEX_SHA256 = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 SDK_VERSION = '0.10.0'
-INTEGRATION_VERSION = 22
+INTEGRATION_VERSION = 23
 SDK_ASSETS = {
     'linux-amd64': '0388edb3f8fb1444f1b0ad5d440cb02d9690ac20a76b04fd6b7dcc19f59328a6',
     'win-amd64': 'ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b',
@@ -213,7 +213,8 @@ def backend_update_reason(data):
         return 'Atualize o backend espacial em Gerar port/Atualizar port.'
     patches = recipe.get('sdk_spatial', {}).get('patches', {})
     required = {'0032-refresh-unchanged-surface-size.patch',
-                '0033-retire-present-queue.patch'}
+                '0033-retire-present-queue.patch',
+                '0034-bounded-hd-source-cache.patch'}
     if data.get('renderer') == 'vulkan-fsi':
         required.add('0031-vulkan-fxaa-quality-parity.patch')
     if required.difference(patches):
@@ -251,7 +252,8 @@ def cpu_sdk_identity(recipe):
     the focus event implementation and no class layout.
     Patch 0026 only stores an existing presenter's pipeline format after creation;
     no header, public type or layout changes. Presenter/UI patches 0004 and 0022
-    remain ABI-sensitive. Unknown future patches force a
+    remain ABI-sensitive. Patch 0034 adds HDTexturePack storage in a public
+    header and conservatively requires a new host as well. Unknown future patches force a
     new host; guest hints, hook, platform and binary hashes are checked separately.
     """
     if recipe is None:
@@ -339,7 +341,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
         candidate = root / current['binary']
         if (all(previous.get(key) == recipe[key] for key in host_fields)
                 and cpu_sdk_identity(previous.get('sdk_spatial')) == cpu_sdk_identity(recipe.get('sdk_spatial'))
-                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22)
+                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
                 and candidate.is_file()
                 and current.get('files', {}).get(current['binary']) == file_hash(candidate)):
             reusable_host = candidate

@@ -33,7 +33,8 @@ class NativeBuildTests(unittest.TestCase):
         centers = dict(base, patches={**base['patches'], '0024-scaled-pixel-parameter-centers.patch': 'implementation-only'})
         self.assertEqual(cpu_sdk_identity(base), cpu_sdk_identity(centers))
         for name in ('0004-embedded-spatial-sdk.patch',
-                     '0022-idle-notification-presentation.patch', 'future-unknown.patch'):
+                     '0022-idle-notification-presentation.patch',
+                     '0034-bounded-hd-source-cache.patch', 'future-unknown.patch'):
             changed = dict(base, patches={**base['patches'], name: 'new'})
             self.assertNotEqual(cpu_sdk_identity(base), cpu_sdk_identity(changed))
         self.assertNotEqual(cpu_sdk_identity(base), cpu_sdk_identity(None))

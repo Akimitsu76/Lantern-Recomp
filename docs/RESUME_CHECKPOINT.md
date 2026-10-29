@@ -1,4 +1,31 @@
-# Entrega atual — launcher com atualizador, 28/10/2026
+# Retomada e entrega v0.1.4-rc.4 — 29/10/2026
+
+O usuário autorizou retomar o jogo após o launcher e pediu estabilidade urgente,
+otimização do custo gráfico, interface/legendas em resolução própria, 60 FPS e
+ilimitado, e redução das travadas restantes. Saves humanos e a instalação do
+usuário devem ser preservados; testes usam perfis `ASTER_DATA_HOME` isolados.
+Não declarar stable, campanha completa ou Windows nativo sem evidência.
+
+Estado desta entrega: fonte `0.1.4-rc.4`, `pyproject.toml` `0.1.4rc4`,
+integração 23, 31 patches até `0034-bounded-hd-source-cache.patch`. O build do
+workspace é `native/6c9bdb...`; o SDK Linux é `spatial-sdk/af09e...`. A
+instalação humana permanece no backend 22 (`4813943...`) e não foi alterada.
+
+O patch 0034 mantém até 128 MiB de DDS/mips validados em cache LRU; evita
+releitura/hash quando a fonte ainda cabe no cache, sem ampliar VRAM, eliminar o
+primeiro carregamento, o upload GPU ou a pausa de pipelines inéditos. A suíte
+completa passou com 474 testes e 3 skips opcionais. Controles 197/198/201
+mediram, entre 100–170 s, medianas de 16,830/16,833/16,833 ms, máximos abaixo de 18 ms e zero
+intervalos acima de 25 ms; são timestamps de apresentação, não prova de GPU ou
+campanha. O experimento 202 não foi integrado (travou em “Press START”). A UI em
+resolução própria continua protótipo privado, sem instalação pública.
+
+Evidência: `.aster/reports/graphics-2026-10-29/STATUS.md` e
+`docs/GRAPHICS_PROGRESS_2026-10-29.md`. Backup do código:
+`/run/media/victor/games/aster-backups/2026-10-29-pre-rc4`; arquivo de
+evidências: `/run/media/victor/games/aster-archive/2026-10-29`.
+
+## Histórico — launcher com atualizador, 28/10/2026
 
 Último pedido: acrescentar Atualizações ao lado de Diagnóstico e preparar prompt
 para o OpenCode publicar. Concluído em Linux e Windows/Wine. Jogo segue PAUSADO
@@ -10,7 +37,7 @@ Candidatos anteriores permanecem históricos, não publicar no lugar destes.
 Prompt de publicação mantido no relatório privado.
 Notas: `docs/RELEASE_v0.1.4-rc.3.md`; funcionamento: `docs/LAUNCHER_UPDATES.md`.
 Repositório atual Akimitsu76/Lantern-Recomp, ID1431033413; endereço antigo redireciona.
-Publicação desta revisão: pré-release `v0.1.4-rc.3` pelo OpenCode.
+Publicação desta revisão: pré-release `v0.1.4-rc.3` pelo OpenCode, commit `2920c91`.
 
 51 testes UI/Tk9Linux;20 atualizadorLinux;20Windows/Wine;3payload. Smoke dos dois
 binários finalizados; troca/restart e recuperação reais em cópias isoladas passaram

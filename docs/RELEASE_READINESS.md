@@ -1,6 +1,37 @@
 # Preparação da release
 
-## Atualização do launcher — v0.1.4-rc.3, 28/10/2026
+## Integração 23 e cache de texturas — v0.1.4-rc.4, 29/10/2026
+
+**Pré-release experimental, não stable.** A versão embutida é `0.1.4-rc.4`; o
+`pyproject.toml` usa a forma PEP 440 `0.1.4rc4`. A fonte exige integração 23 e
+inclui os patches até `0034-bounded-hd-source-cache.patch`.
+
+- O patch 0034 mantém até 128 MiB de DDS e metadados de mip validados em cache
+  LRU. Ele evita releitura/hash quando a fonte ainda cabe no cache, mas não
+  aumenta VRAM, não elimina o primeiro carregamento, o upload para a GPU ou a
+  pausa de criação de um pipeline inédito.
+- A suíte completa passou com 474 testes e 3 skips opcionais no Linux. Os
+  contratos C++ seletivos do carregador HD e do timing portátil também foram
+  executados.
+- Controles 197/198/201, entre 100–170 s: medianas de apresentação de
+  16,830/16,833/16,833 ms, máximos abaixo de 18 ms, zero intervalos acima de
+  25 ms. São timestamps de apresentação, não tempo de GPU ou campanha.
+- O experimento 202 não foi integrado: eliminou o teto do título, mas ficou
+  preso em “Press START”. A UI em resolução própria permanece um protótipo
+  privado, sem instalação no backend público.
+- Assets: `AsterNative-linux-x86_64.AppImage` (53.152.248 bytes, SHA-256
+  `a76864faa255878c6ab31db62d3d2c80a7b690339d9c3508b89bffbe6c2dd0d0`),
+  `AsterNative-windows-x64.exe` (61.337.400 bytes, SHA-256
+  `5296bc1f944e4a9e5375dd811107fa0196ea355dadb8291aa6da99dc70f4ffc0`),
+  `SHA256SUMS` e `LEIA-ME-ATUALIZACAO.md`.
+- Limites: Windows nativo/D3D12 sem validação; o EXE é exercitado sob Wine.
+  Campanha completa, tutorial do Disparo do Anel e estabilidade de 60
+  FPS/ilimitado continuam sem certificação. Não é stable.
+- Atualização: usuários da rc.3 precisam trocar o launcher e usar **Gerar
+  port/Atualizar port** para receber a integração 23; saves, cache e
+  preferências são preservados.
+
+## Histórico — launcher v0.1.4-rc.3, 28/10/2026
 
 **Pré-release experimental, não stable.** Esta revisão publica o launcher com
 interface renovada, fontes DejaVu privadas, Tk 9.0.4/Xft no Linux e atualizador

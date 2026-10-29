@@ -1,6 +1,6 @@
 # Arquivos únicos para Releases
 
-Os assets da pré-release experimental v0.1.4-rc.3 são:
+Os assets da pré-release experimental v0.1.4-rc.4 são:
 
 - `AsterNative-windows-x64.exe` — executável Windows com recursos embutidos.
 - `AsterNative-linux-x86_64.AppImage` — AppImage Linux com recursos embutidos.
@@ -56,25 +56,26 @@ auditoria inclui `native_port/`, `apps/`, `scripts/`, `integrations/rexglue/`,
 dumps, saves, texturas extraídas/HD, código gerado do jogo e executáveis de build
 nunca entram no repositório.
 
-A pré-release v0.1.4-rc.3 preserva os patches 0024 (profundidade em 2x/3x),
+A pré-release v0.1.4-rc.4 preserva os patches 0024 (profundidade em 2x/3x),
 0025 (pré-compilação de shaders conhecidos), 0026 (cache de formato do pipeline
 do presenter Vulkan), 0027 (submissão Vulkan assíncrona sem drenar workers),
 0028 (uma repetição do pedido de tela cheia no primeiro foco), 0031 (FXAA Quality
 3.11 no Vulkan), 0032 (atualização da conexão de apresentação em tamanho nativo
-repetido), 0030 (ASTERUI2 RGBA8 opcional para cobertura de UI) e 0029
-(diagnóstico opcional de c255), e acrescenta 0033 (espera da fila de apresentação
-na retirada da swapchain). A integração do backend é 22. O módulo de requisitos e
-as opções independentes de gráficos continuam incluídos. Não altere o requisito
-de toolchain: Clang/C++23 e, no Windows, Build Tools/Windows SDK continuam
+repetido), 0030 (ASTERUI2 RGBA8 opcional para cobertura de UI), 0029
+(diagnóstico opcional de c255) e 0033 (espera da fila de apresentação na
+retirada da swapchain), e acrescenta 0034 (cache LRU limitado de fontes DDS e
+metadados de mip). A integração do backend é 23. O módulo de requisitos e as
+opções independentes de gráficos continuam incluídos. Não altere o requisito de
+toolchain: Clang/C++23 e, no Windows, Build Tools/Windows SDK continuam
 necessários para GERAR o jogo, embora Python não seja necessário para ABRIR o
 launcher.
 
 Os hashes dos assets desta revisão são:
 
-- `AsterNative-linux-x86_64.AppImage` (53.148.152 bytes):
-  `d51e9a062d45f5ff9249f8d282fc27440142ed013268e51dd3138f21c819dda8`
-- `AsterNative-windows-x64.exe` (61.333.642 bytes):
-  `17c38e24517fdcde515b7e924f27a72e89163ddf25fdf0d7a0480fbe8a680f83`
+- `AsterNative-linux-x86_64.AppImage` (53.152.248 bytes):
+  `a76864faa255878c6ab31db62d3d2c80a7b690339d9c3508b89bffbe6c2dd0d0`
+- `AsterNative-windows-x64.exe` (61.337.400 bytes):
+  `5296bc1f944e4a9e5375dd811107fa0196ea355dadb8291aa6da99dc70f4ffc0`
 
 Trocar apenas o executável não atualiza o backend compilado. Use **Gerar
 port/Atualizar port** e preserve saves/cache; o build anterior permanece em

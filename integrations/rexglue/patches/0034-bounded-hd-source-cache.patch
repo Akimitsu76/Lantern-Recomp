@@ -1,0 +1,107 @@
+--- a/include/rex/graphics/pipeline/texture/hd_override.h
++++ b/include/rex/graphics/pipeline/texture/hd_override.h
+@@ -10,6 +10,7 @@
+ #include <filesystem>
+ #include <fstream>
+ #include <memory>
++#include <list>
+ #include <mutex>
+ #include <sstream>
+ #include <unordered_map>
+@@ -246,7 +247,66 @@
+       result->bytes.assign(dds.begin() + 128, dds.end());
+       return result;
+ }
++// CPU source retention is independent of GPU texture residency. Only already
++// validated immutable replacements enter this cache; first loads still use the
++// full DDS/hash/path checks below. Callers serialize access with library_mutex.
++// The limit counts retained byte-vector and mip-vector capacities, not VRAM.
++class HDSourceCache {
++ public:
++  static constexpr size_t kDefaultBudget = size_t(128) << 20;
++  explicit HDSourceCache(size_t budget = kDefaultBudget) : budget_(budget) {}
++  HDSourceCache(const HDSourceCache&) = delete;
++  HDSourceCache& operator=(const HDSourceCache&) = delete;
++  size_t RetainedBytes() const { return retained_bytes_; }
++  size_t RetainedCount() const { return index_.size(); }
++  size_t BudgetBytes() const { return budget_; }
++  void Remember(const std::string& fingerprint,
++                const std::shared_ptr<const HDTextureReplacement>& image) noexcept {
++    if (!image) return;
++    // Caching must never turn a successfully validated image into a failed load.
++    // Allocation failure leaves the ordinary weak-resident path available.
++    try {
++      auto existing = index_.find(fingerprint);
++      if (existing != index_.end()) {
++        entries_.splice(entries_.begin(), entries_, existing->second);
++        return;
++      }
++      if (image->mips.capacity() > budget_ / sizeof(HDTextureReplacement::Mip)) return;
++      const size_t mip_bytes = image->mips.capacity() * sizeof(HDTextureReplacement::Mip);
++      if (image->bytes.capacity() > budget_ - mip_bytes) return;
++      const size_t cost = image->bytes.capacity() + mip_bytes;
++      // Do not retain empty records or displace useful entries for an oversized one.
++      if (!cost) return;
++      entries_.push_front({fingerprint, image, cost});
++      try {
++        index_.emplace(fingerprint, entries_.begin());
++      } catch (...) {
++        entries_.pop_front();
++        return;
++      }
++      retained_bytes_ += cost;
++      while (retained_bytes_ > budget_) {
++        const auto& oldest = entries_.back();
++        index_.erase(oldest.fingerprint);
++        retained_bytes_ -= oldest.cost;
++        entries_.pop_back();
++      }
++    } catch (...) {}
++  }
++ private:
++  struct Entry {
++    std::string fingerprint;
++    std::shared_ptr<const HDTextureReplacement> image;
++    size_t cost;
++  };
++  const size_t budget_;
++  size_t retained_bytes_ = 0;
++  std::list<Entry> entries_;
++  std::unordered_map<std::string, std::list<Entry>::iterator> index_;
++};
+ struct HDTexturePack {
++  explicit HDTexturePack(size_t source_budget = HDSourceCache::kDefaultBudget)
++      : source_cache(source_budget) {}
+   // Legacy batches keep their existing eager, bounded lifetime contract.
+   std::unordered_map<std::string, std::shared_ptr<const HDTextureReplacement>> entries;
+   struct LibraryEntry {
+@@ -260,6 +320,7 @@
+   std::unordered_map<std::string, LibraryEntry> library_entries;
+   std::unordered_set<uint64_t> geometries;
+   mutable std::mutex library_mutex;
++  mutable HDSourceCache source_cache;
+   static uint64_t Geometry(uint32_t format, uint32_t width, uint32_t height) {
+     return (uint64_t(format) << 32) | (uint64_t(width) << 16) | height;
+   }
+@@ -283,8 +344,11 @@
+     // immutable-library lookup safe for independent consumers without duplicate IO.
+     std::lock_guard lock(library_mutex);
+     if (entry.failed) return {};
+-    if (auto resident = entry.resident.lock()) return resident;
+-    // First match (or a match after GPU eviction) performs bounded synchronous IO.
++    if (auto resident = entry.resident.lock()) {
++      source_cache.Remember(fingerprint, resident);
++      return resident;
++    }
++    // First match (or a match after both CPU and GPU eviction) performs bounded synchronous IO.
+     // Never do inference here. Do not retry a corrupt/changed file every draw.
+     entry.failed = true;
+     try {
+@@ -294,6 +358,7 @@
+           replacement->source_format != format || replacement->source_width != width ||
+           replacement->source_height != height) return {};
+       entry.resident = replacement;
++      source_cache.Remember(fingerprint, replacement);
+       entry.failed = false;
+       return replacement;
+     } catch (const std::exception&) { return {}; }
