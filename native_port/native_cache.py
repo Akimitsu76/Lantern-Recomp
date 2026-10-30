@@ -110,7 +110,9 @@ def build_cache_plugin(root, work, prefix, tools, cancel, emit, run, allow_downl
         '0027-linux-worker-only-async-submissions.patch',
         '0029-effects-pixel-constants.patch', '0030-ui-uncompressed-coverage.patch',
         '0031-vulkan-fxaa-quality-parity.patch',
-        '0034-bounded-hd-source-cache.patch')]
+        '0034-bounded-hd-source-cache.patch',
+        '0035-configurable-controls.patch',
+        '0037-native-save-slots.patch')]
     sdk_abi = prefix / 'aster-spatial-sdk.json'
     abi_identity = file_hash(sdk_abi) if sdk_abi.is_file() else 'official-sdk-0.10.0'
     recipe = hashlib.sha256((''.join(file_hash(patch) for patch in patches) + file_hash(root / 'integrations/rexglue/plugin-only/CMakeLists.txt') + abi_identity).encode()).hexdigest()[:20]

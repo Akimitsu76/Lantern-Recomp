@@ -107,6 +107,8 @@ class NativeBuildTests(unittest.TestCase):
             sha = hashlib.sha256(xex.read_bytes()).hexdigest()
             for relative in ['games/green_lantern_rex_hints.toml',
                              'integrations/rexglue/portable_timing.cpp',
+                             'integrations/rexglue/runtime_save_slots.cpp',
+                             'integrations/rexglue/runtime_languages.cpp',
                              'integrations/rexglue/plugin-only/CMakeLists.txt',
                              'integrations/rexglue/patches/0001-vulkan-driver-pipeline-cache.patch',
                              'integrations/rexglue/patches/0003-vulkan-deferred-pipelines.patch',
@@ -150,7 +152,7 @@ class NativeBuildTests(unittest.TestCase):
                     build.mkdir(parents=True, exist_ok=True)
                     (build / ('aster_green_lantern.exe' if os.name == 'nt' else 'aster_green_lantern')).write_bytes(b'fresh generated executable')
                 return {'stdout': 'ok', 'stderr': '', 'returncode': 0}
-            with patch.dict('os.environ', {'ASTER_USE_LEGACY_SDK': '1'}), \
+            with patch.dict('os.environ', {'ASTER_USE_LEGACY_SDK': '0'}), \
                     patch('native_port.native_build.XEX_SHA256', sha), \
                     patch('native_port.native_build.inspect_source', return_value=info), \
                     patch('native_port.native_build.ensure_sdk', return_value=prefix), \
@@ -159,11 +161,16 @@ class NativeBuildTests(unittest.TestCase):
                     patch('native_port.native_build.toolchain', return_value=('cmake', 'ninja', 'clang++', {})), \
                     patch('native_port.native_build.run_process', side_effect=process) as command, \
                     patch('native_port.native_cache.build_cache_plugin', return_value=cache), \
-                    patch('native_port.native_cache.build_presenter_filter', return_value=cache):
+                    patch('native_port.native_cache.build_presenter_filter', return_value=cache), \
+                    patch('native_port.native_cache.build_arena_lifetime', return_value=cache):
                 first = build_native(game, work)
                 count = command.call_count
                 second = build_native(game, work)
                 self.assertEqual(first, second)
+                project = root / Path(first['binary']).parent.parent / 'project'
+                for name in ('runtime_save_slots.cpp', 'runtime_languages.cpp'):
+                    self.assertIn(name, (project / 'CMakeLists.txt').read_text())
+                    self.assertEqual((project / name).read_text(), 'public fixture')
                 self.assertEqual(command.call_count, count, 'cache hit must not run codegen/compiler')
                 before_codegen = sum('codegen' in call.args[0] for call in command.call_args_list)
                 (root / '.aster/config/native-install.json').unlink()

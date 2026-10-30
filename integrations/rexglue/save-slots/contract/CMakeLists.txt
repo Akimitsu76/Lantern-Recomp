@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.25)
+project(AsterSaveSlotContract LANGUAGES CXX)
+find_package(rexglue 0.10.0 EXACT CONFIG REQUIRED)
+add_executable(aster_save_slot_contract main.cpp)
+target_compile_features(aster_save_slot_contract PRIVATE cxx_std_23)
+target_include_directories(aster_save_slot_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aster_save_slot_contract PRIVATE rex::runtime)

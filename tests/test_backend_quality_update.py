@@ -14,7 +14,9 @@ def current_manifest(renderer):
         '0031-vulkan-fxaa-quality-parity.patch': 'verified',
         '0032-refresh-unchanged-surface-size.patch': 'verified',
         '0033-retire-present-queue.patch': 'verified',
-        '0034-bounded-hd-source-cache.patch': 'verified'}}},
+        '0034-bounded-hd-source-cache.patch': 'verified',
+        '0035-configurable-controls.patch': 'verified',
+        '0037-native-save-slots.patch': 'verified'}}},
         'renderer': renderer, 'presentation_backend': 'sdk-spatial-fsr1'}
 
 

@@ -1,0 +1,279 @@
+--- a/src/input/input_system.cpp
++++ b/src/input/input_system.cpp
+@@ -10,6 +10,8 @@
+  */
+ 
+ #include <algorithm>
++#include <atomic>
++#include <rex/input/controller_remap.h>
+ #include <cmath>
+ 
+ #include <rex/dbg.h>
+@@ -27,6 +29,11 @@
+ REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput")
+     .allowed({"sdl", "xinput"});
+ 
++REXCVAR_DEFINE_STRING(aster_pad_map, "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15", "Aster/Input", "Logical-to-physical gamepad bindings");
++REXCVAR_DEFINE_STRING(aster_pad_axes, "0,0,0,0,0", "Aster/Input", "Swap sticks, invert LX, LY, RX, RY");
++REXCVAR_DEFINE_INT32(aster_pad_deadzone, 0, "Aster/Input", "Additional stick deadzone percent").range(0, 30);
++REXCVAR_DEFINE_STRING(aster_controller_layout, "auto", "Aster/Input", "Controller prompt family").allowed({"auto", "xbox", "playstation"});
++
+ REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
+ namespace rex::input {
+ 
+@@ -36,8 +43,40 @@
+ // a real pad off guest user 0. SlotAssignment routes them by their synthetic
+ // flag and never reads this value.
+ constexpr uint32_t kSyntheticOrdinal = UINT32_MAX;
++std::array<std::atomic<uint8_t>, kMaxGuestUsers> prompt_families{};
++const controller_remap::Config& RemapConfiguration() {
++  // Launch-time preferences: no file parsing or per-poll allocations.
++  static const controller_remap::Config config = [] {
++    controller_remap::Config value;
++    if (!controller_remap::Parse(REXCVAR_GET(aster_pad_map), REXCVAR_GET(aster_pad_axes),
++                                REXCVAR_GET(aster_pad_deadzone), value)) {
++      REXLOG_WARN("Aster: invalid controller map; using unchanged physical controls");
++      value = controller_remap::Config{};
++    }
++    return value;
++  }();
++  return config;
++}
++void RemapGamepad(X_INPUT_GAMEPAD& gamepad) {
++  controller_remap::State raw{uint16_t(gamepad.buttons), gamepad.left_trigger,
++      gamepad.right_trigger, int16_t(gamepad.thumb_lx), int16_t(gamepad.thumb_ly),
++      int16_t(gamepad.thumb_rx), int16_t(gamepad.thumb_ry)};
++  const auto remapped = controller_remap::Apply(raw, RemapConfiguration());
++  gamepad.buttons = remapped.buttons;
++  gamepad.left_trigger = remapped.lt; gamepad.right_trigger = remapped.rt;
++  gamepad.thumb_lx = remapped.lx; gamepad.thumb_ly = remapped.ly;
++  gamepad.thumb_rx = remapped.rx; gamepad.thumb_ry = remapped.ry;
++}
+ 
+ }  // namespace
++
++ControllerFamily GetControllerPromptFamily(uint32_t user_index) {
++  if (REXCVAR_GET(aster_controller_layout) == "playstation") return ControllerFamily::kPlayStation;
++  if (REXCVAR_GET(aster_controller_layout) == "xbox") return ControllerFamily::kXbox;
++  return user_index < kMaxGuestUsers ?
++      ControllerFamily(prompt_families[user_index].load(std::memory_order_relaxed)) :
++      ControllerFamily::kUnknown;
++}
+ 
+ InputSystem::InputSystem(rex::ui::Window* window) : window_(window) {}
+ 
+@@ -233,7 +272,10 @@
+     if (driver->GetDeviceState(id, &state) != X_ERROR_SUCCESS) {
+       continue;
+     }
++    // Activity belongs to the raw physical device, even if its action is unbound.
+     active_devices_.Observe(user_index, id, state.gamepad);
++    const DeviceInfo* device_info = DeviceInfoFor(id);
++    if (device_info && !device_info->synthetic) RemapGamepad(state.gamepad);
+     if (!any) {
+       merged = state;
+       any = true;
+@@ -243,8 +285,19 @@
+   }
+ 
+   if (!any) {
+-    return X_ERROR_DEVICE_NOT_CONNECTED;
+-  }
++    if (user_index < kMaxGuestUsers) prompt_families[user_index].store(0, std::memory_order_relaxed);
++    return X_ERROR_DEVICE_NOT_CONNECTED;
++  }
++  const DeviceInfo* active = DeviceInfoFor(active_devices_.Active(user_index));
++  if (!active) {
++    for (DeviceId id : ids) {
++      const DeviceInfo* candidate = DeviceInfoFor(id);
++      if (candidate && !candidate->synthetic) { active = candidate; break; }
++    }
++  }
++  const auto family = active && !active->synthetic ? active->family : ControllerFamily::kXbox;
++  if (user_index < kMaxGuestUsers)
++    prompt_families[user_index].store(uint8_t(family), std::memory_order_relaxed);
+   if (out_state) {
+     *out_state = merged;
+   }
+@@ -311,6 +364,15 @@
+     }
+     X_RESULT result = driver->GetDeviceKeystroke(id, flags, out_keystroke);
+     if (result == X_ERROR_SUCCESS) {
++      const DeviceInfo* info = DeviceInfoFor(id);
++      if (info && !info->synthetic) {
++        const uint16_t key = controller_remap::RemapKeystroke(
++            uint16_t(out_keystroke->virtual_key), RemapConfiguration());
++        if (!key) { any_connected = true; continue; }
++        out_keystroke->virtual_key = key;
++        if (user_index < kMaxGuestUsers)
++          prompt_families[user_index].store(uint8_t(info->family), std::memory_order_relaxed);
++      }
+       out_keystroke->user_index = static_cast<uint8_t>(user_index);
+       return result;
+     }
+--- a/src/input/sdl/sdl_input_driver.cpp
++++ b/src/input/sdl/sdl_input_driver.cpp
+@@ -161,6 +161,16 @@
+     SDL_GUIDToString(SDL_GetJoystickGUID(SDL_GetGamepadJoystick(controller.sdl)), guid_text,
+                      static_cast<int>(sizeof(guid_text)));
+     info.guid = guid_text;
++    switch (SDL_GetGamepadType(controller.sdl)) {
++      case SDL_GAMEPAD_TYPE_PS3:
++      case SDL_GAMEPAD_TYPE_PS4:
++      case SDL_GAMEPAD_TYPE_PS5:
++        info.family = ControllerFamily::kPlayStation;
++        break;
++      default:
++        info.family = ControllerFamily::kXbox;
++        break;
++    }
+     info.synthetic = false;
+     out.push_back(info);
+   }
+--- a/src/input/xinput/xinput_input_driver.cpp
++++ b/src/input/xinput/xinput_input_driver.cpp
+@@ -145,6 +145,7 @@
+     DeviceInfo info;
+     info.id = DeviceForSlot(slot);
+     info.name = "XInput Controller";
++    info.family = ControllerFamily::kXbox;
+     info.synthetic = false;
+     out.push_back(info);
+   }
+--- a/include/rex/input/device.h
++++ b/include/rex/input/device.h
+@@ -22,11 +22,14 @@
+ /// device took the freed slot.
+ enum class DeviceId : uint64_t { kInvalid = 0 };
+ 
++enum class ControllerFamily : uint8_t { kUnknown = 0, kXbox = 1, kPlayStation = 2 };
++
+ struct DeviceInfo {
+   DeviceId id = DeviceId::kInvalid;
+   uint32_t ordinal = 0;  // connection order, assigned by InputSystem
+   std::string name;
+   std::string guid;
++  ControllerFamily family = ControllerFamily::kUnknown;
+   bool synthetic = false;  // keyboard/mouse emulation or the NOP stand-in
+ };
+ 
+--- /dev/null
++++ b/include/rex/input/controller_remap.h
+@@ -0,0 +1,117 @@
++#pragma once
++// Original Aster control preferences; no dependency on a platform input backend.
++#include <array>
++#include <charconv>
++#include <cstdint>
++#include <string_view>
++#include <rex/input/device.h>
++
++namespace rex::input {
++// The runtime observes the last active assigned pad, with an explicit override.
++// Game/UI consumers use this to select actual prompt artwork; detection alone
++// does not change a game's existing atlas or text.
++ControllerFamily GetControllerPromptFamily(uint32_t user_index = 0);
++namespace controller_remap {
++constexpr uint8_t kNone = 16;
++constexpr std::array<uint16_t, 16> kMasks{0x1000,0x2000,0x4000,0x8000,0x0100,0x0200,
++    0,0,0x0020,0x0010,0x0040,0x0080,0x0001,0x0002,0x0004,0x0008};
++constexpr std::array<uint16_t,16> kKeys{0x5800,0x5801,0x5802,0x5803,0x5805,0x5804,
++    0x5806,0x5807,0x5815,0x5814,0x5816,0x5817,0x5810,0x5811,0x5812,0x5813};
++struct Config {
++  std::array<uint8_t,16> map{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
++  std::array<bool,5> axes{}; // swap, invert LX, LY, RX, RY
++  uint32_t deadzone = 0;
++};
++struct State {
++  uint16_t buttons;
++  uint8_t lt, rt;
++  int16_t lx, ly, rx, ry;
++};
++template <size_t N>
++inline bool ParseCsv(std::string_view text, std::array<uint8_t,N>& out, uint32_t maximum) {
++  for (size_t i=0;i<N;++i) {
++    size_t comma=text.find(',');
++    const auto part=text.substr(0,comma);
++    uint32_t value=0;
++    auto result=std::from_chars(part.data(),part.data()+part.size(),value);
++    if (part.empty() || result.ec!=std::errc{} || result.ptr!=part.data()+part.size() || value>maximum) return false;
++    out[i]=uint8_t(value);
++    if (i+1==N) return comma==std::string_view::npos;
++    if (comma==std::string_view::npos) return false;
++    text.remove_prefix(comma+1);
++  }
++  return false;
++}
++inline bool Parse(std::string_view map_text,std::string_view axis_text,int32_t deadzone,Config& out) {
++  Config candidate;
++  std::array<uint8_t,5> axes{};
++  if (!ParseCsv(map_text,candidate.map,16) || !ParseCsv(axis_text,axes,1) || deadzone<0 || deadzone>30) return false;
++  std::array<bool,16> seen{};
++  for (auto source:candidate.map) {
++    if (source==kNone) continue;
++    if (seen[source]) return false;
++    seen[source]=true;
++  }
++  for (uint8_t target: {uint8_t(0),uint8_t(1),uint8_t(8),uint8_t(9)})
++    if (candidate.map[target]==kNone) return false;
++  for (size_t i=0;i<5;++i) candidate.axes[i]=axes[i]!=0;
++  candidate.deadzone=uint32_t(deadzone);out=candidate;return true;
++}
++inline uint8_t Value(const State& state,uint8_t source) {
++  if (source==6) return state.lt;
++  if (source==7) return state.rt;
++  return source<16 && (state.buttons&kMasks[source]) ? 255 : 0;
++}
++inline int16_t Axis(int16_t value,bool invert,uint32_t deadzone) {
++  int32_t result=value;
++  if (deadzone) {
++    const int32_t magnitude=result<0 ? -result : result;
++    const int32_t threshold=int32_t(deadzone*32767/100);
++    const int32_t scaled=magnitude<=threshold ? 0 : (magnitude-threshold)*32767/(32767-threshold);
++    result=result<0 ? -scaled : scaled;
++  }
++  if (invert) result=-result;
++  if (result>32767) result=32767;
++  if (result<-32768) result=-32768;
++  return int16_t(result);
++}
++inline State Apply(const State& source,const Config& config) {
++  State result=source;
++  // Preserve Guide/reserved bits; only configured game commands are replaced.
++  result.buttons=source.buttons&0x0c00;
++  for (size_t i=0;i<16;++i) {
++    const uint8_t value=Value(source,config.map[i]);
++    if (i==6) result.lt=value;
++    else if (i==7) result.rt=value;
++    else if (value>(config.map[i]==6 || config.map[i]==7 ? 30 : 0)) result.buttons|=kMasks[i];
++  }
++  if (config.axes[0]) {
++    const auto x=result.lx,y=result.ly;result.lx=result.rx;result.ly=result.ry;result.rx=x;result.ry=y;
++  }
++  result.lx=Axis(result.lx,config.axes[1],config.deadzone);
++  result.ly=Axis(result.ly,config.axes[2],config.deadzone);
++  result.rx=Axis(result.rx,config.axes[3],config.deadzone);
++  result.ry=Axis(result.ry,config.axes[4],config.deadzone);
++  return result;
++}
++inline uint16_t RemapKeystroke(uint16_t key,const Config& config) {
++  for (size_t source=0;source<16;++source) if (kKeys[source]==key) {
++    for (size_t target=0;target<16;++target) if (config.map[target]==source) return kKeys[target];
++    return 0;
++  }
++  // Directions generated by XInputGetKeystroke follow stick swapping/inversion.
++  if ((key>=0x5820 && key<=0x5827) || (key>=0x5830 && key<=0x5837)) {
++    constexpr int8_t xs[8]={0,0,1,-1,-1,1,1,-1};
++    constexpr int8_t ys[8]={1,-1,0,0,1,1,-1,-1};
++    size_t stick=key>=0x5830 ? 1 : 0;
++    size_t direction=key&7;
++    if (config.axes[0]) stick=1-stick;
++    int x=xs[direction],y=ys[direction];
++    if (config.axes[1+stick*2]) x=-x;
++    if (config.axes[2+stick*2]) y=-y;
++    for (size_t i=0;i<8;++i) if (xs[i]==x && ys[i]==y) return uint16_t((stick ? 0x5830 : 0x5820)+i);
++  }
++  return key;
++}
++} // namespace controller_remap
++} // namespace rex::input

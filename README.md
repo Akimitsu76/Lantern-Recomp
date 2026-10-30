@@ -12,6 +12,19 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
+## Slots no menu — integração 24, v0.1.4-rc.5
+
+**New Game** e **Continue** abrem um seletor de seis campanhas dentro do jogo.
+O Slot 1 preserva o save existente; os demais têm armazenamento separado por
+usuário, compartilhado entre as configurações gráficas e de FPS. Iniciar sobre
+um slot ocupado exige confirmação e backup. Após atualizar o launcher, use
+**Gerar port/Atualizar port** uma vez para instalar o backend 24.
+
+As fontes são comuns ao AppImage e ao .exe. A troca de campanhas foi testada no
+Linux; o launcher Windows abriu em Wine, mas gameplay D3D12 nativo ainda precisa
+de validação. O aviso original de sobrescrita pode aparecer também em slot
+vazio. Veja [funcionamento e limites dos slots](docs/SAVE_SLOTS.md).
+
 ## Integração 23 e cache de texturas — v0.1.4-rc.4, 29/10/2026
 
 Esta pré-release experimental reúne o launcher da rc.3 e o backend de integração

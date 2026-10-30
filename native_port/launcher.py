@@ -18,7 +18,9 @@ from tkinter import filedialog, messagebox, ttk
 
 from games.green_lantern import GreenLantern
 from . import __version__, launcher_update
-from . import graphics, settings
+from . import controls, graphics, languages, settings
+from .controls_ui import ControlsPanel
+from .ui_languages import LanguageControls
 from .native_build import build_native, read_install, backend_update_reason
 from .paths import project_root, python_command, external_env
 from .diagnostics import diagnostics
@@ -266,7 +268,7 @@ class Launcher:
         header = tk.Frame(shell, bg=BG, padx=26, pady=15)
         header.pack(fill='x')
         brand = tk.Frame(header, bg=BG)
-        brand.pack(side='left', padx=(0, 34))
+        brand.pack(side='left', padx=(0, 20))
         tk.Label(brand, text='GREEN LANTERN', bg=BG, fg=INK,
                  font=('DejaVu Sans Condensed', 20, 'bold')).pack(anchor='w')
         tk.Label(brand, text='ASTER NATIVE  /  EXPERIMENTAL', bg=BG, fg=ACCENT,
@@ -278,6 +280,7 @@ class Launcher:
         self.play_tab = tk.Frame(self.tabs, bg=BG, padx=24, pady=10)
         self.build_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
         self.graphics_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
+        self.controls_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
         self.hd_tab = tk.Toplevel(self.root, bg=BG, padx=18, pady=14)
         self.hd_tab.title('Aster · Ferramentas de texturas')
         self.hd_tab.geometry('900x330')
@@ -288,15 +291,16 @@ class Launcher:
         self.update_tab = tk.Frame(self.tabs, bg=BG, padx=26, pady=16)
         self.nav_buttons, self.nav_lines = {}, {}
         for page, title in [(self.play_tab, 'INÍCIO'), (self.graphics_tab, 'GRÁFICOS'),
+                            (self.controls_tab, 'CONTROLES'),
                             (self.build_tab, 'PREPARAR'), (self.game_tab, 'JOGO'),
                             (self.diag_tab, 'DIAGNÓSTICO'), (self.update_tab, 'ATUALIZAÇÕES')]:
             self.tabs.add(page, text=title)
             item = tk.Frame(navigation, bg=BG)
-            item.pack(side='left', fill='y', padx=(0, 17))
+            item.pack(side='left', fill='y', padx=(0, 12))
             button = tk.Button(item, text=title, bg=BG, fg=MUTED,
                                activebackground=BG, activeforeground=INK,
                                relief='flat', bd=0, highlightthickness=0,
-                               padx=0, pady=12, font=('DejaVu Sans Condensed', 12, 'bold'),
+                               padx=0, pady=12, font=('DejaVu Sans Condensed', 11, 'bold'),
                                cursor='hand2', command=lambda tab=page: self.tabs.select(tab))
             button.pack(fill='both', expand=True)
             line = tk.Frame(item, bg=BG, height=2)
@@ -337,6 +341,8 @@ class Launcher:
         self._build_play_tab()
         self._build_generation_tab()
         self._build_graphics_tab()
+        self.controls_panel = ControlsPanel(self.controls_tab, self.cfg['controls'])
+        self.controls_panel.pack(fill='both', expand=True)
         self._build_game_tab()
         self._build_diag_tab()
         self._build_update_tab()
@@ -852,13 +858,24 @@ class Launcher:
 
     # --------------------------------------------------------------- game tab
     def _build_game_tab(self):
-        tk.Label(self.game_tab, text='Jogo e arquivos', bg=BG, fg=INK,
+        self.game_canvas = tk.Canvas(self.game_tab, bg=BG, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.game_tab, orient='vertical', command=self.game_canvas.yview)
+        self.game_canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side='right', fill='y')
+        self.game_canvas.pack(side='left', fill='both', expand=True)
+        page = tk.Frame(self.game_canvas, bg=BG)
+        window = self.game_canvas.create_window(0, 0, window=page, anchor='nw')
+        page.bind('<Configure>', lambda _: self.game_canvas.configure(scrollregion=self.game_canvas.bbox('all')))
+        self.game_canvas.bind('<Configure>', lambda event: self.game_canvas.itemconfigure(window, width=event.width))
+        self.language_controls = LanguageControls(page, self.cfg['languages'])
+        self.language_controls.pack(fill='x', pady=(0, 12))
+        tk.Label(page, text='Jogo e arquivos', bg=BG, fg=INK,
                  font=(FONT, 17, 'bold')).pack(anchor='w')
-        tk.Label(self.game_tab, text='O dump precisa conter default.xex. A pasta de trabalho e os '
+        tk.Label(page, text='O dump precisa conter default.xex. A pasta de trabalho e os '
                   'perfis ficam em .aster, separados dos arquivos originais.',
                  bg=BG, fg=MUTED, font=(FONT, 9), wraplength=1050,
                  justify='left').pack(anchor='w', pady=(4, 10))
-        workspace_card = self._card(self.game_tab, fill='x')
+        workspace_card = self._card(page, fill='x')
         left = tk.Frame(workspace_card, bg=CARD)
         left.pack(fill='x', padx=16, pady=13)
         self._caps(left, 'Diretório de trabalho').pack(anchor='w')
@@ -888,7 +905,7 @@ class Launcher:
         tk.Label(left, text='Gerar port valida a revisão do dump, gera C++ e compila localmente. '
                   'Requer CMake, Ninja e Clang/C++23 (Build Tools + Windows SDK no Windows).', bg=CARD, fg=MUTED,
                  font=(FONT, 8)).pack(anchor='w', pady=(6, 0))
-        actions = tk.Frame(self.game_tab, bg=BG)
+        actions = tk.Frame(page, bg=BG)
         actions.pack(fill='x', pady=(10, 0))
         self.compile_button = ttk.Button(actions, text='Gerar port nativo', style='Secondary.TButton',
                                          command=self.generate_native, state='disabled')
@@ -899,7 +916,7 @@ class Launcher:
         self.clear_button = ttk.Button(actions, text='Limpar cache…', style='Ghost.TButton',
                                        command=self.clear_cache)
         self.clear_button.pack(side='left', padx=(6, 0))
-        self.summary = tk.Text(self.game_tab, height=4, bg=BG, fg=INK, relief='flat',
+        self.summary = tk.Text(page, height=4, bg=BG, fg=INK, relief='flat',
                                wrap='word', padx=12, pady=12, font=(FONT, 9),
                                highlightthickness=1, highlightbackground=LINE)
         self.summary.pack(fill='both', expand=True, pady=(10, 0))
@@ -908,7 +925,7 @@ class Launcher:
                          'Para jogar, o host local e a referência FSI precisam existir; o launcher '
                          'executa --validar antes de abrir a sessão. O modo 30 fps usa o perfil '
                          'principal. Todos os modos compartilham o save deste usuário.')
-        self.requirements = tk.Frame(self.game_tab, bg=CARD_ALT, highlightthickness=1,
+        self.requirements = tk.Frame(page, bg=CARD_ALT, highlightthickness=1,
                                      highlightbackground='#3a4f57')
         self.requirements.pack(fill='x', pady=(10, 0))
         tk.Label(self.requirements, text='Para outro computador com o mesmo dump', bg=CARD_ALT,
@@ -918,6 +935,22 @@ class Launcher:
                  'nada do jogo é escrito fora do perfil isolado.', bg=CARD_ALT, fg=MUTED,
                  font=(FONT, 8), anchor='w', justify='left', wraplength=1030).pack(fill='x', padx=12,
                                                                                   pady=(0, 8))
+        def scroll(event):
+            if getattr(event, 'num', None) == 4:
+                amount = -3
+            elif getattr(event, 'num', None) == 5:
+                amount = 3
+            else:
+                amount = -int(event.delta / 120) or (-1 if event.delta > 0 else 1)
+            self.game_canvas.yview_scroll(amount, 'units')
+            return 'break'
+        def bind_scroll(widget):
+            if not isinstance(widget, (ttk.Combobox, ttk.Spinbox, ttk.Entry)):
+                for event in ('<MouseWheel>', '<Button-4>', '<Button-5>'):
+                    widget.bind(event, scroll)
+            for child in widget.winfo_children():
+                bind_scroll(child)
+        bind_scroll(page)
 
     # -------------------------------------------------------------- diag tab
     def _build_diag_tab(self):
@@ -1381,7 +1414,9 @@ class Launcher:
             return settings.validate({'schema': 2, 'workspace': self.workspace.get(),
                                       'source': self.source.get(), 'build_type': self.build_type.get(),
                                       'jobs': self.jobs.get(), 'hd_texture_pack': self.hd_texture_pack.get(),
-                                      'hd_texture_catalog': self.hd_texture_catalog.get(), 'graphics': self._graphics_data()}, PROJECT)
+                                      'hd_texture_catalog': self.hd_texture_catalog.get(), 'graphics': self._graphics_data(),
+                                      'controls': self.controls_panel.get_settings(),
+                                      'languages': self.language_controls.get()}, PROJECT)
         except tk.TclError as exc:
             raise PortError('SETTINGS_VALUE', 'Número de tarefas inválido.') from exc
 
@@ -1482,6 +1517,10 @@ class Launcher:
             command += ['--present-mode', 'immediate']
         if self.hd_texture_pack.get() and data['texture_quality'] in ('high', 'ultra'):
             command += ['--hd-texture-pack', self.hd_texture_pack.get()]
+        command += ['--controls-json', json.dumps(self.controls_panel.get_settings(),
+                                                 ensure_ascii=False, separators=(',', ':')),
+                    '--subtitle-language', self.language_controls.get()['subtitle_language'],
+                    '--voice-language', self.language_controls.get()['voice_language']]
         command.append(str(folder))
         return command
 

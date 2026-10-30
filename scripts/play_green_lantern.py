@@ -17,7 +17,7 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-from native_port import graphics  # noqa: E402
+from native_port import controls, graphics, languages  # noqa: E402
 
 EXPECTED_XEX = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 MAIN_BINARY = '.aster/build/rex-green/aster_green_lantern'
@@ -94,6 +94,11 @@ def parse_arguments(argv=None):
                         help='VSync. Padrão ligado; desligado é experimental. O modo ilimitado exige off.')
     parser.add_argument('--present-mode', choices=('auto', 'mailbox', 'fifo', 'immediate'),
                         help='Apresentação. O modo ilimitado exige immediate.')
+    parser.add_argument('--controls-json', help='Preferências tipadas de teclado/controle fornecidas pelo launcher.')
+    parser.add_argument('--subtitle-language', choices=languages.TEXT_LANGUAGES,
+                        help='Idioma original da interface e legendas, independente da voz.')
+    parser.add_argument('--voice-language', choices=languages.VOICE_LANGUAGES,
+                        help='Idioma da dublagem presente no dump, independente das legendas.')
     return parser, parser.parse_args(argv)
 
 
@@ -224,10 +229,11 @@ def build_command(root, binary, game, run, log, args, target, graphics_data, pre
                '--store_shaders=true',
                f'--async_shader_compilation={str(graphics_data["shader_mode"] == "async").lower()}',
                f'--vsync={str(target != "unlimited").lower()}',
-               '--mnk_mode=true', '--allow_game_relative_writes=false',
+               '--allow_game_relative_writes=false',
                f'--game_data_root={game}', f'--user_data_root={run / "user"}',
                f'--cache_root={run / "cache"}', f'--log_file={log}', '--log_level=info']
     command.extend(graphics.cvar_arguments(graphics_data))
+    command.extend(session_preferences_arguments(args))
     command.extend(mode_flags(target))
     if present_mode == 'fifo':
         command.extend(['--vulkan_allow_present_mode_immediate=false',
@@ -242,6 +248,33 @@ def build_command(root, binary, game, run, log, args, target, graphics_data, pre
                         '--vulkan_allow_present_mode_mailbox=false',
                         '--vulkan_allow_present_mode_fifo_relaxed=false'])
     return command
+
+
+def session_preferences_arguments(args, game_root=None):
+    """Typed CLI preferences become real runtime CVars, never shell fragments.
+
+    Legacy direct CLI calls retain their existing keyboard behavior unless the
+    new preferences were explicitly supplied. The launcher always supplies them.
+    Availability is checked before a game process is launched, not at editing.
+    """
+    encoded = getattr(args, 'controls_json', None)
+    arguments = []
+    if encoded is None:
+        arguments.append('--mnk_mode=true')
+    else:
+        if not isinstance(encoded, str) or len(encoded) > 16384:
+            raise PortError('CONTROLS_VALUE', 'Configuração de controles excede o limite de tamanho.')
+        try:
+            data = json.loads(encoded)
+        except (ValueError, TypeError) as exc:
+            raise PortError('CONTROLS_VALUE', 'Configuração JSON de controles inválida.') from exc
+        arguments.extend(controls.cvar_arguments(data))
+    text = getattr(args, 'subtitle_language', None)
+    voice = getattr(args, 'voice_language', None)
+    if text is not None or voice is not None:
+        data = {'subtitle_language': text or 'auto', 'voice_language': voice or 'auto'}
+        arguments.extend(languages.cvar_arguments(data, game_root))
+    return arguments
 
 
 def presentation_arguments(data, installation, parser):
@@ -364,6 +397,10 @@ def main():
         game = game.expanduser().resolve(strict=True)
     except OSError as exc:
         parser.error(f'Pasta do jogo não encontrada: {exc}')
+    try:
+        session_preferences_arguments(args, game)
+    except PortError as exc:
+        parser.error(str(exc))
 
     binary = root / binary_rel
     if installation:
@@ -408,8 +445,11 @@ def main():
           f'apresentação={present_mode} | shaders={graphics_data["shader_mode"]}', flush=True)
     if not graphics_data['vsync']:
         print('VSync desligado é experimental: pode aumentar uso da GPU e causar tearing.', flush=True)
-    print('Enter: Start | Espaço: A | Backspace: B | WASD: stick esquerdo | L: X', flush=True)
-    print('Setas: stick direito | P: Y | Q/E: LT/RT | 1/3: LB/RB | F/K: LS/RS | Tab: Back | Shift+setas: direcional', flush=True)
+    if args.controls_json is not None:
+        print('Controles personalizados do launcher aplicados; consulte a aba Controles para ver as associações.', flush=True)
+    else:
+        print('Enter: Start | Espaço: A | Backspace: B | WASD: stick esquerdo | L: X', flush=True)
+        print('Setas: stick direito | P: Y | Q/E: LT/RT | 1/3: LB/RB | F/K: LS/RS | Tab: Back | Shift+setas: direcional', flush=True)
     print(f'Jogo: {game}\nSaves: {run / "user"}\nLog desta sessão: {log}', flush=True)
     env = presentation_environment(binary, graphics_data, external_env(), parser, installation)
     env.pop('ASTER_EFFECTS_DIAGNOSTICS', None)

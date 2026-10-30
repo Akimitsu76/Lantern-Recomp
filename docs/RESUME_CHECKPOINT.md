@@ -1,3 +1,49 @@
+# Entrega de slots no menu —30/10/2026 (backend24 /0.1.4-rc.5)
+
+New Game e Continue agora abrem seis slots DENTRO da janela do jogo, via
+runtime_save_slots.cpp. Continue relê o container original antes de aplicar o
+estado; Slot1 conserva o caminho legado. Seleção ocupada cria backup após
+confirmação. Retornar da seleção de jogadores cancela a troca de slot.
+Veja [SAVE_SLOTS.md](SAVE_SLOTS.md), incluindo a limitação do aviso original
+redundante em destino vazio e os limites da validação Windows.
+
+Receita comum Linux/Windows inclui os dois CPPs novos eSDK0035/0037; integração
+mínima24. Fontes empacotadas nos dois launchersrc.5 e verificadas byte a byte.
+Artefatos locais emdist/native-slots-rc5: AppImage, EXE eSHA256SUMS. Ambos tiveram
+abertura gráfica; oWindows foi verificado emWine, sem certificaçãoD3D12 real.
+Não houvepush nemrelease. OworkflowWindows foi atualizado, mas .github/ está
+IGNORADO por.git/info/exclude: a publicação precisa adicionar oarquivo
+explicitamente após revisão. O prompt local está em
+.aster/reports/features-2026-10-30/PROMPT_OPENCODE_GITHUB_SLOTS.md.
+
+Evidências privadas em.aster/reports/features-2026-10-30; sessões207–209.
+Campanha novaSlot2 chegou à fase1; ContinueSlot1, comSlot2 anteriormente emRAM,
+carregou a fase de voo. Backup e rollback do menu de jogadores conferidos na
+build pública em60FPS. XEX e três arquivos do perfil humano permaneceram
+intactos. Não repetir a falha de reconstruir bibliotecas de uma sessão ativa:
+a sessão207 terminou comSIGBUS por erro da automação, não por falha funcional
+identificada no jogo; a208 terminou comexit0. Cada teste novo usa pasta imutável.
+
+PSglyphs originais dentro do jogo continuam pendentes: a abaControles e o
+remapeamento não devem ser anunciados como troca completa desses assets.
+
+--- Checkpoints anteriores preservados abaixo ---
+
+# Prioridade atual —30/10/2026
+
+O usuário pediu SOMENTE slots no menu New Game/Continue, ícones PlayStation no
+jogo+remapeamento na abaControles, e escolha de voz/legendas com português.
+Back/Select foi confirmado como funcionamento normal; usuário concluiu fase1 e
+considerou shaders jogáveis/resolvidos. Não voltar às prioridades gráficas antigas.
+
+Há fontes novas parcialmente implementadas, AINDA NÃO integradas/validadas dentro
+do jogo ou empacotadas. Não publicar como atualização pronta. Estado preciso,
+arquivos, testes e próximos passos estão em
+`.aster/reports/features-2026-10-30/CONTINUE.md`. Auditoria não encontrou os três
+recursos nas refs locais deOpenCode/rc4. Sem push/release nesta rodada.
+
+## Histórico anterior
+
 # Retomada e entrega v0.1.4-rc.4 — 29/10/2026
 
 O usuário autorizou retomar o jogo após o launcher e pediu estabilidade urgente,

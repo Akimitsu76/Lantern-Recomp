@@ -1,0 +1,241 @@
+name: Validate Windows spatial graphics SDK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'native_port/spatial_sdk.py'
+      - 'native_port/prerequisites.py'
+      - 'native_port/runtime_evidence.py'
+      - 'scripts/play_green_lantern.py'
+      - 'tests/test_runtime_evidence.py'
+      - 'native_port/native_build.py'
+      - 'native_port/texture_tools.py'
+      - 'native_port/texture_ui.py'
+      - 'games/green_lantern_ui.json'
+      - 'tests/test_texture_ui.py'
+      - 'tests/test_ui_launch.py'
+      - 'tests/test_ui_coverage_native.py'
+      - 'integrations/rexglue/ui-coverage-contract/**'
+      - 'native_port/effects_diagnostics.py'
+      - 'tests/test_effects_diagnostics.py'
+      - 'tests/test_armed_effects_diagnostics.py'
+      - 'native_port/xctd.py'
+      - 'integrations/rexglue/portable_timing.cpp'
+      - 'integrations/rexglue/runtime_save_slots.cpp'
+      - 'integrations/rexglue/runtime_languages.cpp'
+      - 'integrations/rexglue/save-slots/**'
+      - 'integrations/rexglue/patches/0035-configurable-controls.patch'
+      - 'integrations/rexglue/patches/0037-native-save-slots.patch'
+      - 'tests/test_save_slots.py'
+      - 'tests/test_runtime_save_slots.py'
+      - 'tests/test_controls.py'
+      - 'tests/test_runtime_languages.py'
+      - 'tests/test_portable_timing.py'
+      - 'integrations/rexglue/texture-inspection/**'
+      - 'integrations/rexglue/patches/0004-embedded-spatial-sdk.patch'
+      - 'integrations/rexglue/patches/0005-texture-inspection-capture.patch'
+      - 'integrations/rexglue/patches/0006-reviewed-hd-texture-override.patch'
+      - 'integrations/rexglue/patches/0007-isolated-sdk-install.patch'
+      - 'integrations/rexglue/patches/0008-hd-selection-cache.patch'
+      - 'integrations/rexglue/patches/0009-multi-material-hd-pack.patch'
+      - 'integrations/rexglue/patches/0010-gameplay-texture-capture-arm.patch'
+      - 'integrations/rexglue/patches/0011-hd-texture-scales.patch'
+      - 'integrations/rexglue/patches/0012-campaign-texture-library.patch'
+      - 'integrations/rexglue/patches/0013-windows-hd-library-path.patch'
+      - 'integrations/rexglue/patches/0014-portable-mspack-source-path.patch'
+      - 'integrations/rexglue/patches/0015-scaled-resolve-diagnostics.patch'
+      - 'integrations/rexglue/patches/0016-reviewed-ui-alpha-atlas.patch'
+      - 'integrations/rexglue/patches/0017-scaled-texture-offset-flag-parity.patch'
+      - 'integrations/rexglue/patches/0018-effects-sampling-diagnostics.patch'
+      - 'integrations/rexglue/patches/0019-armed-effects-source-index.patch'
+      - 'integrations/rexglue/patches/0020-effects-decision-diagnostics.patch'
+      - 'integrations/rexglue/patches/0021-d3d12-blocking-shader-prewarm.patch'
+      - 'integrations/rexglue/patches/0022-idle-notification-presentation.patch'
+      - 'integrations/rexglue/patches/0023-guest-vblank-video-mode-clock.patch'
+      - 'integrations/rexglue/patches/0024-scaled-pixel-parameter-centers.patch'
+      - 'integrations/rexglue/patches/0025-known-shader-preload-selection.patch'
+      - 'integrations/rexglue/patches/0026-presenter-pipeline-format-cache.patch'
+      - 'integrations/rexglue/patches/0027-worker-only-async-submissions.patch'
+      - 'integrations/rexglue/patches/0028-startup-fullscreen-focus-retry.patch'
+      - 'integrations/rexglue/patches/0029-effects-pixel-constants.patch'
+      - 'integrations/rexglue/patches/0030-ui-uncompressed-coverage.patch'
+      - 'integrations/rexglue/patches/0031-vulkan-fxaa-quality-parity.patch'
+      - 'integrations/rexglue/patches/0032-refresh-unchanged-surface-size.patch'
+      - 'native_port/shader_prepare.py'
+      - 'games/green_lantern_shader_prewarm.json'
+      - 'tests/test_shader_prepare.py'
+      - 'tests/fixtures/shader_prewarm_layout_pinned.inc'
+      - 'integrations/rexglue/patches/0033-retire-present-queue.patch'
+      - 'integrations/rexglue/patches/0034-bounded-hd-source-cache.patch'
+      - 'tests/test_hd_source_cache.py'
+      - 'tests/test_swapchain_retirement.py'
+      - 'tests/fixtures/swapchain_retirement_pinned.inc'
+      - 'tests/test_unchanged_surface_size.py'
+      - 'tests/fixtures/unchanged_surface_size_pinned.inc'
+      - 'tests/test_backend_quality_update.py'
+      - 'integrations/rexglue/swap-aa/**'
+      - 'scripts/generate_swap_aa.py'
+      - 'tests/test_swap_aa.py'
+      - 'tests/test_startup_fullscreen.py'
+      - 'tests/fixtures/startup_fullscreen_focus_pinned.inc'
+      - 'tests/test_async_submission.py'
+      - 'tests/fixtures/async_submission_pinned.inc'
+      - 'tests/test_presenter_format_cache.py'
+      - 'tests/fixtures/presenter_format_cache_pinned.inc'
+      - 'tests/test_d3d12_shader_prewarm.py'
+      - 'tests/test_presenter_idle_notifications.py'
+      - 'tests/test_guest_vblank_clock.py'
+      - 'tests/test_scaled_pixel_centers.py'
+      - 'tests/test_prerequisites.py'
+      - 'tests/test_shader_preload.py'
+      - 'tests/fixtures/scaled_pixel_centers_pinned.inc'
+      - 'tests/fixtures/vblank_clock_pinned.inc'
+      - 'tests/fixtures/d3d12_prewarm_pinned.inc'
+      - 'scripts/build_spatial_sdk.py'
+      - '.github/workflows/native-graphics-windows.yml'
+permissions:
+  contents: read
+jobs:
+  compile-public-runtime:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Configure installed Visual Studio and Windows SDK environment
+        shell: pwsh
+        run: |
+          $finder = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installation = & $finder -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $installation) { throw 'Visual Studio C++ x64 tools are unavailable' }
+          $vcvars = Join-Path $installation 'VC\Auxiliary\Build\vcvars64.bat'
+          $command = '""' + $vcvars + '" >nul && set"'
+          $developmentEnvironment = & $env:ComSpec /d /s /c $command
+          if ($LASTEXITCODE -ne 0) { throw 'vcvars64 failed' }
+          $allowed = @('PATH', 'INCLUDE', 'LIB', 'LIBPATH', 'VCTOOLSINSTALLDIR', 'VCINSTALLDIR', 'WINDOWSSDKDIR', 'WINDOWSSDKVERSION', 'VSCMD_ARG_TGT_ARCH', 'VSCMD_ARG_HOST_ARCH')
+          foreach ($line in $developmentEnvironment) {
+            $name, $value = $line -split '=', 2
+            if ($name.ToUpperInvariant() -in $allowed) {
+              "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            }
+          }
+          $llvm = Join-Path $env:ProgramFiles 'LLVM\bin'
+          if (Test-Path (Join-Path $llvm 'clang-cl.exe')) {
+            $llvm | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+      - name: Check required compiler baseline
+        shell: pwsh
+        run: |
+          clang-cl --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --version
+          ninja --version
+      - name: Build pinned D3D12 EASU and RCAS runtime without game assets
+        shell: pwsh
+        run: |
+          python scripts/build_spatial_sdk.py --allow-download --jobs 4 2>&1 | Tee-Object spatial-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify portable timing callback contract on Windows
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p test_portable_timing.py -v 2>&1 | Tee-Object timing-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_hd_source_cache.py -v 2>&1 | Tee-Object hd-source-cache-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build public Unicode texture helpers against the same SDK
+        shell: pwsh
+        run: |
+          python -m native_port texture-tools 2>&1 | Tee-Object texture-tools.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify font atlas and launch contracts on Windows
+        shell: pwsh
+        run: |
+          $prefixLine = Get-Content spatial-build.log | Where-Object { $_ -like 'SPATIAL_SDK_PREFIX=*' } | Select-Object -Last 1
+          if (-not $prefixLine) { throw 'Built SDK prefix missing from build log' }
+          $env:ASTER_TEST_UI_SDK_PREFIX = $prefixLine.Substring('SPATIAL_SDK_PREFIX='.Length)
+          $env:ASTER_TEST_SAVE_SDK_PREFIX = $env:ASTER_TEST_UI_SDK_PREFIX
+          python -m unittest discover -s tests -p test_runtime_save_slots.py -v 2>&1 | Tee-Object save-slot-native-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_save_slots.py -v 2>&1 | Tee-Object save-slot-storage-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_controls.py -v 2>&1 | Tee-Object controls-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_runtime_languages.py -v 2>&1 | Tee-Object language-native-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_ui_coverage_native.py -v 2>&1 | Tee-Object ui-native-coverage-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_texture_ui.py -v 2>&1 | Tee-Object ui-atlas-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_shader_prepare.py -v 2>&1 | Tee-Object shader-preparation-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_swapchain_retirement.py -v 2>&1 | Tee-Object swapchain-retirement-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_unchanged_surface_size.py -v 2>&1 | Tee-Object unchanged-surface-size-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_swap_aa.py -v 2>&1 | Tee-Object swap-aa-source-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_ui_launch.py -v 2>&1 | Tee-Object ui-launch-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_backend_quality_update.py -v 2>&1 | Tee-Object backend-quality-update-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_play_launcher.py -v 2>&1 | Tee-Object play-launcher-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_effects_diagnostics.py -v 2>&1 | Tee-Object effects-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_armed_effects_diagnostics.py -v 2>&1 | Tee-Object effects-index-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_effects_decision_budget.py -v 2>&1 | Tee-Object effects-decisions-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_d3d12_shader_prewarm.py -v 2>&1 | Tee-Object shader-prewarm-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_presenter_idle_notifications.py -v 2>&1 | Tee-Object presenter-idle-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_guest_vblank_clock.py -v 2>&1 | Tee-Object guest-vblank-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_scaled_pixel_centers.py -v 2>&1 | Tee-Object pixel-center-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_shader_preload.py -v 2>&1 | Tee-Object shader-preload-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_presenter_format_cache.py -v 2>&1 | Tee-Object presenter-format-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_async_submission.py -v 2>&1 | Tee-Object async-submission-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_startup_fullscreen.py -v 2>&1 | Tee-Object startup-fullscreen-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_runtime_evidence.py -v 2>&1 | Tee-Object runtime-evidence-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p test_prerequisites.py -v 2>&1 | Tee-Object prerequisites-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve compilation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-spatial-sdk-evidence
+          path: |
+            spatial-build.log
+            texture-tools.log
+            timing-test.log
+            ui-atlas-test.log
+            ui-launch-test.log
+            effects-test.log
+            effects-index-test.log
+            effects-decisions-test.log
+            shader-prewarm-test.log
+            presenter-idle-test.log
+            guest-vblank-test.log
+            pixel-center-test.log
+            shader-preload-test.log
+            presenter-format-test.log
+            async-submission-test.log
+            startup-fullscreen-test.log
+            runtime-evidence-test.log
+            prerequisites-test.log
+            .aster/tools/texture-tools/**/texture-tools.json
+            .aster/tools/texture-tools/**/logs/*
+            .aster/tools/spatial-sdk/**/logs/*.log
+            .aster/tools/spatial-sdk/**/logs/*-failure.json
+            .aster/tools/spatial-sdk/**/install/aster-spatial-sdk.json
+          include-hidden-files: true
+          retention-days: 14

@@ -2,7 +2,7 @@
 from pathlib import Path
 import json
 import sys
-from . import graphics
+from . import controls, graphics, languages
 from .errors import PortError
 from .workspace import Workspace
 
@@ -12,7 +12,8 @@ SCHEMA = 2
 def defaults(project):
     return {'schema': SCHEMA, 'workspace': str(Path(project) / '.aster'),
             'source': '', 'build_type': 'Release', 'jobs': 1, 'hd_texture_pack': '', 'hd_texture_catalog': '',
-            'graphics': graphics.defaults()}
+            'graphics': graphics.defaults(), 'controls': controls.defaults(),
+            'languages': languages.defaults()}
 
 
 def validate(data, project):
@@ -51,6 +52,8 @@ def validate(data, project):
         elif 'upscaler' not in previous_graphics and previous_graphics.get('preset') == 'custom':
             previous_graphics['upscaler'] = ('fsr1' if previous_graphics.get('texture_quality') in ('high', 'ultra') else 'bilinear')
     result['graphics'] = graphics.validate(previous_graphics)
+    result['controls'] = controls.validate(result['controls'])
+    result['languages'] = languages.validate(result['languages'])
     return result
 
 

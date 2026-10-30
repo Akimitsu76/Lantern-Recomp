@@ -24,7 +24,8 @@ from .workspace import Workspace
 
 XEX_SHA256 = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 SDK_VERSION = '0.10.0'
-INTEGRATION_VERSION = 23
+INTEGRATION_VERSION = 24
+HOST_SOURCES = ('portable_timing.cpp', 'runtime_save_slots.cpp', 'runtime_languages.cpp')
 SDK_ASSETS = {
     'linux-amd64': '0388edb3f8fb1444f1b0ad5d440cb02d9690ac20a76b04fd6b7dcc19f59328a6',
     'win-amd64': 'ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b',
@@ -214,11 +215,13 @@ def backend_update_reason(data):
     patches = recipe.get('sdk_spatial', {}).get('patches', {})
     required = {'0032-refresh-unchanged-surface-size.patch',
                 '0033-retire-present-queue.patch',
-                '0034-bounded-hd-source-cache.patch'}
+                '0034-bounded-hd-source-cache.patch',
+                '0035-configurable-controls.patch',
+                '0037-native-save-slots.patch'}
     if data.get('renderer') == 'vulkan-fsi':
         required.add('0031-vulkan-fxaa-quality-parity.patch')
     if required.difference(patches):
-        return 'Faltam correções de texto/apresentação no backend. Use Gerar port/Atualizar port.'
+        return 'Faltam recursos/correções no backend. Use Gerar port/Atualizar port.'
     return ''
 
 
@@ -298,14 +301,17 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
     if digest_source(xex, cancel) != XEX_SHA256:
         raise PortError('BUILD_REVISION', 'Revisão do XEX ainda não suportada. O original não foi alterado.')
     hints = root / 'games/green_lantern_rex_hints.toml'
-    hook = root / 'integrations/rexglue/portable_timing.cpp'
+    host_sources = {name: root / 'integrations/rexglue' / name for name in HOST_SOURCES}
+    host_hashes = {name: file_hash(path) for name, path in host_sources.items()}
+    hook_hash = hashlib.sha256(json.dumps(host_hashes, sort_keys=True).encode()).hexdigest()
     # Both platforms use the same complete spatial SDK; only developers may
     # explicitly select the old Linux ABI for regression comparisons.
     use_spatial_sdk = os.name == 'nt' or os.environ.get('ASTER_USE_LEGACY_SDK') != '1'
     from .spatial_sdk import spatial_sdk_recipe, build_spatial_sdk
     spatial_recipe = spatial_sdk_recipe(root, host_platform()) if use_spatial_sdk else None
     recipe = {'sdk': SDK_VERSION, 'sdk_spatial': spatial_recipe, 'platform': host_platform(), 'xex': XEX_SHA256,
-              'hints': file_hash(hints), 'hook': file_hash(hook), 'integration': INTEGRATION_VERSION,
+              'hints': file_hash(hints), 'hook': hook_hash, 'host_sources': host_hashes,
+              'integration': INTEGRATION_VERSION,
               'cache_project': file_hash(root / 'integrations/rexglue/plugin-only/CMakeLists.txt') if os.name != 'nt' else None,
               'driver_cache_patch': file_hash(root / 'integrations/rexglue/patches/0001-vulkan-driver-pipeline-cache.patch') if os.name != 'nt' else None,
               'deferred_pipeline_patch': file_hash(root / 'integrations/rexglue/patches/0003-vulkan-deferred-pipelines.patch') if os.name != 'nt' else None,
@@ -341,7 +347,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
         candidate = root / current['binary']
         if (all(previous.get(key) == recipe[key] for key in host_fields)
                 and cpu_sdk_identity(previous.get('sdk_spatial')) == cpu_sdk_identity(recipe.get('sdk_spatial'))
-                and previous.get('integration') in (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+                and previous.get('integration') in range(4, INTEGRATION_VERSION + 1)
                 and candidate.is_file()
                 and current.get('files', {}).get(current['binary']) == file_hash(candidate)):
             reusable_host = candidate
@@ -412,12 +418,20 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
                                 + 'game_root = ' + json.dumps(relative(game), ensure_ascii=False) + '\n\n'
                                 + '[entrypoint]\nfile_path = ' + json.dumps(relative(xex), ensure_ascii=False)
                                 + '\nout_directory_path = "generated/default"\nincludes = ["hints.toml"]\n', encoding='utf8')
-            shutil.copy2(hook, project / 'aster_timing.cpp')
+            copied_sources = []
+            for name, path in host_sources.items():
+                # The explicitly requested legacy regression SDK predates the
+                # slot/control APIs. Public builds always use the full SDK.
+                if not use_spatial_sdk and name != 'portable_timing.cpp':
+                    continue
+                target = 'aster_timing.cpp' if name == 'portable_timing.cpp' else name
+                shutil.copy2(path, project / target)
+                copied_sources.append(target)
             cmake_file = project / 'CMakeLists.txt'
             content = cmake_file.read_text(encoding='utf8')
             content = content.replace('rexglue_setup_target(aster_green_lantern)',
                                       'rexglue_setup_target(aster_green_lantern GPU_PLUGINS xenos)')
-            content += '\ntarget_sources(aster_green_lantern PRIVATE aster_timing.cpp)\n'
+            content += '\ntarget_sources(aster_green_lantern PRIVATE ' + ' '.join(copied_sources) + ')\n'
             cmake_file.write_text(content, encoding='utf8')
         stamp = project / 'aster-codegen.json'
         valid_codegen = False
