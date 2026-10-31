@@ -117,6 +117,29 @@ def companion_c_compiler(compiler):
     return str(path.with_name(name))
 
 
+def capture_windows_environment(vcvars, root, env):
+    """Call vcvars through a batch bridge, without nested cmd /c quotations.
+
+    Both subprocess.list2cmdline and PowerShell quote a command string that
+    already contains doubled quotes. Starting /c with CALL and passing an
+    actual batch filename avoids that second layer of interpretation.
+    """
+    with tempfile.TemporaryDirectory(prefix='aster-vcvars-') as temporary:
+        bridge = Path(temporary) / 'environment.cmd'
+        bridge.write_text('@echo off\ncall "%ASTER_VCVARS_PATH%" >nul\n'
+                          'if errorlevel 1 exit /b %errorlevel%\nset\n', encoding='ascii')
+        child_env = dict(env, ASTER_VCVARS_PATH=str(vcvars))
+        result = run_process(['cmd.exe', '/d', '/c', 'call', str(bridge)],
+                             root, Cancellation(), env=child_env)
+    updated = dict(env)
+    for line in result['stdout'].splitlines():
+        if '=' in line and not line.startswith('='):
+            name, value = line.split('=', 1)
+            if name.upper() != 'ASTER_VCVARS_PATH':
+                updated[name.upper()] = value
+    return updated
+
+
 def toolchain(root, work):
     suffix = '.exe' if os.name == 'nt' else ''
     env = external_env()
@@ -135,9 +158,7 @@ def toolchain(root, work):
             installation = result['stdout'].strip()
             vcvars = Path(installation) / 'VC/Auxiliary/Build/vcvars64.bat'
             if vcvars.is_file():
-                result = run_process(['cmd.exe', '/d', '/s', '/c', f'""{vcvars}" >nul && set"'],
-                                     root, Cancellation(), env=env)
-                env.update((line.split('=', 1)[0].upper(), line.split('=', 1)[1]) for line in result['stdout'].splitlines() if '=' in line and not line.startswith('='))
+                env = capture_windows_environment(vcvars, root, env)
                 llvm = Path(installation) / 'VC/Tools/Llvm/x64/bin'
                 cmake_tools = Path(installation) / 'Common7/IDE/CommonExtensions/Microsoft/CMake'
                 env['PATH'] = os.pathsep.join(map(str, [llvm, cmake_tools/'CMake/bin', cmake_tools/'Ninja'])) + os.pathsep + env.get('PATH', '')
