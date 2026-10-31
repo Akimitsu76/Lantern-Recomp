@@ -1,3 +1,18 @@
+# Aba Controles redesenhada — 30/10/2026 (launcher 0.1.4-rc.7)
+
+A aba Controles foi reorganizada com dois cartões de imagens de produto reais
+(Xbox Wireless Controller e DualSense), seleção de layout por clique ou teclado
+e campos agrupados em combate, movimento, câmera, navegação e ajustes dos
+analógicos. A página rola com o mouse; schema, binds, validação, Salvar e
+Restaurar padrão foram preservados. As imagens ficam em
+`native_port/resources/controllers/`, com URLs, titulares e hashes em
+`sources.json`, e são carregadas localmente nas duas plataformas.
+
+Esta entrega é apenas do launcher: não conclui glyphs PlayStation dentro do jogo,
+não adiciona detecção nova de hardware e não altera gameplay, renderer, shaders,
+FPS ou saves. A validação Windows da interface foi feita em Wine, não em gameplay
+D3D12 nativo.
+
 # Entrega de slots no menu —30/10/2026 (backend24 /0.1.4-rc.6)
 
 New Game e Continue agora abrem seis slots DENTRO da janela do jogo, via

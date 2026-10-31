@@ -19,12 +19,21 @@ VSync e preparação de shaders. As limitações de escala/FPS/campanha continua
 as mesmas descritas nos documentos de validação: esta é uma atualização de
 launcher, não uma certificação nova do jogo.
 
+Controles mostra cartões com imagens de produto do Xbox Wireless Controller e
+do DualSense, com seleção de layout por clique ou teclado. Os campos ficam
+agrupados em combate, movimento, câmera, navegação e ajustes dos analógicos, e a
+página rola com o mouse. O schema de preferências, os binds, a validação,
+**Salvar** e **Restaurar padrão** não mudaram. As imagens acompanham o launcher
+e são carregadas localmente, sem downloads na abertura.
+
 Os recibos de validação HD reutilizam artefatos já conferidos quando os arquivos
 permanecem inalterados. A primeira abertura após a atualização ainda faz a
 validação integral. Fontes DejaVu acompanham os executáveis e são registradas
 somente no processo, sem instalar fontes no sistema ou no perfil do usuário.
-A arte de fundo é procedural e original. Não há imagens ou código do launcher
-fornecido como referência nem conteúdo do jogo nos pacotes.
+A arte de fundo é procedural e original. As imagens de produto dos controles
+vêm das páginas oficiais dos fabricantes, com URLs, titulares e hashes em
+`native_port/resources/controllers/`, e não são arte original do projeto. Não
+há código de launcher fornecido como referência nem conteúdo do jogo nos pacotes.
 
 Atalhos: Ctrl+O escolhe a pasta; Ctrl+S salva preferências. A interface foi revisada
 em 1200×820 e 1088×720, e as opções gráficas continuam acessíveis por rolagem.

@@ -12,6 +12,21 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
+## Aba Controles redesenhada — v0.1.4-rc.7
+
+A aba **Controles** agora mostra cartões com imagens de produto do **Xbox
+Wireless Controller** e do **DualSense** (PlayStation 5), com seleção de layout
+por clique ou teclado. Os campos foram agrupados em combate, movimento, câmera,
+navegação e ajustes dos analógicos, e a página rola com o mouse. O schema de
+preferências, os binds, a validação, **Salvar** e **Restaurar padrão** foram
+preservados. As imagens acompanham o launcher e são carregadas localmente, sem
+downloads na abertura; URLs, titulares e hashes estão em
+`native_port/resources/controllers/`.
+
+Esta é uma atualização visual do launcher. Os ícones dentro do jogo ainda não
+são substituídos por glyphs PlayStation completos, não há detecção nova de
+hardware e gameplay/saves não mudam.
+
 ## Slots no menu — integração 24, v0.1.4-rc.6
 
 **New Game** e **Continue** abrem um seletor de seis campanhas dentro do jogo.
