@@ -58,11 +58,16 @@ BASELINE_FLAGS = '-march=x86-64-v2'  # pinned windows-base and linux-base preset
 
 def spatial_sdk_recipe(root, target):
     from .native_build import file_hash
-    return {'revision': SDK_REVISION, 'patches': {Path(p).name: file_hash(Path(root) / p) for p in PATCHES},
+    recipe = {'revision': SDK_REVISION, 'patches': {Path(p).name: file_hash(Path(root) / p) for p in PATCHES},
             'platform': target, 'builder_revision': BUILDER_REVISION, 'schema': 2,
             'baseline_flags': BASELINE_FLAGS, 'configurations': ['Release', 'RelWithDebInfo'],
             'generator': 'Ninja Multi-Config', 'spatial_filters': True,
             'temporal_fidelityfx': False, 'user_package_registry': False, 'tests': False}
+    if target == 'win-amd64':
+        # Setting CMAKE_CXX_FLAGS replaces CMake's default /EHsc for clang-cl.
+        # Keep exception handling explicit and part of the Windows cache key.
+        recipe['cxx_flags'] = BASELINE_FLAGS + ' /EHsc'
+    return recipe
 
 
 def verify_product(prefix, recipe):
@@ -248,7 +253,7 @@ def build_spatial_sdk(root, work, tools, cancel, emit, allow_download=False, job
     pointer.write_text(json.dumps({'source': str(source.resolve())}), encoding='utf8')
     (base / 'aster-build-request.json').write_text(json.dumps(recipe, sort_keys=True), encoding='utf8')
     flags = [f'-DCMAKE_CXX_COMPILER={compiler}', f'-DCMAKE_MAKE_PROGRAM={ninja}',
-             f'-DCMAKE_C_FLAGS={BASELINE_FLAGS}', f'-DCMAKE_CXX_FLAGS={BASELINE_FLAGS}',
+             f'-DCMAKE_C_FLAGS={BASELINE_FLAGS}', f'-DCMAKE_CXX_FLAGS={recipe.get("cxx_flags", BASELINE_FLAGS)}',
              '-DCMAKE_CONFIGURATION_TYPES=Release;RelWithDebInfo', f'-DCMAKE_INSTALL_PREFIX={prefix}',
              '-DASTER_ENABLE_SPATIAL_FILTERS=ON', '-DASTER_SKIP_USER_PACKAGE_REGISTRY=ON', '-DREXGLUE_ENABLE_FIDELITYFX=OFF',
              '-DREXGLUE_BUILD_TESTS=OFF', '-DREXGLUE_USE_D3D12=' + ('ON' if os.name == 'nt' else 'OFF'),

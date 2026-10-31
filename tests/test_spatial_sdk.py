@@ -9,6 +9,15 @@ from native_port.errors import PortError
 
 
 class SpatialSdkTests(unittest.TestCase):
+    def test_windows_exception_flags_are_versioned_without_changing_linux_recipe(self):
+        from native_port.spatial_sdk import spatial_sdk_recipe, BASELINE_FLAGS
+        root = Path(__file__).resolve().parents[1]
+        windows = spatial_sdk_recipe(root, 'win-amd64')
+        linux = spatial_sdk_recipe(root, 'linux-amd64')
+        self.assertIn('/EHsc', windows['cxx_flags'])
+        self.assertIn(BASELINE_FLAGS, windows['cxx_flags'])
+        self.assertNotIn('cxx_flags', linux)
+
     def test_plain_and_git_patches_inventory_new_and_modified_files_equally(self):
         plain = ('--- /dev/null\n+++ b/include/new.h\n@@ -0,0 +1 @@\n+new\n'
                  '--- a/src/a.cpp\n+++ b/src/a.cpp\n@@ -1 +1 @@ old function\n-old\n+new\n')
