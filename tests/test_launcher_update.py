@@ -132,13 +132,16 @@ class LauncherUpdateTests(unittest.TestCase):
                 'old_sha256':update.file_hash(target), 'asset':update.asset_name(),
                 'version':'v0.1.5', 'parent_pid':12345, 'nonce':'a'*48}
 
-    def test_atomic_install_keeps_old_launcher_as_backup_and_never_moves_user_data(self):
+    def test_atomic_install_keeps_rollback_copy_private_and_never_moves_user_data(self):
         plan = self.plan()
         save = self.root/'user/save';save.parent.mkdir();save.write_bytes(b'campaign')
         backup = update.commit_install(plan)
         self.assertEqual(Path(plan['target']).read_bytes(), self.new)
         self.assertEqual(backup.read_bytes(), binary(b'old'))
+        self.assertEqual(backup.parent, Path(plan['source']).parent)
         self.assertEqual(save.read_bytes(), b'campaign')
+        # Nothing extra appears beside the executable the user runs.
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), sorted(['download', update.asset_name(), 'user']))
 
     def test_changed_target_or_bad_download_never_replaces_current_file(self):
         plan = self.plan();target = Path(plan['target']);target.write_bytes(b'new user file')
@@ -158,12 +161,14 @@ class LauncherUpdateTests(unittest.TestCase):
         self.assertEqual(json.loads(path.read_text())['parent_pid'],12345)
         self.assertEqual(Path(plan['target']).read_bytes(),binary(b'old'))
 
-    def test_failed_restart_restores_backup_and_records_failure(self):
+    def test_failed_restart_restores_previous_launcher_and_keeps_no_second_binary(self):
         plan = self.plan();path = Path(plan['source']).parent/'install.json';path.write_text(json.dumps(plan))
         failed = Mock();failed.poll.return_value = 1
         with patch.object(update,'_wait_parent'), patch.object(update.subprocess,'Popen',return_value=failed) as spawn:
             self.assertEqual(update.apply_update(path),1)
         self.assertEqual(Path(plan['target']).read_bytes(),binary(b'old'))
+        self.assertFalse(Path(plan['source']).exists())
+        self.assertFalse(list(Path(plan['source']).parent.glob('previous-*')))
         result = json.loads((self.root/'last-result.json').read_text())
         self.assertFalse(result['success']);self.assertEqual(spawn.call_count,2)
 
@@ -176,6 +181,21 @@ class LauncherUpdateTests(unittest.TestCase):
         with patch.object(update,'_wait_parent'), patch.object(update.subprocess,'Popen',side_effect=spawn):
             self.assertEqual(update.apply_update(path),0)
         self.assertEqual(Path(plan['target']).read_bytes(),self.new)
+        # Only the new launcher survives: no rollback copy, no downloaded package.
+        self.assertFalse(Path(plan['source']).exists())
+        self.assertFalse(list(Path(plan['source']).parent.glob('previous-*')))
+        leftovers = [p.name for p in self.root.iterdir() if p.is_file() and p.suffix.lower() in ('.appimage', '.exe')]
+        self.assertEqual(leftovers, [update.asset_name()])
+
+    def test_legacy_launchers_beside_the_executable_are_pruned_by_hash(self):
+        target = self.root/update.asset_name();target.write_bytes(self.new)
+        stale = self.root/(target.name + '.previous-' + hashlib.sha256(binary(b'old')).hexdigest()[:12])
+        stale.write_bytes(binary(b'old'))
+        foreign = self.root/(target.name + '.previous-' + 'f'*12);foreign.write_bytes(b'unrelated')
+        update.prune_previous(target)
+        self.assertFalse(stale.exists())
+        self.assertTrue(foreign.exists())
+        self.assertEqual(target.read_bytes(), self.new)
 
     def test_source_checkout_cannot_be_self_replaced(self):
         with patch.object(update.sys,'frozen',False,create=True):
@@ -193,6 +213,22 @@ class LauncherUpdateTests(unittest.TestCase):
         self.assertFalse(folder.exists())
         self.assertEqual(backup.read_bytes(),b'old')
         self.assertEqual((active/'file.part').read_bytes(),b'partial')
+
+    def test_cleanup_removes_failed_staging_and_abandoned_launcher_binaries(self):
+        failed = self.root/'download-failed';failed.mkdir()
+        plan={'nonce':'c'*48,'source':str(failed/update.asset_name())}
+        (failed/'install.json').write_text(json.dumps(plan))
+        (failed/'finished.json').write_text(json.dumps({'nonce':'c'*48,'success':False}))
+        os.utime(failed/'finished.json',(0,0))
+        abandoned = self.root/'download-abandoned';abandoned.mkdir()
+        (abandoned/'install.json').write_text(json.dumps({'nonce':'d'*48,'source':str(abandoned/update.asset_name())}))
+        (abandoned/('updater'+Path(update.asset_name()).suffix)).write_bytes(b'old launcher')
+        (abandoned/'diag.txt').write_text('kept')
+        os.utime(abandoned,(0,0))
+        update.cleanup_downloads(self.root)
+        self.assertFalse(failed.exists())
+        self.assertFalse([p.name for p in abandoned.iterdir() if p.suffix.lower() in ('.appimage','.exe')])
+        self.assertEqual((abandoned/'diag.txt').read_text(),'kept')
 
     def test_rejects_dos_or_wrong_architecture_before_install(self):
         path=self.root/update.asset_name()

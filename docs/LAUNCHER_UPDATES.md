@@ -26,8 +26,11 @@ launcher fechar e substitui seu arquivo de forma atômica. Um helper copiado do
 launcher atual faz isso também no Windows, onde o EXE em execução está bloqueado.
 O launcher novo é aberto automaticamente; ele deve confirmar versão e nonce de
 inicialização. Se não iniciar a interface, o helper restaura e reabre a versão
-anterior. O backup permanece ao lado do executável, com sufixo
-`.previous-<hash>`. Não são alterados dump, saves, caches ou configurações gráficas.
+anterior. A cópia de rollback existe apenas durante a instalação, dentro da pasta
+temporária de download: depois do sucesso, ela e o pacote baixado são apagados,
+de modo que reste **um único launcher**. Cópias `*.previous-<hash>` deixadas ao
+lado do executável por versões anteriores são removidas quando o hash confere.
+Não são alterados dump, saves, caches ou configurações gráficas.
 
 O EXE/AppImage deve estar em uma pasta gravável. O recurso não substitui arquivos
 de um checkout Python nem atualiza automaticamente o backend do jogo. Uma nova

@@ -1,4 +1,4 @@
-# Entrega de slots no menu —30/10/2026 (backend24 /0.1.4-rc.5)
+# Entrega de slots no menu —30/10/2026 (backend24 /0.1.4-rc.6)
 
 New Game e Continue agora abrem seis slots DENTRO da janela do jogo, via
 runtime_save_slots.cpp. Continue relê o container original antes de aplicar o
@@ -8,12 +8,12 @@ Veja [SAVE_SLOTS.md](SAVE_SLOTS.md), incluindo a limitação do aviso original
 redundante em destino vazio e os limites da validação Windows.
 
 Receita comum Linux/Windows inclui os dois CPPs novos eSDK0035/0037; integração
-mínima24. Fontes empacotadas nos dois launchersrc.5 e verificadas byte a byte.
-Artefatos locais emdist/native-slots-rc5: AppImage, EXE eSHA256SUMS. Ambos tiveram
+mínima24. Fontes empacotadas nos dois launchersrc.6 e verificadas byte a byte.
+Artefatos locais emdist/native-slots-rc6: AppImage, EXE eSHA256SUMS. Ambos tiveram
 abertura gráfica; oWindows foi verificado emWine, sem certificaçãoD3D12 real.
-Não houvepush nemrelease. OworkflowWindows foi atualizado, mas .github/ está
-IGNORADO por.git/info/exclude: a publicação precisa adicionar oarquivo
-explicitamente após revisão. O prompt local está em
+A rc.5 foi publicada como pré-release; a rc.6 acrescenta a limpeza do launcher
+antigo após atualizar. OworkflowWindows valida as 26 suítes de contratos em cada
+push e é o portão antes da publicação. O prompt local está em
 .aster/reports/features-2026-10-30/PROMPT_OPENCODE_GITHUB_SLOTS.md.
 
 Evidências privadas em.aster/reports/features-2026-10-30; sessões207–209.

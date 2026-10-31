@@ -12,7 +12,7 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
-## Slots no menu — integração 24, v0.1.4-rc.5
+## Slots no menu — integração 24, v0.1.4-rc.6
 
 **New Game** e **Continue** abrem um seletor de seis campanhas dentro do jogo.
 O Slot 1 preserva o save existente; os demais têm armazenamento separado por
@@ -77,10 +77,11 @@ acompanham os executáveis; no Linux, o AppImage usa Tk 9.0.4 recompilado com Xf
 
 A nova aba **Atualizações** consulta os releases públicos, avisa quando há versão
 maior, permite incluir pré-releases, baixa o AppImage/EXE da plataforma e confere
-tamanho, formato x64 e SHA-256 antes de instalar. O launcher guarda a versão
-anterior, reinicia e restaura o backup se a nova interface não iniciar. O backend
-do jogo não é atualizado automaticamente, e saves, cache, preferências e dump são
-preservados. Veja [launcher](docs/LAUNCHER.md),
+tamanho, formato x64 e SHA-256 antes de instalar. O launcher reinicia e, se a
+nova interface não iniciar, restaura e reabre a versão anterior. Depois do
+sucesso, a cópia de rollback e o pacote baixado são apagados: resta **um único
+launcher**. O backend do jogo não é atualizado automaticamente, e saves, cache,
+preferências e dump são preservados. Veja [launcher](docs/LAUNCHER.md),
 [atualizações](docs/LAUNCHER_UPDATES.md) e as
 [notas da v0.1.4-rc.3](docs/RELEASE_v0.1.4-rc.3.md).
 

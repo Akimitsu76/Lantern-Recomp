@@ -282,12 +282,37 @@ def _atomic_copy(source, target):
         Path(temporary).unlink(missing_ok=True)
 
 
+PREVIOUS_RE = re.compile(r'\.previous-(?P<hash>[0-9a-f]{12})$')
+
+
+def previous_backups(target):
+    """Older launcher copies adjacent to the executable, from releases before rc.6."""
+    target = Path(target)
+    found = []
+    for path in target.parent.glob(target.name + '.previous-*'):
+        match = PREVIOUS_RE.search(path.name)
+        if match and path.is_file() and not path.is_symlink():
+            found.append((path, match.group('hash')))
+    return found
+
+
+def prune_previous(target):
+    """Remove older launchers kept next to the executable; only hash-matching copies."""
+    for path, expected in previous_backups(target):
+        try:
+            if file_hash(path).startswith(expected):
+                path.unlink()
+        except OSError:
+            continue
+
+
 def commit_install(plan):
     source, target = Path(plan['source']), Path(plan['target'])
     verify_binary(source, plan['sha256'], plan['asset'])
     if file_hash(target) != plan['old_sha256']:
         raise PortError('UPDATE_CHANGED', 'O launcher foi alterado durante a atualização. Instalação cancelada.')
-    backup = target.with_name(target.name + '.previous-' + plan['old_sha256'][:12])
+    # Rollback copy lives in the private staging folder, never beside the user's launcher.
+    backup = source.parent / ('previous-' + plan['old_sha256'][:12])
     if backup.exists() or backup.is_symlink():
         if backup.is_symlink() or file_hash(backup) != plan['old_sha256']:
             raise PortError('UPDATE_BACKUP', 'Existe outro arquivo no destino do backup. Instalação cancelada.')
@@ -379,26 +404,46 @@ def previous_result():
     return None
 
 
+LAUNCHER_SUFFIXES = ('.exe', '.appimage')
+
+
 def cleanup_downloads(directory=None):
-    """Retire successful updater staging only; preserve backups and failures."""
+    """Retire owned updater staging; never leave extra launcher binaries behind."""
     base = Path(directory) if directory else user_data_root() / 'updates'
     if not base.is_dir() or base.is_symlink():
         return
+    now = time.time()
     for folder in list(base.glob('download-*'))[:100]:
         if not folder.is_dir() or folder.is_symlink():
             continue
         try:
-            receipt = folder / 'finished.json'
-            if time.time() - receipt.stat().st_mtime < 10:
-                continue
-            result = json.loads(receipt.read_text(encoding='utf8'))
             plan = json.loads((folder / 'install.json').read_text(encoding='utf8'))
-            if (result.get('success') is True and result.get('nonce') == plan.get('nonce') and
-                    re.fullmatch('[0-9a-f]{48}', result.get('nonce', '')) and
-                    Path(plan['source']).parent == folder):
-                shutil.rmtree(folder)
+            if Path(plan['source']).parent != folder:
+                continue
+            nonce = plan.get('nonce')
+            if not isinstance(nonce, str) or not re.fullmatch('[0-9a-f]{48}', nonce):
+                continue
+            receipt = folder / 'finished.json'
+            if receipt.is_file() and now - receipt.stat().st_mtime >= 10:
+                result = json.loads(receipt.read_text(encoding='utf8'))
+                if (result.get('nonce') == nonce and isinstance(result.get('success'), bool)):
+                    shutil.rmtree(folder)
+                    continue
+            # Interrupted or failed attempt: keep small diagnostics, drop launcher copies.
+            if now - folder.stat().st_mtime > 3600:
+                for path in folder.iterdir():
+                    if path.is_file() and path.suffix.lower() in LAUNCHER_SUFFIXES:
+                        path.unlink(missing_ok=True)
         except (OSError, ValueError, TypeError, KeyError):
             continue
+
+
+def _retire(path):
+    """Best effort removal of a temporary launcher binary; never fatal."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def apply_update(plan_path):
@@ -437,13 +482,24 @@ def apply_update(plan_path):
         result['error'] = str(exc)
         if backup:
             _restore(backup, Path(plan['target']))
-        result['backup'] = str(backup) if backup else None
+        # Keep the failure note, never a second launcher binary.
+        _retire(backup)
+        _retire(plan['source'])
+        _retire(folder / ('updater' + Path(plan['target']).suffix))
+        result['backup'] = None
         _write_json(folder.parent / 'last-result.json', result)
+        _write_json(folder / 'finished.json', {**result, 'nonce': plan['nonce']})
         if file_hash(plan['target']) == plan['old_sha256']:
             subprocess.Popen(executable_command(plan['target']), env=clean_env(),
                              start_new_session=(os.name != 'nt'))
         return 1
-    result['backup'] = str(backup) if backup else None
+    # One launcher only: retire the rollback copy and the downloaded package, and remove
+    # leftovers from releases that kept *.previous-<hash> beside the executable.
+    _retire(backup)
+    _retire(plan['source'])
+    _retire(folder / ('updater' + Path(plan['target']).suffix))
+    prune_previous(plan['target'])
+    result['backup'] = None
     _write_json(folder.parent / 'last-result.json', result)
     _write_json(folder / 'finished.json', {**result, 'nonce': plan['nonce']})
     return 0 if result['success'] else 1

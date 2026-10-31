@@ -45,9 +45,10 @@ entrega.
   e `SHA256SUMS`. Pré-releases são incluídas por padrão, com opção para excluí-las.
 - O download aceita somente HTTPS nos hosts previstos, pode ser cancelado e
   confere tamanho, formato x64 e SHA-256. A instalação usa um helper copiado,
-  substituição atômica, backup, reinicialização e handshake de versão/nonce; se a
-  nova interface não abrir, a versão anterior é restaurada. Staging concluído é
-  limpo, preservando backup e dados do usuário.
+  substituição atômica, cópia de rollback temporária, reinicialização e handshake
+  de versão/nonce; se a nova interface não abrir, a versão anterior é restaurada.
+  Staging concluído é limpo e, após o sucesso, rollback e pacote baixado são
+  apagados: resta apenas o launcher novo.
 - Validação desta entrega: 51 testes da interface/Tk9 no Linux; 20 testes do
   atualizador no Linux e 20 no Windows/Wine; 3 testes de payload. Os dois
   executáveis passaram no smoke com perfis `ASTER_DATA_HOME` temporários e

@@ -387,8 +387,8 @@ class Launcher:
         ttk.Checkbutton(self.update_tab, text='Incluir versões de teste (pré-releases)',
             variable=self.update_prerelease).pack(anchor='w', pady=(16, 10))
         tk.Label(self.update_tab, text='O download é conferido pelo SHA-256 publicado no release. '
-            'O launcher reinicia após instalar e guarda uma cópia da versão anterior. '
-            'Se a nova interface falhar ao abrir, a versão anterior é restaurada. '
+            'O launcher reinicia após instalar e mantém somente a versão nova. '
+            'Se a nova interface falhar ao abrir, a versão anterior é restaurada e reaberta. '
             'Saves, cache, preferências e dump continuam na pasta do usuário.',
             bg=BG, fg=MUTED, font=(FONT, 10), wraplength=970, justify='left').pack(anchor='w', pady=(0, 16))
         self.update_notes = tk.Text(self.update_tab, bg=PANEL, fg=INK, relief='flat',
@@ -1967,5 +1967,10 @@ def main():
             app.check_updates()
             root.after(30 * 60 * 1000, query_updates)
     root.after(1800, query_updates)
-    root.after(30000, lambda: threading.Thread(target=launcher_update.cleanup_downloads, daemon=True).start())
+    def maintain_launcher_files():
+        launcher_update.cleanup_downloads()
+        target = launcher_update.installed_executable()
+        if target:
+            launcher_update.prune_previous(target)
+    root.after(30000, lambda: threading.Thread(target=maintain_launcher_files, daemon=True).start())
     root.mainloop()
