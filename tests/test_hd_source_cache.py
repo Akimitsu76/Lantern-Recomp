@@ -107,7 +107,9 @@ void add(HDTexturePack& pack,const Fixture& f) {
   pack.library_entries.emplace(f.fp,std::move(e));
 }
 int main(int argc,char** argv) {
-  assert(argc==3);std::string mode=argv[1];const auto root=std::filesystem::absolute(argv[2]);
+  // Windows temp paths may use 8.3 aliases (RUNNER~1). Production pack paths
+  // are canonical; the strict loader deliberately rejects unresolved aliases.
+  assert(argc==3);std::string mode=argv[1];const auto root=std::filesystem::canonical(argv[2]);
   if(mode=="lru") {
     HDSourceCache cache(20);auto a=image(10),b=image(10),c=image(10);
     std::weak_ptr<const HDTextureReplacement> wa=a,wb=b,wc=c;
