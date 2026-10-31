@@ -111,7 +111,7 @@ def ensure_sdk(work, cancel, emit, allow_download=False):
 
 def companion_c_compiler(compiler):
     path = Path(compiler)
-    if path.name in ('clang-cl', 'clang-cl.exe'):
+    if path.name.lower() in ('clang-cl', 'clang-cl.exe'):
         return str(path)
     name = path.name.replace('clang++', 'clang', 1) if path.name.startswith('clang++') else 'clang'
     return str(path.with_name(name))

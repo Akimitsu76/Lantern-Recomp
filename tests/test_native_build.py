@@ -22,6 +22,7 @@ class NativeBuildTests(unittest.TestCase):
         self.assertEqual(Path(companion_c_compiler('/usr/bin/clang++-18')).name, 'clang-18')
         self.assertEqual(Path(companion_c_compiler('/usr/bin/clang++')).name, 'clang')
         self.assertEqual(Path(companion_c_compiler('clang-cl.exe')).name, 'clang-cl.exe')
+        self.assertEqual(Path(companion_c_compiler('clang-cl.EXE')).name, 'clang-cl.EXE')
 
     def test_cpu_reuse_keeps_presenter_and_unknown_patches_abi_sensitive(self):
         base = {'revision': 'pinned', 'platform': 'linux-amd64', 'baseline_flags': 'x86-64-v2',
