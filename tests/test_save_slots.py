@@ -19,7 +19,7 @@ class SaveSlotTests(unittest.TestCase):
 #include <cassert>
 using namespace rex::system::xam::green_lantern;
 namespace fs=std::filesystem;
-static void put(const fs::path& p,const char* value){fs::create_directories(p.parent_path());std::ofstream(p)<<value;}
+static void put(const fs::path& p,const char* value){fs::create_directories(p.parent_path());std::ofstream(p,std::ios::binary)<<value;}
 static std::string read(const fs::path&p){std::ifstream f(p);return {std::istreambuf_iterator<char>(f),{}};}
 int main(int argc,char**argv){
  SaveSlotStore s(argv[1]);const uint64_t a=0xB13EBABEBABEBABE,b=0x123;
