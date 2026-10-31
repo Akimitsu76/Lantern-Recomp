@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'native_port/spatial_sdk.py'
+      - 'pyproject.toml'
       - 'native_port/prerequisites.py'
       - 'native_port/runtime_evidence.py'
       - 'scripts/play_green_lantern.py'
@@ -106,6 +107,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Install pinned Python validation dependencies
+        shell: pwsh
+        run: |
+          python -m pip install ".[hd,analysis]"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Configure installed Visual Studio and Windows SDK environment
         shell: pwsh
         run: |
@@ -120,11 +126,27 @@ jobs:
           ninja --version
           python -m unittest discover -s tests -p test_windows_toolchain.py -v 2>&1 | Tee-Object compiler-environment-test.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Restore verified public SDK cache
+        id: sdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .aster/tools/spatial-sdk/*/install
+            .aster/tools/spatial-sdk-sources
+          key: windows-spatial-v1-${{ hashFiles('native_port/spatial_sdk.py', 'native_port/native_build.py', 'integrations/rexglue/patches/*.patch') }}
       - name: Build pinned D3D12 EASU and RCAS runtime without game assets
         shell: pwsh
         run: |
           python scripts/build_spatial_sdk.py --allow-download --jobs 4 2>&1 | Tee-Object spatial-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Cache the successfully verified public SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .aster/tools/spatial-sdk/*/install
+            .aster/tools/spatial-sdk-sources
+          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
       - name: Verify portable timing callback contract on Windows
         shell: pwsh
         run: |
