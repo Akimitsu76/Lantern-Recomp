@@ -20,7 +20,8 @@ def main():
     allowed = {'PATH', 'INCLUDE', 'LIB', 'LIBPATH', 'VCTOOLSINSTALLDIR', 'VCINSTALLDIR',
                'VSINSTALLDIR', 'WINDOWSSDKDIR', 'WINDOWSSDKVERSION', 'WINDOWSSDKBINPATH',
                'WINDOWSSDKVERBINPATH', 'UCRTVERSION', 'UNIVERSALCRTSDKDIR',
-               'VSCMD_ARG_TGT_ARCH', 'VSCMD_ARG_HOST_ARCH', 'VSCMD_VER', 'VCTOOLSVERSION'}
+               'VSCMD_ARG_TGT_ARCH', 'VSCMD_ARG_HOST_ARCH', 'VSCMD_VER', 'VCTOOLSVERSION',
+               'VSCMD_SKIP_SENDTELEMETRY'}
     exported = []
     with args.github_env.open('a', encoding='utf8', newline='\n') as output:
         for name in sorted(allowed):

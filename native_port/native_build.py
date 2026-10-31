@@ -128,7 +128,9 @@ def capture_windows_environment(vcvars, root, env):
         bridge = Path(temporary) / 'environment.cmd'
         bridge.write_text('@echo off\ncall "%ASTER_VCVARS_PATH%" >nul\n'
                           'if errorlevel 1 exit /b %errorlevel%\nset\n', encoding='ascii')
-        child_env = dict(env, ASTER_VCVARS_PATH=str(vcvars))
+        # VsDevCmd can start a telemetry child that inherits the capture files
+        # and keeps them locked after cmd.exe exits on Windows.
+        child_env = dict(env, ASTER_VCVARS_PATH=str(vcvars), VSCMD_SKIP_SENDTELEMETRY='1')
         result = run_process(['cmd.exe', '/d', '/c', 'call', str(bridge)],
                              root, Cancellation(), env=child_env)
     updated = dict(env)

@@ -21,6 +21,7 @@ class WindowsToolchainTests(unittest.TestCase):
             result = capture_windows_environment(script, root, env)
             self.assertEqual(result['VCTOOLSINSTALLDIR'], r'C:\Build Tools\VC\Tools')
             self.assertEqual(result['INCLUDE'], r'C:\Windows Kits\Include')
+            self.assertEqual(result['VSCMD_SKIP_SENDTELEMETRY'], '1')
             self.assertNotIn('ASTER_VCVARS_PATH', result)
             self.assertEqual(env, before)
 
