@@ -13,6 +13,9 @@ on:
       - 'scripts/play_green_lantern.py'
       - 'tests/test_runtime_evidence.py'
       - 'native_port/native_build.py'
+      - 'native_port/launcher.py'
+      - 'native_port/launcher_update.py'
+      - 'tests/test_launcher_update.py'
       - 'scripts/prepare_windows_env.py'
       - 'tests/test_windows_toolchain.py'
       - 'native_port/texture_tools.py'
@@ -184,6 +187,7 @@ jobs:
             [pscustomobject]@{ Pattern = 'test_ui_launch.py'; Log = 'ui-launch-test.log' }
             [pscustomobject]@{ Pattern = 'test_backend_quality_update.py'; Log = 'backend-quality-update-test.log' }
             [pscustomobject]@{ Pattern = 'test_play_launcher.py'; Log = 'play-launcher-test.log' }
+            [pscustomobject]@{ Pattern = 'test_launcher_update.py'; Log = 'launcher-update-test.log' }
             [pscustomobject]@{ Pattern = 'test_effects_diagnostics.py'; Log = 'effects-test.log' }
             [pscustomobject]@{ Pattern = 'test_armed_effects_diagnostics.py'; Log = 'effects-index-test.log' }
             [pscustomobject]@{ Pattern = 'test_effects_decision_budget.py'; Log = 'effects-decisions-test.log' }
