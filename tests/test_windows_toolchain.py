@@ -33,3 +33,24 @@ class WindowsToolchainTests(unittest.TestCase):
             with self.assertRaises(PortError) as raised:
                 capture_windows_environment(script, root, dict(os.environ))
             self.assertEqual(raised.exception.details['returncode'], 7)
+
+    def test_sdk_flags_accept_utf8_literals_and_cpp_exceptions(self):
+        import subprocess
+        from native_port.native_build import toolchain
+        from native_port.spatial_sdk import spatial_sdk_recipe
+        from native_port.workspace import Workspace
+        project = Path(__file__).resolve().parents[1]
+        _, _, compiler, environment = toolchain(project, Workspace(project / '.aster', project))
+        with tempfile.TemporaryDirectory(prefix='Aster compiler contract ') as temporary:
+            root = Path(temporary)
+            source = root / 'utf8.cpp'
+            source.write_text('#include <string_view>\n#include <stdexcept>\n'
+                              'void contract() { std::string_view prefix(u8"native"); '
+                              'try { throw std::runtime_error("test"); } catch (...) {} }\n', encoding='ascii')
+            flags = spatial_sdk_recipe(project, 'win-amd64')['cxx_flags'].split()
+            result = subprocess.run([compiler, '/nologo', '/std:c++latest', '/c',
+                                     str(source), '/Fo' + str(root / 'utf8.obj'), *flags],
+                                    env=environment, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn('unknown argument', result.stderr)
+            self.assertTrue((root / 'utf8.obj').is_file())

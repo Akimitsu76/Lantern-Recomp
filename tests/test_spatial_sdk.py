@@ -16,6 +16,8 @@ class SpatialSdkTests(unittest.TestCase):
         linux = spatial_sdk_recipe(root, 'linux-amd64')
         self.assertIn('/EHsc', windows['cxx_flags'])
         self.assertIn(BASELINE_FLAGS, windows['cxx_flags'])
+        self.assertIn('/clang:-fno-char8_t', windows['cxx_flags'])
+        self.assertIn('/clang:-ffp-model=strict', windows['cxx_flags'])
         self.assertNotIn('cxx_flags', linux)
 
     def test_plain_and_git_patches_inventory_new_and_modified_files_equally(self):

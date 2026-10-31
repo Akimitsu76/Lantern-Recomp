@@ -64,9 +64,13 @@ def spatial_sdk_recipe(root, target):
             'generator': 'Ninja Multi-Config', 'spatial_filters': True,
             'temporal_fidelityfx': False, 'user_package_registry': False, 'tests': False}
     if target == 'win-amd64':
-        # Setting CMAKE_CXX_FLAGS replaces CMake's default /EHsc for clang-cl.
-        # Keep exception handling explicit and part of the Windows cache key.
-        recipe['cxx_flags'] = BASELINE_FLAGS + ' /EHsc'
+        # clang-cl ignores the SDK's bare GNU char8_t/strict-FP switches.
+        # Forward them explicitly; these arguments are applied after the
+        # driver's flags. Restore GNU Wall/Wextra rather than MSVC /Wall's
+        # unrelated compatibility warnings. Keep all semantics cache-versioned.
+        recipe['cxx_flags'] = (BASELINE_FLAGS + ' /EHsc'
+                               ' /clang:-fno-char8_t /clang:-ffp-model=strict'
+                               ' /clang:-Wno-everything /clang:-Wall /clang:-Wextra')
     return recipe
 
 
