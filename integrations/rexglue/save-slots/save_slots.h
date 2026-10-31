@@ -117,8 +117,15 @@ class SaveSlotStore {
         ec.clear();
         const auto stamp = std::filesystem::last_write_time(candidate, ec);
         if (ec) continue;
+        // MSVC's file_clock exposes to_utc instead of to_sys; clock_cast
+        // accounts for its epoch and leap seconds. libstdc++ uses to_sys.
+#ifdef _MSC_VER
+        const auto system_stamp = std::chrono::clock_cast<std::chrono::system_clock>(stamp);
+#else
+        const auto system_stamp = std::filesystem::file_time_type::clock::to_sys(stamp);
+#endif
         const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
-            std::filesystem::file_time_type::clock::to_sys(stamp).time_since_epoch()).count();
+            system_stamp.time_since_epoch()).count();
         if (seconds > slot.modified) slot.modified = seconds;
       }
     }

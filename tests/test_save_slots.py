@@ -28,6 +28,9 @@ int main(int argc,char**argv){
  put(legacy,"human-progress");put(header,"human-header");
  assert(legacy==fs::path(argv[1])/"B13EBABEBABEBABE/575207E9/00000001/GL_10/GL_10");
  assert(s.List(a)[0].existing && !s.List(a)[1].existing);
+ const auto now=std::chrono::duration_cast<std::chrono::seconds>(
+     std::chrono::system_clock::now().time_since_epoch()).count();
+ assert(s.List(a)[0].modified >= now-60 && s.List(a)[0].modified <= now+60);
  assert(s.Select(a,{})==SelectResult::kCancelled && !fs::exists(s.SelectionPath(a)));
  assert(s.Select(a,0)==SelectResult::kInvalidSlot && s.Select(a,7)==SelectResult::kInvalidSlot);
  assert(s.Select(a,2,true)==SelectResult::kOpenContent && !fs::exists(s.SelectionPath(a)));
