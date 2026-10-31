@@ -18,7 +18,7 @@ class Cancellation:
             raise PortError('CANCELLED', 'Operação cancelada.')
 
 
-def run_process(argv, cwd, cancel, timeout=120, env=None, on_output=None):
+def run_process(argv, cwd, cancel, timeout=120, env=None, on_output=None, output_log=None):
     """Internal trusted calls only; never accepts argv from a game manifest or UI.
 
     No shell, own process group; cancellation kills descendants and reaps parent.
@@ -76,6 +76,15 @@ def run_process(argv, cwd, cancel, timeout=120, env=None, on_output=None):
                 # A quick tool can exit before its final output is delivered.
                 # Its output callback may request cancellation even then.
                 cancel.check()
+                # Keep full compiler diagnostics on disk when requested. A
+                # bounded tail and a sampled progress callback can both miss
+                # an early error followed by warnings from parallel jobs.
+                if output_log is not None:
+                    import shutil
+                    with open(output_log, 'wb') as diagnostic:
+                        for captured in (out, err):
+                            captured.seek(0)
+                            shutil.copyfileobj(captured, diagnostic)
                 def tail(f):
                     f.seek(0, 2)
                     f.seek(max(0, f.tell()-65536))

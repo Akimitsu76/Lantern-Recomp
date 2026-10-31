@@ -178,14 +178,15 @@ def build_spatial_sdk(root, work, tools, cancel, emit, allow_download=False, job
         emit({'stage': 'tools', 'task': name, 'state': 'running', 'message': name})
         # All paths/arguments are passed directly, with no shell or credential access.
         def progress(line):
-            event = {'stage': 'tools', 'state': 'running', 'message': line[:180]}
+            event = {'stage': 'tools', 'state': 'running', 'message': line[:2048]}
             match = re.search(r'\[(\d+)/(\d+)\]', line)
             if match:
                 event.update(completed=int(match[1]), total=int(match[2]), unit='targets')
             emit(event)
         try:
             result = run_process(list(map(str, command)), root, cancel, env=env, timeout=timeout,
-                                 on_output=progress)
+                                 on_output=progress,
+                                 output_log=logs / (name.replace(' ', '-') + '-full.log'))
         except PortError as exc:
             (logs / (name.replace(' ', '-') + '-failure.json')).write_text(json.dumps(exc.as_dict(), indent=2), encoding='utf8')
             raise
