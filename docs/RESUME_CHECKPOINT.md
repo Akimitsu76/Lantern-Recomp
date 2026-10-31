@@ -7,13 +7,16 @@ confirmação. Retornar da seleção de jogadores cancela a troca de slot.
 Veja [SAVE_SLOTS.md](SAVE_SLOTS.md), incluindo a limitação do aviso original
 redundante em destino vazio e os limites da validação Windows.
 
-Receita comum Linux/Windows inclui os dois CPPs novos eSDK0035/0037; integração
-mínima24. Fontes empacotadas nos dois launchersrc.6 e verificadas byte a byte.
-Artefatos locais emdist/native-slots-rc6: AppImage, EXE eSHA256SUMS. Ambos tiveram
-abertura gráfica; oWindows foi verificado emWine, sem certificaçãoD3D12 real.
-A rc.5 foi publicada como pré-release; a rc.6 acrescenta a limpeza do launcher
-antigo após atualizar. OworkflowWindows valida as 26 suítes de contratos em cada
-push e é o portão antes da publicação. O prompt local está em
+Receita comum Linux/Windows inclui os dois CPPs novos e SDK 0035/0037; integração
+mínima 24. Fontes empacotadas nos dois launchers rc.6 e verificadas byte a byte.
+Artefatos locais em dist/native-slots-rc6: AppImage, EXE e SHA256SUMS. Ambos tiveram
+abertura gráfica; o Windows foi verificado em Wine, sem certificação D3D12 real.
+
+A rc.6 foi publicada como pré-release em 30/10/2026, com a tag no commit
+`845375f`: <https://github.com/Akimitsu76/Lantern-Recomp/releases/tag/v0.1.4-rc.6>.
+Ela acrescenta a limpeza do launcher antigo após atualizar: resta um único
+AppImage/EXE. O workflow Windows validou as 26 suítes de contratos no mesmo
+commit. O prompt local está em
 .aster/reports/features-2026-10-30/PROMPT_OPENCODE_GITHUB_SLOTS.md.
 
 Evidências privadas em.aster/reports/features-2026-10-30; sessões207–209.
