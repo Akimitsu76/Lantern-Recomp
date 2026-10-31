@@ -187,6 +187,22 @@ class LauncherUpdateTests(unittest.TestCase):
         leftovers = [p.name for p in self.root.iterdir() if p.is_file() and p.suffix.lower() in ('.appimage', '.exe')]
         self.assertEqual(leftovers, [update.asset_name()])
 
+    def test_plan_with_alternate_spelling_of_staging_folder_is_accepted(self):
+        # Windows temp dirs may arrive as 8.3 short paths; only the canonical folder matters.
+        plan = self.plan()
+        source = Path(plan['source'])
+        plan['source'] = str(source.parent/'..'/source.parent.name/source.name)
+        path = source.parent/'install.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(plan))
+        def spawn(*args,**kwargs):
+            health=Path(kwargs['env']['ASTER_UPDATE_HEALTH_FILE'])
+            health.write_text(json.dumps({'nonce':plan['nonce'],'version':'0.1.5'}))
+            return Mock()
+        with patch.object(update,'_wait_parent'), patch.object(update.subprocess,'Popen',side_effect=spawn):
+            self.assertEqual(update.apply_update(path),0)
+        self.assertEqual(Path(plan['target']).read_bytes(),self.new)
+
     def test_legacy_launchers_beside_the_executable_are_pruned_by_hash(self):
         target = self.root/update.asset_name();target.write_bytes(self.new)
         stale = self.root/(target.name + '.previous-' + hashlib.sha256(binary(b'old')).hexdigest()[:12])

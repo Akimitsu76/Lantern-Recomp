@@ -418,7 +418,7 @@ def cleanup_downloads(directory=None):
             continue
         try:
             plan = json.loads((folder / 'install.json').read_text(encoding='utf8'))
-            if Path(plan['source']).parent != folder:
+            if Path(plan['source']).resolve().parent != folder.resolve():
                 continue
             nonce = plan.get('nonce')
             if not isinstance(nonce, str) or not re.fullmatch('[0-9a-f]{48}', nonce):
@@ -451,9 +451,12 @@ def apply_update(plan_path):
     path = Path(plan_path).resolve()
     plan = json.loads(path.read_text(encoding='utf8'))
     folder = path.parent
-    if (plan.get('schema') != 1 or Path(plan['source']).parent != folder or
+    # Windows temp paths can be 8.3 short names (RUNNER~1); compare canonical paths.
+    source = Path(plan['source']).resolve()
+    if (plan.get('schema') != 1 or source.parent != folder or
             plan.get('asset') != asset_name() or not re.fullmatch('[0-9a-f]{48}', plan.get('nonce', ''))):
         raise ValueError('Plano local de atualização inválido.')
+    plan['source'] = str(source)
     ready, health = folder / 'ready.json', folder / 'health.json'
     _write_json(ready, {'nonce': plan['nonce']})
     backup = None
