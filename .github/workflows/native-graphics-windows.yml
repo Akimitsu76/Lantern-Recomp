@@ -168,58 +168,43 @@ jobs:
           if (-not $prefixLine) { throw 'Built SDK prefix missing from build log' }
           $env:ASTER_TEST_UI_SDK_PREFIX = $prefixLine.Substring('SPATIAL_SDK_PREFIX='.Length)
           $env:ASTER_TEST_SAVE_SDK_PREFIX = $env:ASTER_TEST_UI_SDK_PREFIX
-          python -m unittest discover -s tests -p test_runtime_save_slots.py -v 2>&1 | Tee-Object save-slot-native-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_save_slots.py -v 2>&1 | Tee-Object save-slot-storage-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_controls.py -v 2>&1 | Tee-Object controls-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_runtime_languages.py -v 2>&1 | Tee-Object language-native-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_ui_coverage_native.py -v 2>&1 | Tee-Object ui-native-coverage-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_texture_ui.py -v 2>&1 | Tee-Object ui-atlas-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_shader_prepare.py -v 2>&1 | Tee-Object shader-preparation-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_swapchain_retirement.py -v 2>&1 | Tee-Object swapchain-retirement-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_unchanged_surface_size.py -v 2>&1 | Tee-Object unchanged-surface-size-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_swap_aa.py -v 2>&1 | Tee-Object swap-aa-source-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_ui_launch.py -v 2>&1 | Tee-Object ui-launch-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_backend_quality_update.py -v 2>&1 | Tee-Object backend-quality-update-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_play_launcher.py -v 2>&1 | Tee-Object play-launcher-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_effects_diagnostics.py -v 2>&1 | Tee-Object effects-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_armed_effects_diagnostics.py -v 2>&1 | Tee-Object effects-index-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_effects_decision_budget.py -v 2>&1 | Tee-Object effects-decisions-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_d3d12_shader_prewarm.py -v 2>&1 | Tee-Object shader-prewarm-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_presenter_idle_notifications.py -v 2>&1 | Tee-Object presenter-idle-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_guest_vblank_clock.py -v 2>&1 | Tee-Object guest-vblank-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_scaled_pixel_centers.py -v 2>&1 | Tee-Object pixel-center-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_shader_preload.py -v 2>&1 | Tee-Object shader-preload-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_presenter_format_cache.py -v 2>&1 | Tee-Object presenter-format-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_async_submission.py -v 2>&1 | Tee-Object async-submission-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_startup_fullscreen.py -v 2>&1 | Tee-Object startup-fullscreen-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_runtime_evidence.py -v 2>&1 | Tee-Object runtime-evidence-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s tests -p test_prerequisites.py -v 2>&1 | Tee-Object prerequisites-test.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $failedContracts = @()
+          $contracts = @(
+            [pscustomobject]@{ Pattern = 'test_runtime_save_slots.py'; Log = 'save-slot-native-test.log' }
+            [pscustomobject]@{ Pattern = 'test_save_slots.py'; Log = 'save-slot-storage-test.log' }
+            [pscustomobject]@{ Pattern = 'test_controls.py'; Log = 'controls-test.log' }
+            [pscustomobject]@{ Pattern = 'test_runtime_languages.py'; Log = 'language-native-test.log' }
+            [pscustomobject]@{ Pattern = 'test_ui_coverage_native.py'; Log = 'ui-native-coverage-test.log' }
+            [pscustomobject]@{ Pattern = 'test_texture_ui.py'; Log = 'ui-atlas-test.log' }
+            [pscustomobject]@{ Pattern = 'test_shader_prepare.py'; Log = 'shader-preparation-test.log' }
+            [pscustomobject]@{ Pattern = 'test_swapchain_retirement.py'; Log = 'swapchain-retirement-test.log' }
+            [pscustomobject]@{ Pattern = 'test_unchanged_surface_size.py'; Log = 'unchanged-surface-size-test.log' }
+            [pscustomobject]@{ Pattern = 'test_swap_aa.py'; Log = 'swap-aa-source-test.log' }
+            [pscustomobject]@{ Pattern = 'test_ui_launch.py'; Log = 'ui-launch-test.log' }
+            [pscustomobject]@{ Pattern = 'test_backend_quality_update.py'; Log = 'backend-quality-update-test.log' }
+            [pscustomobject]@{ Pattern = 'test_play_launcher.py'; Log = 'play-launcher-test.log' }
+            [pscustomobject]@{ Pattern = 'test_effects_diagnostics.py'; Log = 'effects-test.log' }
+            [pscustomobject]@{ Pattern = 'test_armed_effects_diagnostics.py'; Log = 'effects-index-test.log' }
+            [pscustomobject]@{ Pattern = 'test_effects_decision_budget.py'; Log = 'effects-decisions-test.log' }
+            [pscustomobject]@{ Pattern = 'test_d3d12_shader_prewarm.py'; Log = 'shader-prewarm-test.log' }
+            [pscustomobject]@{ Pattern = 'test_presenter_idle_notifications.py'; Log = 'presenter-idle-test.log' }
+            [pscustomobject]@{ Pattern = 'test_guest_vblank_clock.py'; Log = 'guest-vblank-test.log' }
+            [pscustomobject]@{ Pattern = 'test_scaled_pixel_centers.py'; Log = 'pixel-center-test.log' }
+            [pscustomobject]@{ Pattern = 'test_shader_preload.py'; Log = 'shader-preload-test.log' }
+            [pscustomobject]@{ Pattern = 'test_presenter_format_cache.py'; Log = 'presenter-format-test.log' }
+            [pscustomobject]@{ Pattern = 'test_async_submission.py'; Log = 'async-submission-test.log' }
+            [pscustomobject]@{ Pattern = 'test_startup_fullscreen.py'; Log = 'startup-fullscreen-test.log' }
+            [pscustomobject]@{ Pattern = 'test_runtime_evidence.py'; Log = 'runtime-evidence-test.log' }
+            [pscustomobject]@{ Pattern = 'test_prerequisites.py'; Log = 'prerequisites-test.log' }
+          )
+          foreach ($contract in $contracts) {
+            python -m unittest discover -s tests -p $contract.Pattern -v 2>&1 | Tee-Object $contract.Log
+            if ($LASTEXITCODE -ne 0) { $failedContracts += $contract.Pattern }
+          }
+          if ($failedContracts.Count -gt 0) {
+            Write-Output ("Failed contracts: " + ($failedContracts -join ', '))
+            exit 1
+          }
       - name: Preserve compilation evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -230,6 +215,7 @@ jobs:
             texture-tools.log
             timing-test.log
             compiler-environment-test.log
+            *-test.log
             save-slot-native-test.log
             save-slot-storage-test.log
             controls-test.log
