@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - '.gitattributes'
       - 'native_port/spatial_sdk.py'
       - 'native_port/tasks.py'
       - 'tests/test_process_diagnostics.py'

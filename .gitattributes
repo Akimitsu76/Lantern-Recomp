@@ -1,0 +1,3 @@
+# Preserve pinned vendor hashes and the generated shader byte contract on Windows.
+integrations/rexglue/swap-aa/Fxaa3_11.h text eol=lf
+integrations/rexglue/swap-aa/fxaa_quality_source.h text eol=lf

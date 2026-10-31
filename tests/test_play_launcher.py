@@ -21,7 +21,7 @@ spec.loader.exec_module(launcher)
 class PlayLauncherTests(unittest.TestCase):
     def test_changed_graphics_plugin_cannot_pass_build_validation(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             game = root / 'game'
             game.mkdir()
             (game / 'default.xex').write_bytes(b'synthetic xex')
@@ -53,7 +53,7 @@ class PlayLauncherTests(unittest.TestCase):
                 (['--present-mode', 'auto'], 'true', 'true'),
                 (['--shader-mode', 'blocking', '--vsync', 'off'], 'false', 'true')]:
             with self.subTest(options=options), tempfile.TemporaryDirectory() as folder:
-                root = Path(folder)
+                root = Path(folder).resolve()
                 game = root / 'dump'
                 game.mkdir()
                 (game / 'default.xex').write_bytes(b'synthetic xex')
@@ -90,7 +90,7 @@ class PlayLauncherTests(unittest.TestCase):
 
     def test_experimental_60fps_uses_v9_build_and_shared_user_profile(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             game = root / 'dump'
             game.mkdir()
             (game / 'default.xex').write_bytes(b'synthetic xex')
@@ -138,7 +138,7 @@ class PlayLauncherTests(unittest.TestCase):
 
     def test_experimental_60fps_rejects_a_non_60fps_reference(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             game = root / 'dump'
             game.mkdir()
             (game / 'default.xex').write_bytes(b'synthetic xex')
@@ -166,7 +166,7 @@ class PlayLauncherTests(unittest.TestCase):
             self.assertIn('não é do modo 60 fps', errors.getvalue())
 
     def _unlimited_install(self, folder, presents=41355, elapsed=90.0):
-        root = Path(folder)
+        root = Path(folder).resolve()
         game = root / 'dump'
         game.mkdir()
         (game / 'default.xex').write_bytes(b'synthetic xex')
@@ -236,7 +236,7 @@ class PlayLauncherTests(unittest.TestCase):
 
     def test_high_preset_maps_to_real_cvars(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             game = root / 'dump'
             game.mkdir()
             (game / 'default.xex').write_bytes(b'synthetic xex')
@@ -285,7 +285,7 @@ class PlayLauncherTests(unittest.TestCase):
 
     def test_legacy_build_cannot_silently_downgrade_requested_internal_scale(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()
             game = root / 'dump'
             game.mkdir()
             (game / 'default.xex').write_bytes(b'synthetic xex')
@@ -408,7 +408,7 @@ class PlayLauncherTests(unittest.TestCase):
     def test_malformed_report_produces_clear_error_without_traceback(self):
         for report in [[], {'command': None}, {'command': [7]}]:
             with self.subTest(report=report), tempfile.TemporaryDirectory() as folder:
-                root = Path(folder)
+                root = Path(folder).resolve()
                 report_path = root / '.aster/reports/rexglue-runtime-probe.json'
                 report_path.parent.mkdir(parents=True)
                 report_path.write_text(json.dumps(report))

@@ -19,7 +19,7 @@ class NativeCoverageTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix='aster-ui-native-')
         cls.addClassCleanup(cls.temp.cleanup)
-        cls.folder = Path(cls.temp.name)
+        cls.folder = Path(cls.temp.name).resolve()
         root = Path(__file__).resolve().parents[1]
         prefix = Path(os.environ['ASTER_TEST_UI_SDK_PREFIX']).resolve()
         cls.environment = dict(os.environ)

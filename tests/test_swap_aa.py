@@ -35,7 +35,20 @@ class SwapQualityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='aster-fxaa-cpp-') as temp:
             temp = Path(temp)
             (temp / 'shader.h').write_bytes(aa.header_bytes())
-            (temp / 'main.cpp').write_text('#include "shader.h"\n#include <cstdio>\nint main(int argc,char**argv){std::fputs(rex::graphics::vulkan::aster_fxaa::GetQualitySource(argc>1),stdout);return 0;}\n')
+            (temp / 'main.cpp').write_text(r'''#include "shader.h"
+#include <cstdio>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+int main(int argc,char**argv) {
+#ifdef _WIN32
+  _setmode(_fileno(stdout), _O_BINARY); // Preserve shader bytes, without CRT CRLF conversion.
+#endif
+  std::fputs(rex::graphics::vulkan::aster_fxaa::GetQualitySource(argc>1),stdout);
+  return 0;
+}
+''')
             compiler = shutil.which('clang++') or shutil.which('c++')
             binary = temp / ('check.exe' if sys.platform == 'win32' else 'check')
             result = subprocess.run([compiler, '-std=c++17', str(temp / 'main.cpp'), '-o', str(binary)], capture_output=True, text=True, timeout=30)

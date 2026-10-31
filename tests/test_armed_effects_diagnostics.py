@@ -138,7 +138,7 @@ int main(int argc,char** argv) {
 
     def run_mode(self,mode,text=None,empty=False,unset=False):
         path=self.folder/'fontes-ação-粒子.index'
-        if text is not None: path.write_text(text)
+        if text is not None: path.write_text(text, encoding='utf8', newline='')
         env=dict(os.environ)
         env.pop('ASTER_EFFECTS_SOURCE_INDEX',None)
         if not unset: env['ASTER_EFFECTS_SOURCE_INDEX']='' if empty else str(path)
