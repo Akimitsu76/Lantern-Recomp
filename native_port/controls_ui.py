@@ -1,11 +1,12 @@
-"""Controls tab; owns no launcher settings file and launches no game."""
+"""Controls preferences, with real offline Xbox and DualSense product images."""
 from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 from . import controls
+from .controller_artwork import ControllerCard
 
 BG = '#090c0b'
-CARD = '#131a16'
+CARD = '#111a16'
 INK = '#f0f4f8'
 MUTED = '#98a99f'
 ACCENT = '#b4ed74'
@@ -24,68 +25,150 @@ class ControlsPanel(ttk.Frame):
                         for key, value in config['gamepad']['bindings'].items()}
         self.axes = {key: tk.BooleanVar(self, value=config['gamepad'][key]) for key in controls.AXIS_FIELDS}
         self.deadzone = tk.IntVar(self, value=config['gamepad']['deadzone'])
-        header = ttk.Frame(self); header.pack(fill='x', pady=(0, 8))
+        self._styles()
+        header = ttk.Frame(self)
+        header.pack(fill='x', pady=(0, 14))
         ttk.Label(header, text='Controles', font=('DejaVu Sans', 20, 'bold')).pack(side='left')
         ttk.Button(header, text='Restaurar padrão', command=lambda: self.set_settings(controls.defaults())).pack(side='right')
-        options = ttk.Frame(self); options.pack(fill='x', pady=6)
-        ttk.Label(options, text='Ícones no jogo').pack(side='left')
-        ttk.Combobox(options, state='readonly', width=17, values=list(controls.LAYOUTS.values()), textvariable=self.layout).pack(side='left', padx=12)
-        ttk.Label(options, text='Automático acompanha o controle em atividade.').pack(side='left')
-        previews = ttk.Frame(self); previews.pack(fill='x', pady=8)
-        self._draw_controller(previews, False)
-        self._draw_controller(previews, True)
-        wrapper = ttk.Frame(self); wrapper.pack(fill='both', expand=True)
+        options = ttk.Frame(self)
+        options.pack(fill='x', pady=(0, 14))
+        ttk.Label(options, text='Layout dos botões', font=('DejaVu Sans', 10, 'bold')).pack(side='left')
+        ttk.Combobox(options, state='readonly', width=17, values=list(controls.LAYOUTS.values()),
+                     textvariable=self.layout).pack(side='left', padx=(16, 14))
+        ttk.Label(options, text='Escolha a referência visual dos comandos.', foreground=MUTED).pack(side='left')
+        wrapper = ttk.Frame(self)
+        wrapper.pack(fill='both', expand=True)
         self.canvas = tk.Canvas(wrapper, bg=BG, highlightthickness=0, height=310)
         scrollbar = ttk.Scrollbar(wrapper, orient='vertical', command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side='right', fill='y'); self.canvas.pack(side='left', fill='both', expand=True)
-        body = ttk.Frame(self.canvas)
-        window = self.canvas.create_window(0, 0, window=body, anchor='nw')
-        body.bind('<Configure>', lambda _: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        scrollbar.pack(side='right', fill='y', padx=(8, 0))
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.body = ttk.Frame(self.canvas)
+        window = self.canvas.create_window(0, 0, window=self.body, anchor='nw')
+        self.body.bind('<Configure>', lambda _: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
         self.canvas.bind('<Configure>', lambda event: self.canvas.itemconfigure(window, width=event.width))
-        body.columnconfigure(0, weight=1); body.columnconfigure(1, weight=1)
-        keyboard = ttk.Frame(body); keyboard.grid(row=0, column=0, sticky='nsew', padx=(0, 18))
-        gamepad = ttk.Frame(body); gamepad.grid(row=0, column=1, sticky='nsew')
-        keyboard.columnconfigure(1, weight=1); gamepad.columnconfigure(1, weight=1)
-        ttk.Label(keyboard, text='Teclado e mouse', font=('DejaVu Sans', 13, 'bold')).grid(row=0, column=0, columnspan=2, sticky='w', pady=8)
-        ttk.Checkbutton(keyboard, text='Ativar teclado', variable=self.keyboard_enabled).grid(row=1, column=0, columnspan=2, sticky='w')
-        ttk.Label(keyboard, text='Ex.: Space, L, Shift+Up. Vírgula separa alternativas.', wraplength=440).grid(row=2, column=0, columnspan=2, sticky='w', pady=(4, 12))
-        for row, key in enumerate(controls.KEYBOARD_DEFAULTS, 3):
-            ttk.Label(keyboard, text=controls.KEYBOARD_LABELS[key]).grid(row=row, column=0, sticky='w', pady=3, padx=(0, 10))
-            ttk.Entry(keyboard, textvariable=self.keyboard[key], width=19).grid(row=row, column=1, sticky='ew', pady=3)
-        row += 1
-        ttk.Checkbutton(keyboard, text='Mouse controla a câmera', variable=self.mouse_look).grid(row=row, column=0, columnspan=2, sticky='w', pady=(12, 4))
-        ttk.Label(keyboard, text='Sensibilidade do mouse').grid(row=row+1, column=0, sticky='w')
-        ttk.Spinbox(keyboard, from_=.01, to=10, increment=.1, width=10, textvariable=self.mouse_sensitivity).grid(row=row+1, column=1, sticky='w')
-        ttk.Label(gamepad, text='Controle Xbox / PlayStation', font=('DejaVu Sans', 13, 'bold')).grid(row=0, column=0, columnspan=2, sticky='w', pady=8)
-        ttk.Label(gamepad, text='Comando do jogo → botão físico', wraplength=440).grid(row=1, column=0, columnspan=2, sticky='w', pady=(0, 8))
-        for row, (key, label, description) in enumerate(controls.ACTIONS, 2):
-            ttk.Label(gamepad, text=f'{label} · {description}').grid(row=row, column=0, sticky='w', padx=(0, 8), pady=3)
-            ttk.Combobox(gamepad, state='readonly', width=17, values=list(controls.PAD_LABELS.values()), textvariable=self.gamepad[key]).grid(row=row, column=1, sticky='ew', pady=3)
-        row += 1
-        labels = {'swap_sticks': 'Trocar os analógicos', 'invert_lx': 'Inverter analógico esquerdo X',
-                  'invert_ly': 'Inverter analógico esquerdo Y', 'invert_rx': 'Inverter câmera X', 'invert_ry': 'Inverter câmera Y'}
-        for key in controls.AXIS_FIELDS:
-            ttk.Checkbutton(gamepad, text=labels[key], variable=self.axes[key]).grid(row=row, column=0, columnspan=2, sticky='w', pady=3); row += 1
-        ttk.Label(gamepad, text='Zona morta adicional (%)').grid(row=row, column=0, sticky='w')
-        ttk.Spinbox(gamepad, from_=0, to=30, textvariable=self.deadzone, width=6).grid(row=row, column=1, sticky='w')
-        ttk.Label(self, text='Use Salvar para aplicar as alterações na próxima abertura do jogo. As configurações não alteram o save.', wraplength=1000).pack(anchor='w', pady=(10, 0))
+        self.body.columnconfigure((0, 1), weight=1, uniform='control-columns')
+        self.previews = {}
+        for column, family in enumerate(('xbox', 'playstation')):
+            card = ControllerCard(self.body, family, self.layout)
+            card.grid(row=0, column=column, sticky='ew', padx=(0, 8) if column == 0 else (8, 0), pady=(0, 18))
+            self.previews[family] = card
+        keyboard = self._column(self.body, 0, 'Teclado e mouse', 'Personalize as teclas e os movimentos da câmera.')
+        gamepad = self._column(self.body, 1, 'Controle', 'Ação do jogo → botão físico do controle.')
+        self._keyboard_fields(keyboard)
+        self._gamepad_fields(gamepad)
+        self._bind_scroll(self)
+        ttk.Label(self, text='Salve para aplicar na próxima abertura do jogo. Seus saves permanecem os mesmos.',
+                  foreground=MUTED, wraplength=950).pack(anchor='w', pady=(12, 0))
+
+    def _styles(self):
+        style = ttk.Style(self)
+        style.configure('Controls.Card.TFrame', background=CARD)
+        style.configure('Controls.Card.TLabel', background=CARD, foreground=INK)
+        style.configure('Controls.Muted.TLabel', background=CARD, foreground=MUTED)
+        style.configure('Controls.Group.TLabel', background=CARD, foreground=ACCENT, font=('DejaVu Sans', 9, 'bold'))
+        style.configure('Controls.TCheckbutton', background=CARD, foreground=INK, padding=(0, 4))
+        style.map('Controls.TCheckbutton', background=[('active', CARD)])
+        style.configure('Controls.TEntry', padding=(10, 8), fieldbackground='#0b120e', foreground=INK,
+                        bordercolor='#304237', lightcolor='#304237', darkcolor='#304237')
+        style.configure('Controls.TCombobox', padding=(8, 7), fieldbackground='#0b120e', foreground=INK,
+                        bordercolor='#304237', lightcolor='#304237', darkcolor='#304237', arrowcolor=MUTED)
+        style.map('Controls.TCombobox', fieldbackground=[('readonly', '#0b120e')],
+                  selectbackground=[('readonly', '#0b120e')], selectforeground=[('readonly', INK)])
 
     @staticmethod
-    def _draw_controller(parent, playstation):
-        canvas = tk.Canvas(parent, width=370, height=112, bg=CARD, highlightthickness=0)
-        canvas.pack(side='left', fill='x', expand=True, padx=(0, 10))
-        canvas.create_text(12, 13, text='PlayStation' if playstation else 'Xbox', fill=INK, anchor='w', font=('DejaVu Sans', 11, 'bold'))
-        canvas.create_polygon(74, 32, 130, 27, 222, 27, 278, 32, 303, 91, 273, 98, 240, 74, 112, 74, 79, 98, 49, 91, fill='#28372d', outline='#63836a', width=2, smooth=True)
-        canvas.create_rectangle(90, 47, 101, 78, fill='#d7e0d9', outline='')
-        canvas.create_rectangle(80, 57, 111, 68, fill='#d7e0d9', outline='')
-        for x, y in ((143, 74), (213, 74)):
-            canvas.create_oval(x-13, y-13, x+13, y+13, fill='#0b110d', outline='#63836a', width=2)
-        for x, y, xbox, ps, color in ((268, 50, 'Y', '△', '#80d9b2'), (281, 65, 'B', '○', '#f1979a'),
-                                     (255, 65, 'X', '□', '#dca1d2'), (268, 80, 'A', '×', '#9ec3f3')):
-            canvas.create_text(x, y, text=ps if playstation else xbox, fill=color if playstation else ACCENT, font=('DejaVu Sans', 11, 'bold'))
-        canvas.create_text(175, 43, text='Share    Options' if playstation else 'Back    Start', fill=MUTED, font=('DejaVu Sans', 7))
-        return canvas
+    def _column(parent, column, title, subtitle):
+        outer = tk.Frame(parent, bg=CARD, highlightthickness=1, highlightbackground='#283a30')
+        outer.grid(row=1, column=column, sticky='new', padx=(0, 8) if column == 0 else (8, 0))
+        inner = ttk.Frame(outer, style='Controls.Card.TFrame', padding=18)
+        inner.pack(fill='both', expand=True)
+        inner.columnconfigure(1, weight=1)
+        ttk.Label(inner, text=title, style='Controls.Card.TLabel', font=('DejaVu Sans', 13, 'bold')).grid(row=0, column=0, columnspan=2, sticky='w')
+        ttk.Label(inner, text=subtitle, style='Controls.Muted.TLabel', wraplength=400).grid(row=1, column=0, columnspan=2, sticky='w', pady=(6, 14))
+        return inner
+
+    @staticmethod
+    def _group(parent, row, title):
+        ttk.Label(parent, text=title.upper(), style='Controls.Group.TLabel').grid(
+            row=row, column=0, columnspan=2, sticky='w', pady=(20, 8))
+        return row + 1
+
+    @staticmethod
+    def _label(parent, row, text):
+        ttk.Label(parent, text=text, style='Controls.Card.TLabel', wraplength=205).grid(
+            row=row, column=0, sticky='w', padx=(0, 14), pady=5)
+
+    def _keyboard_fields(self, parent):
+        ttk.Checkbutton(parent, text='Ativar teclado', style='Controls.TCheckbutton',
+                        variable=self.keyboard_enabled).grid(row=2, column=0, columnspan=2, sticky='w')
+        ttk.Label(parent, text='Ex.: Space ou Shift+Up. Use vírgula para alternativas.',
+                  style='Controls.Muted.TLabel', wraplength=400).grid(row=3, column=0, columnspan=2, sticky='w', pady=(4, 0))
+        groups = (
+            ('Combate e ações', ('a', 'b', 'x', 'y', 'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder')),
+            ('Movimento', ('lstick_up', 'lstick_down', 'lstick_left', 'lstick_right', 'lstick_press')),
+            ('Câmera', ('rstick_up', 'rstick_down', 'rstick_left', 'rstick_right', 'rstick_press')),
+            ('Menus e direcional', ('back', 'start', 'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right', 'guide')),
+        )
+        row = 4
+        for title, keys in groups:
+            row = self._group(parent, row, title)
+            for key in keys:
+                self._label(parent, row, controls.KEYBOARD_LABELS[key])
+                ttk.Entry(parent, style='Controls.TEntry', textvariable=self.keyboard[key], width=17).grid(
+                    row=row, column=1, sticky='ew', pady=4)
+                row += 1
+        row = self._group(parent, row, 'Mouse')
+        ttk.Checkbutton(parent, text='Mouse controla a câmera', style='Controls.TCheckbutton',
+                        variable=self.mouse_look).grid(row=row, column=0, columnspan=2, sticky='w', pady=(0, 8))
+        self._label(parent, row+1, 'Sensibilidade')
+        ttk.Spinbox(parent, from_=.01, to=10, increment=.1, width=9,
+                    textvariable=self.mouse_sensitivity).grid(row=row+1, column=1, sticky='w')
+
+    def _gamepad_fields(self, parent):
+        actions = {key: (label, description) for key, label, description in controls.ACTIONS}
+        groups = (
+            ('Combate e ações', ('a', 'b', 'x', 'y', 'left_trigger', 'right_trigger', 'left_shoulder', 'right_shoulder')),
+            ('Menus e direcional', ('back', 'start', 'dpad_up', 'dpad_down', 'dpad_left', 'dpad_right')),
+            ('Analógicos', ('lstick_press', 'rstick_press')),
+        )
+        row = 2
+        for title, keys in groups:
+            row = self._group(parent, row, title)
+            for key in keys:
+                _, description = actions[key]
+                self._label(parent, row, description)
+                field = ttk.Combobox(parent, state='readonly', width=17, style='Controls.TCombobox',
+                                     values=list(controls.PAD_LABELS.values()), textvariable=self.gamepad[key])
+                field.grid(row=row, column=1, sticky='ew', pady=4)
+                row += 1
+        row = self._group(parent, row, 'Ajustes dos analógicos')
+        labels = {'swap_sticks': 'Trocar os analógicos', 'invert_lx': 'Inverter movimento horizontal',
+                  'invert_ly': 'Inverter movimento vertical', 'invert_rx': 'Inverter câmera horizontal',
+                  'invert_ry': 'Inverter câmera vertical'}
+        for key in controls.AXIS_FIELDS:
+            ttk.Checkbutton(parent, text=labels[key], style='Controls.TCheckbutton', variable=self.axes[key]).grid(
+                row=row, column=0, columnspan=2, sticky='w', pady=2)
+            row += 1
+        self._label(parent, row, 'Zona morta adicional (%)')
+        ttk.Spinbox(parent, from_=0, to=30, textvariable=self.deadzone, width=6).grid(row=row, column=1, sticky='w')
+
+    def _bind_scroll(self, widget):
+        widget.bind('<MouseWheel>', self._scroll, add='+')
+        widget.bind('<Button-4>', self._scroll, add='+')
+        widget.bind('<Button-5>', self._scroll, add='+')
+        for child in widget.winfo_children():
+            self._bind_scroll(child)
+
+    def _scroll(self, event):
+        if getattr(event, 'num', None) in (4, 5):
+            steps = -1 if event.num == 4 else 1
+        else:
+            delta = event.delta
+            if not delta:
+                return
+            steps = -int(delta/120) if abs(delta) >= 120 else (-1 if delta > 0 else 1)
+        self.canvas.yview_scroll(steps * 3, 'units')
+        return 'break'
 
     def get_settings(self):
         reverse_layout = {label: key for key, label in controls.LAYOUTS.items()}

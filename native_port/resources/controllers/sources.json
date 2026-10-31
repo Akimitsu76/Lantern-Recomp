@@ -1,0 +1,18 @@
+[
+  {
+    "file": "xbox-series.png",
+    "source_page": "https://www.microsoft.com/en-us/d/xbox-wireless-controller/8xn59crbsqgz",
+    "source_url": "https://cdn-dynmedia-1.microsoft.com/is/image/microsoftcorp/gldn-Xbox-Cntrl-Black-b00?fmt=png-alpha&wid=1600&qlt=95",
+    "rights_holder": "Microsoft / Xbox",
+    "sha256": "de5f832a6f6a10275714116b2d3b5e01ee33fd0f6a2109625466f10484f7f015",
+    "modified": false
+  },
+  {
+    "file": "dualsense.png",
+    "source_page": "https://www.playstation.com/en-us/accessories/dualsense-wireless-controller/",
+    "source_url": "https://gmedia.playstation.com/is/image/SIEPDC/dualsense-controller-product-thumbnail-01-en-14sep21?fmt=png-alpha&wid=1600",
+    "rights_holder": "Sony Interactive Entertainment / PlayStation",
+    "sha256": "f4e0359370cff7124ff9c82e9fca4d28a32e679a50640735a08dbd9f60e534aa",
+    "modified": false
+  }
+]
