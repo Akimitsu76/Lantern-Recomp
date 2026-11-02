@@ -856,6 +856,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(data['source'], str(folder))
         self.assertEqual(data['graphics']['preset'], 'high')
         self.assertEqual(data['graphics']['fps_target'], '60')
+        self.assertTrue(data['lightweight'])
         self.assertFalse((self.project / '.aster/runtime').exists())
 
     def test_play_missing_build_routes_to_generation_without_launching_game(self):

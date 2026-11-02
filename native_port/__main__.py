@@ -47,6 +47,9 @@ def main():
     ui.add_argument('--coverage-format', choices=('bc3', 'rgba8'), default='bc3', help='RGBA8 preserva cobertura alpha sem recompressão; requer backend 0030.')
     helpers = sub.add_parser('texture-tools', help='Compilar helpers públicos sem assets do jogo')
     helpers.add_argument('--download-sdk', action='store_true')
+    trim = sub.add_parser('trim', help='Manter apenas o necessário para jogar (remove caches de atualização)')
+    trim.add_argument('--workspace', type=Path, default=PROJECT / '.aster')
+    trim.add_argument('--keep-tools', action='store_true', help='Mantém as ferramentas de compilação')
     args = parser.parse_args()
     try:
         if args.command == 'gui':
@@ -63,6 +66,9 @@ def main():
             from .texture_tools import ensure_texture_tools
             result = {k: str(v) for k, v in ensure_texture_tools(PROJECT, Workspace(PROJECT / '.aster', PROJECT),
                 allow_download=args.download_sdk, emit=lambda event: print(json.dumps(event), file=sys.stderr)).items()}
+        elif args.command == 'trim':
+            from .retention import trim_workspace
+            result = trim_workspace(PROJECT, args.workspace, keep_tools=args.keep_tools)
         elif args.command == 'texture-ui-prepare':
             from .texture_ui import prepare_game_ui
             folder = prepare_game_ui(args.source, PROJECT, Workspace(PROJECT / '.aster', PROJECT),

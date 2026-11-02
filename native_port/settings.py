@@ -12,7 +12,7 @@ SCHEMA = 2
 def defaults(project):
     return {'schema': SCHEMA, 'workspace': str(Path(project) / '.aster'),
             'source': '', 'build_type': 'Release', 'jobs': 1, 'hd_texture_pack': '', 'hd_texture_catalog': '',
-            'graphics': graphics.defaults(), 'controls': controls.defaults(),
+            'lightweight': True, 'graphics': graphics.defaults(), 'controls': controls.defaults(),
             'languages': languages.defaults()}
 
 
@@ -43,6 +43,8 @@ def validate(data, project):
         raise PortError('SETTINGS_VALUE', 'Tipo de build inválido.')
     if type(result['jobs']) is not int or not 1 <= result['jobs'] <= 64:
         raise PortError('SETTINGS_VALUE', 'Número de tarefas deve ficar entre 1 e 64.')
+    if type(result['lightweight']) is not bool:
+        raise PortError('SETTINGS_VALUE', 'A opção de instalação leve deve ser verdadeira ou falsa.')
     previous_graphics = result['graphics']
     if isinstance(previous_graphics, dict):
         previous_graphics = dict(previous_graphics)

@@ -114,6 +114,7 @@ class Launcher:
         self.jobs = tk.IntVar(value=cfg['jobs'])
         self.hd_texture_pack = tk.StringVar(value=cfg['hd_texture_pack'])
         self.hd_texture_catalog = tk.StringVar(value=cfg['hd_texture_catalog'])
+        self.lightweight = tk.BooleanVar(value=cfg['lightweight'])
         self.hd_status = tk.StringVar(value='Texturas originais · nenhum pacote selecionado')
         self.hd_material_count = None
         self.hd_running = False
@@ -357,7 +358,8 @@ class Launcher:
                         self.copy_button, self.restore_graphics_button, self.build_start_button,
                         self.hd_select_button, self.hd_original_button, self.hd_catalog_button,
                         self.hd_prepare_button, self.hd_auto_button, self.fullscreen_check,
-                        self.sharpness_spin, self.sharpness_balanced_button, self.shader_preload_check]
+                        self.sharpness_spin, self.sharpness_balanced_button, self.shader_preload_check,
+                        self.lightweight_check]
         self._readonly_widgets = [self.build_combo, self.shader_combo, self.output_combo,
             self.upscaler_combo, self.antialiasing_combo, *self.home_combos]
 
@@ -991,6 +993,17 @@ class Launcher:
         self.copy_button = ttk.Button(actions, text='Copiar logs', style='Ghost.TButton',
                                       command=self.copy_logs)
         self.copy_button.pack(side='left', padx=(6, 0))
+        lightweight_row = tk.Frame(self.diag_tab, bg=BG)
+        lightweight_row.pack(fill='x', pady=(8, 0))
+        self.lightweight_check = ttk.Checkbutton(
+            lightweight_row, text='Manter instalação leve',
+            variable=self.lightweight, command=lambda: self.save_settings(quiet=True))
+        self.lightweight_check.pack(side='left')
+        tk.Label(lightweight_row,
+                 text='Remove ferramentas e caches de textura após gerar/atualizar. '
+                      'Saves, configurações, shaders, recibos e o pack HD são preservados.',
+                 bg=BG, fg=MUTED, font=(FONT, 9), wraplength=720,
+                 justify='left').pack(side='left', padx=(8, 0))
         tk.Label(self.diag_tab, textvariable=self.report_path, bg=BG, fg=MUTED,
                  font=(FONT, 8), wraplength=1000, justify='left').pack(anchor='w', pady=(7, 0))
 
@@ -1414,7 +1427,9 @@ class Launcher:
             return settings.validate({'schema': 2, 'workspace': self.workspace.get(),
                                       'source': self.source.get(), 'build_type': self.build_type.get(),
                                       'jobs': self.jobs.get(), 'hd_texture_pack': self.hd_texture_pack.get(),
-                                      'hd_texture_catalog': self.hd_texture_catalog.get(), 'graphics': self._graphics_data(),
+                                      'hd_texture_catalog': self.hd_texture_catalog.get(),
+                                      'lightweight': bool(self.lightweight.get()),
+                                      'graphics': self._graphics_data(),
                                       'controls': self.controls_panel.get_settings(),
                                       'languages': self.language_controls.get()}, PROJECT)
         except tk.TclError as exc:
@@ -1554,6 +1569,8 @@ class Launcher:
         command = self.play_command(folder)
         texture_work = Workspace(self.workspace.get(), PROJECT)
         installation = read_install(PROJECT)
+        lightweight = bool(self.lightweight.get())
+        configured_pack = self.hd_texture_pack.get()
         def action():
             if installation and graphics_data['shader_preload']:
                 from .shader_prepare import prepare_game_shaders
@@ -1575,6 +1592,15 @@ class Launcher:
             if checked.returncode:
                 raise PortError('EXPERIMENTAL_VALIDATION', (checked.stderr or checked.stdout).strip()
                                 or 'A validação da instalação falhou.')
+            if lightweight:
+                from .retention import trim_workspace
+                try:
+                    report = trim_workspace(PROJECT, texture_work.root,
+                                            keep_packs=[prepared.get('pack'), configured_pack])
+                except Exception as exc:
+                    report = {'state': 'skipped', 'warnings': [str(exc)],
+                              'message': 'Modo leve não aplicado; o jogo será aberto normalmente.'}
+                self.queue.put(('retention', '', report))
             output = PROJECT / '.aster/reports' / f'launcher-play-{time.time_ns()}.log'
             output.parent.mkdir(parents=True, exist_ok=True)
             process = None
@@ -1746,10 +1772,14 @@ class Launcher:
             'A primeira geração compila o SDK gráfico completo no Linux e no Windows e pode demorar.\n\n'
             'Preparar também as dependências ausentes pelo gerenciador oficial do sistema? '
             'A instalação de ferramentas e bibliotecas pode pedir autorização de administrador '
-            'e ocupar vários GB na primeira geração. O launcher verificará os requisitos novamente ao concluir.')
+            'e ocupar vários GB na primeira geração. O launcher verificará os requisitos novamente ao concluir.\n\n'
+            'Ao terminar, o modo leve remove ferramentas e caches temporários. O build, o pack HD, '
+            'os saves, as configurações, os shaders e os recibos de validação são preservados.')
         if not consent:
             return
         source, jobs = cfg['source'], cfg['jobs']
+        lightweight = cfg['lightweight']
+        configured_pack = cfg['hd_texture_pack']
         graphics_data = self._graphics_data()
         texture_work = Workspace(cfg['workspace'], PROJECT)
         def generate():
@@ -1760,6 +1790,15 @@ class Launcher:
             textures = ensure_graphics_textures(source, graphics_data, PROJECT, texture_work,
                 cancel=self.cancel, emit=lambda e: self.queue.put(('hd-event', '', e)), allow_download=True)
             self.queue.put(('hd-selection', '', textures))
+            if lightweight:
+                from .retention import trim_workspace
+                try:
+                    report = trim_workspace(PROJECT, texture_work.root,
+                                            keep_packs=[textures.get('pack'), configured_pack])
+                except Exception as exc:
+                    report = {'state': 'skipped', 'warnings': [str(exc)],
+                              'message': 'Modo leve não aplicado; o port foi gerado normalmente.'}
+                self.queue.put(('retention', '', report))
             return result
         self.start(generate, 'Gerar port')
         self.tabs.select(self.build_tab)
@@ -1845,6 +1884,13 @@ class Launcher:
             if state == 'hd-event':
                 self.log(value)
                 self._hd_event(value)
+                continue
+            if state == 'retention':
+                self.log(value)
+                for warning in value.get('warnings', []):
+                    self.log({'task': 'Modo leve', 'warning': warning})
+                if value.get('message'):
+                    self.status.set(value['message'])
                 continue
             if state == 'event':
                 self.log(value)

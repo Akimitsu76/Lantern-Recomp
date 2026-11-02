@@ -28,8 +28,14 @@ e são carregadas localmente, sem downloads na abertura.
 
 Os recibos de validação HD reutilizam artefatos já conferidos quando os arquivos
 permanecem inalterados. A primeira abertura após a atualização ainda faz a
-validação integral. Fontes DejaVu acompanham os executáveis e são registradas
-somente no processo, sem instalar fontes no sistema ou no perfil do usuário.
+validação integral. Por padrão, o launcher aplica o **modo leve** ao concluir
+uma geração ou atualização: remove ferramentas de compilação, texturas
+intermediárias e builds antigos, preservando o build ativo, o pack HD em uso,
+saves, preferências, shaders decodificados e recibos. A opção pode ser
+desligada em **Diagnóstico → Manter instalação leve**. Numa atualização
+posterior, o launcher baixa novamente apenas o que faltar e volta ao modo leve
+sozinho. Fontes DejaVu acompanham os executáveis e são registradas somente no
+processo, sem instalar fontes no sistema ou no perfil do usuário.
 A arte de fundo é procedural e original. As imagens de produto dos controles
 vêm das páginas oficiais dos fabricantes, com URLs, titulares e hashes em
 `native_port/resources/controllers/`, e não são arte original do projeto. Não
