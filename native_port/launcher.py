@@ -847,13 +847,26 @@ class Launcher:
             return
         source = Path(self.source.get()).expanduser().resolve()
         work = Workspace(self.workspace.get(), PROJECT)
+        lightweight = bool(self.lightweight.get())
+        configured_pack = self.hd_texture_pack.get()
         self.hd_running = True
         self.hd_progress.configure(mode='indeterminate', value=0)
         self.hd_progress.start(15)
         def action():
             from .texture_pipeline import ensure_graphics_textures
-            return ensure_graphics_textures(source, data, PROJECT, work, cancel=self.cancel,
-                                            emit=lambda event: self.queue.put(('hd-event', '', event)), allow_download=True)
+            prepared = ensure_graphics_textures(source, data, PROJECT, work, cancel=self.cancel,
+                                                emit=lambda event: self.queue.put(('hd-event', '', event)),
+                                                allow_download=True)
+            if lightweight:
+                from .retention import trim_workspace
+                try:
+                    report = trim_workspace(PROJECT, work.root,
+                                            keep_packs=[prepared.get('pack'), configured_pack])
+                except Exception as exc:
+                    report = {'state': 'skipped', 'warnings': [str(exc)],
+                              'message': 'Modo leve não aplicado; as texturas foram preparadas.'}
+                self.queue.put(('retention', '', report))
+            return prepared
         self.start(action, 'Preparar texturas HD')
         self.tabs.select(self.graphics_tab)
 
