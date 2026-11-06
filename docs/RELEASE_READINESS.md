@@ -1,5 +1,32 @@
 # Preparação da release
 
+## Modo leve após geração/atualização — v0.1.4-rc.8, 02/11/2026
+
+**Pré-release experimental, não stable.** Esta revisão publica o launcher com o
+modo leve habilitado por padrão. Ao concluir uma geração/atualização do port ou
+uma preparação manual de texturas HD, o launcher remove ferramentas de
+compilação, texturas intermediárias e builds antigos. São preservados o build
+ativo, o pack HD em uso, saves, preferências, shaders decodificados e recibos de
+validação. A opção **Manter instalação leve** fica em **Diagnóstico** e pode ser
+desligada.
+
+A limpeza confere o build ativo por hash antes de remover qualquer coisa, não
+segue links simbólicos e, em caso de dúvida ou geração em andamento, não apaga
+nada. Uma atualização posterior baixa novamente apenas o que faltar e reaplica o
+modo leve. A versão embutida é `0.1.4-rc.8`; o `pyproject.toml` usa `0.1.4rc8`.
+
+- Assets: `AsterNative-linux-x86_64.AppImage` (55.966.200 bytes, SHA-256
+  `c23f6ee20f05024233e5a50bb46fcddc945bd9553d6ddc296b3faba3b85e2870`),
+  `AsterNative-windows-x64.exe` (69.460.215 bytes, SHA-256
+  `59e0adad8dc656b80a565a96ec42871903b81194e4390fab09a9d7e3f5c0d651`),
+  `SHA256SUMS` e `LEIA-ME-ATUALIZACAO.md`.
+- O updater já inclui as correções de launcher único e caminhos canônicos da
+  rc.7. A suíte completa passou no Linux com 506 testes, 27 skips e 322
+  subtests; o smoke do AppImage confirmou versão, Tk 9, fontes escaláveis e aba
+  de atualizações. O smoke do EXE passou sob Wine (Tk 8.6, mesmos controles e
+  `game_launched=false`). Windows continua validado apenas sob Wine; gameplay
+  D3D12 nativo não é certificado.
+
 ## Integração 23 e cache de texturas — v0.1.4-rc.4, 29/10/2026
 
 **Pré-release experimental, não stable.** A versão embutida é `0.1.4-rc.4`; o

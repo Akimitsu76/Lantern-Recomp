@@ -12,6 +12,22 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
+## Modo leve após gerar ou atualizar — v0.1.4-rc.8
+
+O launcher agora aplica o **modo leve** por padrão depois de gerar ou atualizar
+o port e depois de preparar texturas HD manualmente. Ele remove ferramentas de
+compilação, texturas intermediárias e builds antigos, preservando o build ativo,
+o pack HD em uso, saves, preferências, shaders decodificados e recibos de
+validação. A opção **Manter instalação leve** fica em **Diagnóstico** e pode ser
+desligada. Numa atualização posterior, o launcher baixa de novo apenas o que
+faltar e volta ao modo leve sozinho.
+
+A limpeza é conservadora: o build ativo é conferido por hash e links simbólicos
+não são seguidos. Se a instalação estiver em uso ou não puder ser conferida,
+nada é apagado. A mudança reduz o espaço ocupado depois da primeira geração e
+não altera o dump, o backend compilado, o gameplay ou os saves. Windows segue
+validado apenas via Wine; D3D12 nativo continua sem certificação.
+
 ## Aba Controles redesenhada — v0.1.4-rc.7
 
 A aba **Controles** agora mostra cartões com imagens de produto do **Xbox

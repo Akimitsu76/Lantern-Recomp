@@ -1,3 +1,20 @@
+# Modo leve após geração/atualização — 02/11/2026 (launcher 0.1.4-rc.8)
+
+O launcher aplica o modo leve por padrão ao concluir uma geração/atualização e
+também após preparar texturas HD manualmente. `native_port/retention.py` remove
+ferramentas de compilação, texturas intermediárias e builds antigos, preservando
+o build ativo, o pack HD em uso, saves, preferências, shaders decodificados e
+recibos de validação. A opção **Manter instalação leve** fica em Diagnóstico e
+vem marcada. A limpeza confere o build ativo por hash, não segue links simbólicos
+e, em qualquer dúvida, não apaga nada.
+
+Esta entrega é do launcher: não altera gameplay, backend, renderer, shaders, FPS
+ou saves. A versão embutida é `0.1.4-rc.8`; o `pyproject.toml` usa `0.1.4rc8`.
+A release inclui AppImage Linux, EXE Windows e SHA256SUMS para o atualizador
+entregar a mudança. A suíte completa passou no Linux com 506 testes, 27 skips e
+322 subtests. Windows foi exercitado sob Wine; D3D12 nativo continua sem
+certificação.
+
 # Aba Controles redesenhada — 30/10/2026 (launcher 0.1.4-rc.7)
 
 A aba Controles foi reorganizada com dois cartões de imagens de produto reais
