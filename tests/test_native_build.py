@@ -24,6 +24,19 @@ class NativeBuildTests(unittest.TestCase):
         self.assertEqual(Path(companion_c_compiler('clang-cl.exe')).name, 'clang-cl.exe')
         self.assertEqual(Path(companion_c_compiler('clang-cl.EXE')).name, 'clang-cl.EXE')
 
+    def test_windows_project_restores_sse41_for_generated_simde(self):
+        from native_port.native_build import apply_project_compatibility, project_configure_flags
+        template = ('project(example)\ninclude(generated/rexglue.cmake)\n'
+                    'rexglue_setup_target(aster_green_lantern)\n')
+        windows = apply_project_compatibility(template, 'win-amd64')
+        self.assertIn('add_compile_options(-msse4.1)', windows)
+        self.assertLess(windows.index('add_compile_options'), windows.index('rexglue_setup_target'))
+        self.assertEqual(apply_project_compatibility(template, 'linux-amd64'), template)
+        self.assertEqual(project_configure_flags('win-amd64'), ['-msse4.1'])
+        self.assertEqual(project_configure_flags('linux-amd64'), [])
+        with self.assertRaises(PortError):
+            apply_project_compatibility('project(example)\n', 'win-amd64')
+
     def test_cpu_reuse_keeps_presenter_and_unknown_patches_abi_sensitive(self):
         base = {'revision': 'pinned', 'platform': 'linux-amd64', 'baseline_flags': 'x86-64-v2',
                 'patches': {'0004-embedded-spatial-sdk.patch': 'presenter-abi'}}

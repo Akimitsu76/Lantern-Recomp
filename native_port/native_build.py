@@ -31,6 +31,41 @@ SDK_ASSETS = {
     'win-amd64': 'ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b',
 }
 INSTALL = 'config/native-install.json'
+# clang-cl reports MSVC to CMake, so the SDK's `NOT MSVC` baseline omits this
+# GNU-style switch. Generated SIMDe code then lowers vrfin to the C23 libcall
+# roundevenf, which the Microsoft CRT does not provide. Keep the same SSE4.1
+# baseline the SDK applies to Clang on Linux and other Unix hosts.
+WINDOWS_PROJECT_CXX_FLAGS = '-msse4.1'
+
+
+def project_configure_flags(target):
+    """Recipe marker for project settings the installed SDK helper misses."""
+    if target == 'win-amd64':
+        return [WINDOWS_PROJECT_CXX_FLAGS]
+    return []
+
+
+def project_compatibility(target):
+    """CMake snippet that restores the SDK's missing clang-cl baseline."""
+    if target != 'win-amd64':
+        return ''
+    return (
+        '\n# clang-cl reports MSVC to CMake, so the SDK omits its Unix SSE4.1\n'
+        '# baseline. Generated SIMDe code then references C23 roundevenf,\n'
+        '# which the Microsoft CRT does not provide.\n'
+        'if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")\n'
+        f'    add_compile_options({WINDOWS_PROJECT_CXX_FLAGS})\n'
+        'endif()\n')
+
+
+def apply_project_compatibility(content, target):
+    snippet = project_compatibility(target)
+    if not snippet:
+        return content
+    marker = 'include(generated/rexglue.cmake)'
+    if marker not in content:
+        raise PortError('BUILD_TEMPLATE', 'CMake do projeto não contém o include esperado do SDK.')
+    return content.replace(marker, marker + snippet, 1)
 
 
 def host_platform():
@@ -341,6 +376,10 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
               'texture_inspection_patch': file_hash(root / 'integrations/rexglue/patches/0005-texture-inspection-capture.patch'),
               'hd_texture_patch': file_hash(root / 'integrations/rexglue/patches/0006-reviewed-hd-texture-override.patch'),
               'presenter_filter': {p.name: file_hash(p) for p in sorted((root / 'integrations/rexglue/presenter-filter').iterdir()) if p.is_file()} if os.name != 'nt' else None}
+    if os.name == 'nt':
+        # Keep the key absent on Linux so existing verified ports keep their
+        # cache; Windows must rebuild once with the corrected SIMDe baseline.
+        recipe['project_flags'] = project_configure_flags(host_platform())
     key = hashlib.sha256(json.dumps(recipe, sort_keys=True).encode()).hexdigest()[:20]
     try:
         current = read_install(root)
@@ -451,7 +490,7 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
                 shutil.copy2(path, project / target)
                 copied_sources.append(target)
             cmake_file = project / 'CMakeLists.txt'
-            content = cmake_file.read_text(encoding='utf8')
+            content = apply_project_compatibility(cmake_file.read_text(encoding='utf8'), host_platform())
             content = content.replace('rexglue_setup_target(aster_green_lantern)',
                                       'rexglue_setup_target(aster_green_lantern GPU_PLUGINS xenos)')
             content += '\ntarget_sources(aster_green_lantern PRIVATE ' + ' '.join(copied_sources) + ')\n'

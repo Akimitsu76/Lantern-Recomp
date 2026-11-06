@@ -12,6 +12,22 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
+## Compilação Windows corrigida — v0.1.4-rc.9
+
+A geração do port no Windows falhava no link com `undefined symbol: roundevenf`.
+O clang-cl se apresenta ao CMake como MSVC, então o helper do SDK não aplicava
+`-msse4.1` ao projeto; sem SSE4.1, o SIMDe do código gerado usa a função C23
+`roundevenf`, ausente no CRT da Microsoft. O CMakeLists gerado para Windows
+agora recebe `add_compile_options(-msse4.1)`, o mesmo baseline já usado pelo SDK
+no Linux, sem substituir os flags padrão do CMake/MSVC. A receita de build
+inclui o flag, então um port Windows anterior é recompilado em vez de reutilizar
+o cache quebrado.
+
+A correção foi conferida no próprio `aster_green_lantern_recomp.63.cpp`: sem o
+flag o objeto referencia `roundevenf`; com o flag, a referência desaparece. Os
+demais limites continuam: Windows é exercitado sob Wine, e D3D12/gameplay
+nativos ainda não são certificados.
+
 ## Modo leve após gerar ou atualizar — v0.1.4-rc.8
 
 O launcher agora aplica o **modo leve** por padrão depois de gerar ou atualizar

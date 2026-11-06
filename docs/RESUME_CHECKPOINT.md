@@ -1,3 +1,19 @@
+# Link Windows corrigido — 05/11/2026 (launcher 0.1.4-rc.9)
+
+A geração do port no Windows falhava no link com `undefined symbol: roundevenf`
+no `lld-link`. O helper do SDK aplica `-msse4.1` apenas quando `NOT MSVC`; o
+clang-cl define `MSVC` para o CMake, então o projeto ficava sem SSE4.1. O SIMDe
+do código gerado caía em `__builtin_roundevenf`, que o clang-cl rebaixa para a
+função C23 `roundevenf`, inexistente no CRT da Microsoft. No Linux o mesmo
+helper adiciona SSE4.1 e o símbolo resolve pela libc.
+
+O CMakeLists gerado para Windows agora recebe `add_compile_options(-msse4.1)`,
+preservando os flags padrão do CMake/MSVC, e inclui `project_flags` na receita,
+forçando uma recompilação única de ports Windows antigos. A verificação compilou o `recomp.63.cpp` real com clang
+para Windows: sem o flag o objeto contém `U roundevenf`; com o flag, nenhuma
+referência. A suíte passou com 507 testes, 27 skips e 322 subtests. Windows
+continua validado apenas sob Wine; D3D12 nativo não é certificado.
+
 # Modo leve após geração/atualização — 02/11/2026 (launcher 0.1.4-rc.8)
 
 O launcher aplica o modo leve por padrão ao concluir uma geração/atualização e

@@ -1,5 +1,34 @@
 # Preparação da release
 
+## Link Windows e roundevenf — v0.1.4-rc.9, 05/11/2026
+
+**Pré-release experimental, não stable.** Esta revisão corrige a falha de link
+do port no Windows: `lld-link: error: undefined symbol: roundevenf`. O clang-cl
+é tratado como MSVC pelo helper do SDK, que por isso não adiciona `-msse4.1` ao
+projeto. Sem SSE4.1, o SIMDe do código gerado usa `__builtin_roundevenf`, que o
+clang-cl rebaixa para a função C23 `roundevenf`, ausente no CRT da Microsoft.
+
+O CMakeLists gerado para Windows agora recebe `add_compile_options(-msse4.1)`,
+o mesmo baseline que o SDK já aplica ao Clang no Linux, sem substituir os flags
+padrão do CMake/MSVC. O flag entra na receita (`project_flags`),
+portanto um port Windows anterior é recompilado em vez de reutilizar o cache
+quebrado. A confirmação compilou o `aster_green_lantern_recomp.63.cpp` real com
+clang para Windows: sem o flag o objeto referencia `roundevenf`; com o flag, a
+referência desaparece. A suíte completa passou com 507 testes, 27 skips e 322
+subtests.
+
+- Assets: `AsterNative-linux-x86_64.AppImage` (55.970.296 bytes, SHA-256
+  `1dfaceb7f1923568e994a2773740b1abdcf3492693ed4cb252701f27bf2b69cb`),
+  `AsterNative-windows-x64.exe` (69.459.518 bytes, SHA-256
+  `03c5f8f9cd837bea9d6eae924e440b4d958dada9e1bf0cb841b7145521fe6833`),
+  `SHA256SUMS` e `LEIA-ME-ATUALIZACAO.md`.
+- O smoke do AppImage confirmou versão `0.1.4-rc.9`, Tk 9.0, fontes escaláveis,
+  arte pronta, aba de atualizações e `game_launched=false`. O smoke do EXE
+  passou sob Wine com Tk 8.6 e os mesmos controles. O payload dos dois binários
+  foi conferido e contém `native_build.py` com `WINDOWS_PROJECT_CXX_FLAGS`.
+  Windows continua validado apenas sob Wine; gameplay D3D12 nativo não é
+  certificado.
+
 ## Modo leve após geração/atualização — v0.1.4-rc.8, 02/11/2026
 
 **Pré-release experimental, não stable.** Esta revisão publica o launcher com o
