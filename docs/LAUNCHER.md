@@ -44,7 +44,8 @@ há código de launcher fornecido como referência nem conteúdo do jogo nos pac
 Atalhos: Ctrl+O escolhe a pasta; Ctrl+S salva preferências. A interface foi revisada
 em 1200×820 e 1088×720, e as opções gráficas continuam acessíveis por rolagem.
 
-O executável portátil também aceita `--play <pasta com default.xex> [opções]`,
-usado pelo RecompLauncher para iniciar o jogo sem abrir esta interface. As
-opções gráficas do manifesto são encaminhadas ao mesmo
-`scripts/play_green_lantern.py`. Veja [RECOMPLAUNCHER.md](RECOMPLAUNCHER.md).
+O executável portátil também aceita `--play <iso ou pasta> [opções]` e
+`--prepare-game <iso ou pasta>`, usados pelo RecompLauncher para extrair a ISO
+e iniciar o jogo sem abrir esta interface. As opções gráficas do manifesto são
+encaminhadas ao mesmo `scripts/play_green_lantern.py`. Veja
+[RECOMPLAUNCHER.md](RECOMPLAUNCHER.md).

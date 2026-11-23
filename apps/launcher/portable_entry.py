@@ -52,6 +52,9 @@ def main():
     if not (root / 'games/green_lantern_rex_hints.toml').is_file():
         raise SystemExit('Extraia o pacote completo antes de abrir o launcher; a pasta app está ausente.')
     sys.path.insert(0, str(root))
+    if len(sys.argv) > 1 and sys.argv[1] == '--prepare-game':
+        from native_port.play_entry import prepare_dispatch
+        return prepare_dispatch(root, sys.argv)
     if len(sys.argv) > 1 and sys.argv[1] == '--play':
         from native_port.play_entry import dispatch
         return dispatch(root, sys.argv)

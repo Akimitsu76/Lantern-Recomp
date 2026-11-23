@@ -6,17 +6,31 @@
   "inputs": [
     {
       "id": "game",
-      "label": "Pasta extraída do disco Xbox 360 de Green Lantern: Rise of the Manhunters, com default.xex na raiz.",
-      "formats": [{ "type": "folder" }],
-      "check": {
-        "file": "default.xex",
-        "ids": ["575207E9"]
-      }
+      "role": "game",
+      "label": "Sua cópia de Green Lantern: Rise of the Manhunters para Xbox 360: imagem de disco (.iso) ou pasta extraída com default.xex, edição EUA ou Europa.",
+      "formats": [
+        { "type": "file", "extensions": ["iso"] },
+        { "type": "folder" }
+      ],
+      "check": { "ids": ["575207E9"] },
+      "dumps": [
+        { "name": "Europe", "size": 7838695424, "crc32": "b722866e" },
+        { "name": "USA", "size": 7838695424, "crc32": "1cb483fd" }
+      ]
     }
   ],
   "start": {
     "program": ["AsterNative-windows-x64.exe", "AsterNative-linux-x86_64.AppImage"],
-    "args": ["--play", "{game}"]
+    "args": ["--play", "{input:game}"]
+  },
+  "prepare": {
+    "program": ["AsterNative-windows-x64.exe", "AsterNative-linux-x86_64.AppImage"],
+    "args": ["--prepare-game", "{input:game}"],
+    "label": "Extraindo os arquivos do disco de Green Lantern",
+    "done": [
+      "{local}/AsterNative/app/.aster/game-files/green-lantern/default.xex",
+      "{local}/aster-native/app/.aster/game-files/green-lantern/default.xex"
+    ]
   },
   "config": [
     {
