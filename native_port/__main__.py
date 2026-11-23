@@ -19,6 +19,9 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('doctor')
     sub.add_parser('gui')
+    play = sub.add_parser('play', help='Abrir o port com as opções usadas pelo RecompLauncher')
+    play.add_argument('game_root', help='Pasta extraída que contém default.xex')
+    play.add_argument('options', nargs=argparse.REMAINDER, help='Opções de scripts/play_green_lantern.py')
     for name in ('inspect', 'prepare'):
         p = sub.add_parser(name)
         p.add_argument('source')
@@ -56,6 +59,9 @@ def main():
             from .launcher import main as launch
             launch()
             return 0
+        if args.command == 'play':
+            from .play_entry import dispatch
+            return dispatch(PROJECT, ['--play', str(args.game_root), *args.options])
         if args.command == 'doctor':
             result = diagnostics()
         elif args.command == 'build':

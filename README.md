@@ -12,6 +12,17 @@ das mudanças do OpenCode corrigiu o analisador e isolou 21 limites de função
 não comprovados. Veja [a revisão](docs/OPENCODE_REVIEW.md) e o
 [estado de jogabilidade](docs/PLAYABILITY.md).
 
+## RecompLauncher — níveis 1 e 2
+
+O repositório inclui `recomplauncher.json`: o jogador informa a pasta extraída
+com `default.xex`, o launcher confere o Title ID `575207E9` e o **Play** abre o
+jogo diretamente com `--play "<pasta>"`. Qualidade gráfica, resolução, janela,
+filtro de saída, antisserrilhado e FPS aparecem na página do jogo. Os ZIPs
+gerados por `scripts/package_launcher.py --single-file` levam o manifesto no
+topo, ao lado do executável. Veja [o guia de integração](docs/RECOMPLAUNCHER.md)
+e os limites atuais (entrada por pasta, port gerado localmente, recursos
+experimentais).
+
 ## Compilação Windows corrigida — v0.1.4-rc.9
 
 A geração do port no Windows falhava no link com `undefined symbol: roundevenf`.

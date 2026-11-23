@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -82,6 +83,35 @@ def single_file(bundle, work, output, command, env, root, args):
         artifact.chmod(0o755)
     print(json.dumps({'single_file': str(artifact), 'bytes': artifact.stat().st_size,
                       'sha256': hashlib.sha256(artifact.read_bytes()).hexdigest()}))
+    recomplauncher_zip(root, artifact, output)
+
+
+def project_version(root):
+    """Read the version from the source, without importing Tk-dependent modules."""
+    source = (Path(root) / 'native_port/__init__.py').read_text(encoding='utf8')
+    match = re.search(r"^__version__\s*=\s*'([^']+)'", source, re.MULTILINE)
+    if not match:
+        raise ValueError('native_port/__init__.py não informa __version__')
+    return match.group(1)
+
+
+def recomplauncher_zip(root, artifact, output):
+    """Package one file per platform with recomplauncher.json at the top.
+
+    RecompLauncher only reads the manifest from a release archive, next to the
+    executable. The original single-file assets stay in place for the built-in
+    updater; this ZIP is the install path for launcher players.
+    """
+    manifest = Path(root) / 'recomplauncher.json'
+    if not manifest.is_file():
+        raise ValueError('recomplauncher.json ausente na raiz do projeto')
+    system = 'Windows-x64' if os.name == 'nt' else 'Linux-x64'
+    archive = Path(output) / f'LanternRecomp-v{project_version(root)}-{system}.zip'
+    with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as z:
+        z.write(Path(artifact), Path(artifact).name)
+        z.write(manifest, 'recomplauncher.json')
+    print(json.dumps({'recomplauncher_zip': str(archive), 'bytes': archive.stat().st_size}))
+    return archive
 
 
 def copy_public(root, destination):
@@ -111,6 +141,8 @@ def copy_public(root, destination):
         copied.append(name)
     shutil.copy2(root / 'docs/PORTABLE_BUILD.md', destination / 'README.md')
     copied.append('README.md')
+    shutil.copy2(root / 'recomplauncher.json', destination / 'recomplauncher.json')
+    copied.append('recomplauncher.json')
     return copied
 
 

@@ -1,0 +1,141 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Aster Native — Green Lantern: Rise of the Manhunters",
+  "repo": "Akimitsu76/Lantern-Recomp",
+  "inputs": [
+    {
+      "id": "game",
+      "label": "Pasta extraída do disco Xbox 360 de Green Lantern: Rise of the Manhunters, com default.xex na raiz.",
+      "formats": [{ "type": "folder" }],
+      "check": {
+        "file": "default.xex",
+        "ids": ["575207E9"]
+      }
+    }
+  ],
+  "start": {
+    "program": ["AsterNative-windows-x64.exe", "AsterNative-linux-x86_64.AppImage"],
+    "args": ["--play", "{game}"]
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "json",
+      "file": [{ "path": "{config}/AsterNative/recomplauncher.json" }],
+      "game_path": "game_root"
+    }
+  ],
+  "settings": [
+    {
+      "id": "preset",
+      "label": "Qualidade gráfica",
+      "help": "Média é o padrão do projeto. Alta e Ultra usam texturas HD preparadas e precisam gerar o port no launcher do projeto antes de jogar.",
+      "in": "args",
+      "group": "Vídeo",
+      "choices": [
+        { "label": "Baixa (desempenho)", "args": ["--graphics-preset", "low"] },
+        { "label": "Média (padrão)", "args": ["--graphics-preset", "default"] },
+        { "label": "Alta (1440p, HD 2x)", "args": ["--graphics-preset", "high"] },
+        { "label": "Ultra (4K, HD 4x)", "args": ["--graphics-preset", "ultra"] }
+      ]
+    },
+    {
+      "id": "resolution",
+      "label": "Resolução interna",
+      "help": "720p é a resolução do console. 1440p e 4K exigem um backend atualizado e mais GPU.",
+      "in": "args",
+      "group": "Vídeo",
+      "choices": [
+        { "label": "720p", "args": ["--render-scale", "1"] },
+        { "label": "1440p", "args": ["--render-scale", "2"] },
+        { "label": "4K", "args": ["--render-scale", "3"] }
+      ]
+    },
+    {
+      "id": "window_size",
+      "label": "Tamanho da janela",
+      "help": "Automático deixa a janela o maior tamanho que couber na tela.",
+      "in": "args",
+      "group": "Vídeo",
+      "choices": [
+        { "label": "Automático", "args": ["--output-resolution", "auto"] },
+        { "label": "1280 x 720", "args": ["--output-resolution", "1280x720"] },
+        { "label": "1920 x 1080", "args": ["--output-resolution", "1920x1080"] },
+        { "label": "2560 x 1440", "args": ["--output-resolution", "2560x1440"] },
+        { "label": "3840 x 2160", "args": ["--output-resolution", "3840x2160"] }
+      ]
+    },
+    {
+      "id": "window",
+      "label": "Janela",
+      "help": "Tela cheia ocupa a tela inteira; Janela mantém o tamanho escolhido acima.",
+      "in": "args",
+      "group": "Vídeo",
+      "choices": [
+        { "label": "Janela", "args": ["--fullscreen", "off"] },
+        { "label": "Tela cheia", "args": ["--fullscreen", "on"] }
+      ]
+    },
+    {
+      "id": "upscaler",
+      "label": "Filtro de saída",
+      "help": "FSR 1 é experimental e exige o backend espacial atualizado, gerado pelo launcher do projeto.",
+      "in": "args",
+      "group": "Vídeo",
+      "choices": [
+        { "label": "Bilinear", "args": ["--upscaler", "bilinear"] },
+        { "label": "FSR 1", "args": ["--upscaler", "fsr1"] }
+      ]
+    },
+    {
+      "id": "antialiasing",
+      "label": "Antisserrilhado",
+      "help": "FXAA suaviza contornos. A opção intensa é mais agressiva e pode borrar textos.",
+      "in": "args",
+      "group": "Vídeo",
+      "choices": [
+        { "label": "Desligado", "args": ["--antialiasing", "none"] },
+        { "label": "FXAA", "args": ["--antialiasing", "fxaa"] },
+        { "label": "FXAA intenso", "args": ["--antialiasing", "fxaa_extreme"] }
+      ]
+    },
+    {
+      "id": "frame_rate",
+      "label": "Quadros por segundo",
+      "help": "30 fps é o padrão validado. 60 fps e ilimitado são experimentais: física, cortes e campanha não estão certificados.",
+      "in": "args",
+      "group": "Desempenho",
+      "choices": [
+        { "label": "30 fps (padrão)", "args": ["--fps-target", "30"] },
+        { "label": "60 fps (experimental)", "args": ["--fps-target", "60"] },
+        {
+          "label": "Ilimitado (experimental)",
+          "args": ["--fps-target", "unlimited", "--vsync", "off", "--present-mode", "immediate"]
+        }
+      ]
+    }
+  ],
+  "folders": {
+    "saves": [
+      { "path": "{local}/AsterNative/app/.aster/runtime/green-lantern/user" },
+      { "path": "{local}/aster-native/app/.aster/runtime/green-lantern/user" }
+    ],
+    "logs": [
+      { "path": "{local}/AsterNative/app/.aster/reports" },
+      { "path": "{local}/aster-native/app/.aster/reports" }
+    ]
+  },
+  "saves": [
+    "{local}/AsterNative/app/.aster/runtime/green-lantern/user",
+    "{local}/aster-native/app/.aster/runtime/green-lantern/user"
+  ],
+  "actions": [
+    {
+      "id": "saves",
+      "label": "Saves",
+      "help": "Perfis e slots de campanha criados pelo port.",
+      "open": "saves"
+    }
+  ]
+}
