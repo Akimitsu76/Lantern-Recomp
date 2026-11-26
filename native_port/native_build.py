@@ -24,8 +24,10 @@ from .workspace import Workspace
 
 XEX_SHA256 = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 SDK_VERSION = '0.10.0'
-INTEGRATION_VERSION = 24
-HOST_SOURCES = ('portable_timing.cpp', 'runtime_save_slots.cpp', 'runtime_languages.cpp')
+INTEGRATION_VERSION = 25
+HOST_SOURCES = ('portable_timing.cpp', 'runtime_save_slots.cpp', 'runtime_languages.cpp',
+                'runtime_graphics_menu.cpp')
+HOST_HEADERS = ('aster_graphics_menu.h',)
 SDK_ASSETS = {
     'linux-amd64': '0388edb3f8fb1444f1b0ad5d440cb02d9690ac20a76b04fd6b7dcc19f59328a6',
     'win-amd64': 'ad4485da853fbe932e9f5dbb643f9b5fe85dc73775ebbad4df6879fe6df0c11b',
@@ -80,6 +82,81 @@ def host_platform():
 
 def file_hash(path):
     return digest_source(path, Cancellation())
+
+
+def sync_host_sources(project, root, use_spatial_sdk):
+    """Copy reviewed host code into the generated project on every build.
+
+    Existing installs predate newer hooks, so this cannot live only in the
+    `rexglue init` branch. Files are rewritten only when their bytes differ,
+    which keeps repeated builds and the install cache stable.
+    """
+    source_root = Path(root) / 'integrations/rexglue'
+    copied = []
+    for name in HOST_SOURCES:
+        # The explicitly requested legacy regression SDK predates the
+        # slot/control APIs. Public builds always use the full SDK.
+        if not use_spatial_sdk and name != 'portable_timing.cpp':
+            continue
+        source = source_root / name
+        target = project / ('aster_timing.cpp' if name == 'portable_timing.cpp' else name)
+        if not target.is_file() or file_hash(target) != file_hash(source):
+            shutil.copy2(source, target)
+        copied.append(target.name)
+    for name in HOST_HEADERS:
+        source, target = source_root / name, project / name
+        if not target.is_file() or file_hash(target) != file_hash(source):
+            shutil.copy2(source, target)
+    return copied
+
+
+def update_project_cmake(project, sources):
+    """Keep the generated target sources and GPU plugin selection current."""
+    cmake_file = project / 'CMakeLists.txt'
+    content = cmake_file.read_text(encoding='utf8')
+    content = content.replace('rexglue_setup_target(aster_green_lantern)',
+                              'rexglue_setup_target(aster_green_lantern GPU_PLUGINS xenos)')
+    line = 'target_sources(aster_green_lantern PRIVATE ' + ' '.join(sources) + ')'
+    pattern = re.compile(r'^target_sources\(aster_green_lantern PRIVATE [^)]*\)\s*$', re.MULTILINE)
+    if pattern.search(content):
+        content = pattern.sub(line, content, count=1)
+    else:
+        content = content.rstrip() + '\n' + line + '\n'
+    cmake_file.write_text(content, encoding='utf8')
+
+
+def apply_graphics_menu_hooks(project):
+    """Enable the in-game F1 graphics menu in the generated app subclass."""
+    header = project / 'src/aster_green_lantern_app.h'
+    if not header.is_file():
+        return
+    content = header.read_text(encoding='utf8')
+    if '#include "aster_graphics_menu.h"' not in content:
+        marker = '#include <rex/rex_app.h>'
+        if marker not in content:
+            raise PortError('BUILD_TEMPLATE', 'App gerado não contém o include esperado do ReXApp.')
+        content = content.replace(marker, marker + '\n\n#include "aster_graphics_menu.h"', 1)
+    create = '  // void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {}'
+    if create in content:
+        content = content.replace(
+            create,
+            '  void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {\n'
+            '    rex::ReXApp::OnCreateDialogs(drawer);\n'
+            '    aster::ui::InstallGraphicsMenu(drawer);\n'
+            '  }', 1)
+    shutdown = '  // void OnShutdown() override {}'
+    if shutdown in content:
+        content = content.replace(
+            shutdown,
+            '  void OnShutdown() override {\n'
+            '    aster::ui::UninstallGraphicsMenu();\n'
+            '    rex::ReXApp::OnShutdown();\n'
+            '  }', 1)
+    if ('OnCreateDialogs(' not in content or 'OnShutdown(' not in content
+            or '#include "aster_graphics_menu.h"' not in content):
+        raise PortError('BUILD_TEMPLATE',
+                        'Não foi possível habilitar o menu gráfico no app gerado.')
+    header.write_text(content, encoding='utf8')
 
 
 def safe_extract(archive, destination):
@@ -177,6 +254,72 @@ def capture_windows_environment(vcvars, root, env):
     return updated
 
 
+VC_VS_PRODUCTS = ('Microsoft Visual Studio', 'Microsoft Visual Studio Build Tools')
+VC_VS_YEARS = ('2022', '2019', '2017')
+VC_VS_EDITIONS = ('BuildTools', 'Community', 'Professional', 'Enterprise', 'Preview')
+
+
+def program_files_roots():
+    """Windows install roots to inspect, including the native 64-bit one.
+
+    Build Tools 2022 installs under Program Files on 64-bit Windows, while
+    older releases used Program Files (x86). Both must be considered.
+    """
+    return (Path(os.environ.get('ProgramFiles') or 'C:/Program Files'),
+            Path(os.environ.get('ProgramFiles(x86)') or 'C:/Program Files (x86)'))
+
+
+def vcvars_candidates(program_files, program_files_x86):
+    """Return every standard vcvars64.bat location, preferred roots first.
+
+    Kept free of filesystem and platform checks so candidate order is
+    testable without a Windows host.
+    """
+    return [Path(root) / product / year / edition / 'VC/Auxiliary/Build/vcvars64.bat'
+            for root in (program_files, program_files_x86) if root
+            for product in VC_VS_PRODUCTS
+            for year in VC_VS_YEARS
+            for edition in VC_VS_EDITIONS]
+
+
+def vswhere_installation(program_files, program_files_x86, root=None, env=None):
+    """Ask vswhere for the newest install that has the C++ x64 tools."""
+    for directory in (program_files_x86, program_files):
+        finder = Path(directory) / 'Microsoft Visual Studio/Installer/vswhere.exe'
+        if not finder.is_file():
+            continue
+        try:
+            result = run_process([finder, '-latest', '-products', '*', '-requires',
+                                  'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+                                  '-property', 'installationPath'],
+                                 root or Path.cwd(), Cancellation(), env=env)
+        except PortError:
+            continue
+        installation = result['stdout'].strip()
+        if installation:
+            return Path(installation)
+    return None
+
+
+def find_vcvars(program_files=None, program_files_x86=None, root=None, use_vswhere=None, env=None):
+    """Return the first existing vcvars64.bat, or None when none is installed.
+
+    vswhere is authoritative when it can answer, but a missing or failing
+    vswhere must not hide an installation found by scanning either root.
+    """
+    default_files, default_files_x86 = program_files_roots()
+    program_files = default_files if program_files is None else Path(program_files)
+    program_files_x86 = default_files_x86 if program_files_x86 is None else Path(program_files_x86)
+    candidates = vcvars_candidates(program_files, program_files_x86)
+    if use_vswhere is None:
+        use_vswhere = os.name == 'nt'
+    if use_vswhere:
+        installation = vswhere_installation(program_files, program_files_x86, root, env)
+        if installation:
+            candidates.insert(0, installation / 'VC/Auxiliary/Build/vcvars64.bat')
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
 def toolchain(root, work):
     suffix = '.exe' if os.name == 'nt' else ''
     env = external_env()
@@ -187,18 +330,13 @@ def toolchain(root, work):
         additions = [program_files / 'Git/cmd', program_files / 'CMake/bin']
         env['PATH'] = os.pathsep.join(str(p) for p in additions if p.is_dir()) + os.pathsep + env.get('PATH', '')
     if os.name == 'nt' and not env.get('VCTOOLSINSTALLDIR'):
-        finder = Path(env.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft Visual Studio/Installer/vswhere.exe'
-        if finder.is_file():
-            result = run_process([str(finder), '-latest', '-products', '*', '-requires',
-                                  'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-                                  '-property', 'installationPath'], root, Cancellation(), env=env)
-            installation = result['stdout'].strip()
-            vcvars = Path(installation) / 'VC/Auxiliary/Build/vcvars64.bat'
-            if vcvars.is_file():
-                env = capture_windows_environment(vcvars, root, env)
-                llvm = Path(installation) / 'VC/Tools/Llvm/x64/bin'
-                cmake_tools = Path(installation) / 'Common7/IDE/CommonExtensions/Microsoft/CMake'
-                env['PATH'] = os.pathsep.join(map(str, [llvm, cmake_tools/'CMake/bin', cmake_tools/'Ninja'])) + os.pathsep + env.get('PATH', '')
+        vcvars = find_vcvars(env.get('PROGRAMFILES'), env.get('PROGRAMFILES(X86)'), root, env=env)
+        if vcvars:
+            installation = vcvars.parents[3]
+            env = capture_windows_environment(vcvars, root, env)
+            llvm = installation / 'VC/Tools/Llvm/x64/bin'
+            cmake_tools = installation / 'Common7/IDE/CommonExtensions/Microsoft/CMake'
+            env['PATH'] = os.pathsep.join(map(str, [llvm, cmake_tools/'CMake/bin', cmake_tools/'Ninja'])) + os.pathsep + env.get('PATH', '')
     def find(name):
         candidates = [root / f'tools/{name}/bin/{name}{suffix}',
                       root / f'tools/{name}/{name}{suffix}']
@@ -275,7 +413,8 @@ def backend_update_reason(data):
                 '0033-retire-present-queue.patch',
                 '0034-bounded-hd-source-cache.patch',
                 '0035-configurable-controls.patch',
-                '0037-native-save-slots.patch'}
+                '0037-native-save-slots.patch',
+                '0038-keyboard-pad-coop.patch'}
     if data.get('renderer') == 'vulkan-fsi':
         required.add('0031-vulkan-fxaa-quality-parity.patch')
     if required.difference(patches):
@@ -480,21 +619,12 @@ def _build_native(source, workspace, cancel=None, emit=None, jobs=2, allow_downl
                                 + 'game_root = ' + json.dumps(relative(game), ensure_ascii=False) + '\n\n'
                                 + '[entrypoint]\nfile_path = ' + json.dumps(relative(xex), ensure_ascii=False)
                                 + '\nout_directory_path = "generated/default"\nincludes = ["hints.toml"]\n', encoding='utf8')
-            copied_sources = []
-            for name, path in host_sources.items():
-                # The explicitly requested legacy regression SDK predates the
-                # slot/control APIs. Public builds always use the full SDK.
-                if not use_spatial_sdk and name != 'portable_timing.cpp':
-                    continue
-                target = 'aster_timing.cpp' if name == 'portable_timing.cpp' else name
-                shutil.copy2(path, project / target)
-                copied_sources.append(target)
             cmake_file = project / 'CMakeLists.txt'
             content = apply_project_compatibility(cmake_file.read_text(encoding='utf8'), host_platform())
-            content = content.replace('rexglue_setup_target(aster_green_lantern)',
-                                      'rexglue_setup_target(aster_green_lantern GPU_PLUGINS xenos)')
-            content += '\ntarget_sources(aster_green_lantern PRIVATE ' + ' '.join(copied_sources) + ')\n'
             cmake_file.write_text(content, encoding='utf8')
+        copied_sources = sync_host_sources(project, root, use_spatial_sdk)
+        update_project_cmake(project, copied_sources)
+        apply_graphics_menu_hooks(project)
         stamp = project / 'aster-codegen.json'
         valid_codegen = False
         if stamp.is_file():

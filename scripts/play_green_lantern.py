@@ -95,10 +95,15 @@ def parse_arguments(argv=None):
     parser.add_argument('--present-mode', choices=('auto', 'mailbox', 'fifo', 'immediate'),
                         help='Apresentação. O modo ilimitado exige immediate.')
     parser.add_argument('--controls-json', help='Preferências tipadas de teclado/controle fornecidas pelo launcher.')
+    parser.add_argument('--input-split', choices=tuple(controls.INPUT_SPLITS),
+                        help='Divisão local: auto compartilha teclado e 1º controle; keyboard_pad '
+                             'dá o teclado ao jogador 1 e um jogador por controle.')
     parser.add_argument('--subtitle-language', choices=languages.TEXT_LANGUAGES,
                         help='Idioma original da interface e legendas, independente da voz.')
     parser.add_argument('--voice-language', choices=languages.VOICE_LANGUAGES,
                         help='Idioma da dublagem presente no dump, independente das legendas.')
+    parser.add_argument('--recomp', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--from-launcher', action='store_true', help=argparse.SUPPRESS)
     return parser, parser.parse_args(argv)
 
 
@@ -106,6 +111,8 @@ def resolve_target(parser, args):
     if args.experimental_60fps and args.fps_target and args.fps_target != '60':
         parser.error('--experimental-60fps não pode ser combinado com outro alvo de FPS.')
     return args.fps_target or ('60' if args.experimental_60fps else '30')
+
+
 
 
 def resolve_graphics(parser, args, target):
@@ -138,6 +145,140 @@ def resolve_graphics(parser, args, target):
         return data
     except Exception as exc:  # PortError and malformed command-line combinations
         parser.error(str(exc))
+
+
+def launcher_defaults(args):
+    """RecompLauncher starts the game from Big Picture mode without a keyboard."""
+    if not args.from_launcher:
+        return
+    if os.environ.get('RECOMPLAUNCHER_MODE') == 'bigpicture' and args.fullscreen == 'off':
+        args.fullscreen = 'on'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def resolve_present_mode(args, target, vsync_on):
@@ -261,6 +402,7 @@ def session_preferences_arguments(args, game_root=None):
     arguments = []
     if encoded is None:
         arguments.append('--mnk_mode=true')
+        arguments.append('--aster_input_split=' + (getattr(args, 'input_split', None) or 'auto'))
     else:
         if not isinstance(encoded, str) or len(encoded) > 16384:
             raise PortError('CONTROLS_VALUE', 'Configuração de controles excede o limite de tamanho.')
@@ -294,11 +436,20 @@ def presentation_arguments(data, installation, parser):
         return []
     if not installation.get('recipe', {}).get('sdk_spatial'):
         parser.error('O manifesto não confirma o SDK espacial; gere novamente o port.')
-    if data['upscaler'] not in ('bilinear', 'fsr1'):
-        parser.error('Este runtime compartilhado Linux/Windows oferece bilinear e FSR 1. Selecione FSR 1 para ampliar a imagem.')
+    sharpness = graphics.validate(data)['fsr_sharpness']
+    if data['upscaler'] in ('cubic', 'sharp'):
+        # Older launchers stored bicubic labels. The current presenter has no
+        # bicubic path, so keep the saved preference usable by mapping it to
+        # the closest real filter instead of refusing to start.
+        data = {**data, 'upscaler': 'bilinear' if data['upscaler'] == 'cubic' else 'cas'}
+    if data['upscaler'] == 'cas':
+        return [*preload, '--present_effect=cas',
+                f'--present_cas_additional_sharpness={sharpness / 100:g}']
     if data['upscaler'] == 'fsr1':
         return [*preload, '--present_effect=fsr', '--present_fsr_max_upsampling_passes=2',
-                f"--present_fsr_sharpness_reduction={2 * (1 - graphics.validate(data)['fsr_sharpness'] / 100):g}"]
+                f"--present_fsr_sharpness_reduction={2 * (1 - sharpness / 100):g}"]
+    if data['upscaler'] != 'bilinear':
+        parser.error(graphics.BLOCKED_UPSCALER_REASON)
     return [*preload, '--present_effect=bilinear']
 
 
@@ -370,12 +521,17 @@ def presentation_environment(binary, data, env, parser, installation=None):
 
 def main():
     parser, args = parse_arguments()
+    launcher_defaults(args)
     target = resolve_target(parser, args)
     graphics_data = resolve_graphics(parser, args, target)
     root = Path(__file__).resolve().parent.parent
     binary_rel, report_rel, runtime_rel = mode_paths(target)
     installation = read_install(root)
     update_reason = backend_update_reason(installation)
+    if args.recomp and (not installation or update_reason):
+        print('O port nativo ainda não está pronto. Abra AsterNative, selecione a pasta do jogo em '
+              '"Jogo e arquivos" e clique em "Gerar port nativo" antes de jogar.', file=sys.stderr)
+        return 3
     if update_reason:
         parser.error(update_reason)
     if graphics_data['upscaler'] == 'fsr1' and (not installation or installation.get('recipe', {}).get('integration', 0) < 6):

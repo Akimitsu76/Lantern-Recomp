@@ -358,7 +358,7 @@ class Launcher:
                         self.copy_button, self.restore_graphics_button, self.build_start_button,
                         self.hd_select_button, self.hd_original_button, self.hd_catalog_button,
                         self.hd_prepare_button, self.hd_auto_button, self.fullscreen_check,
-                        self.sharpness_spin, self.sharpness_balanced_button, self.shader_preload_check,
+                        self.sharpness_spin, *self.sharpness_preset_buttons, self.shader_preload_check,
                         self.lightweight_check]
         self._readonly_widgets = [self.build_combo, self.shader_combo, self.output_combo,
             self.upscaler_combo, self.antialiasing_combo, *self.home_combos]
@@ -762,13 +762,18 @@ class Launcher:
         combo(image, 'Antisserrilhado', self.antialiasing, list(graphics.ANTIALIASING_LABELS.values()), 'antialiasing_combo', True)
         sharp_row = tk.Frame(image, bg=CARD)
         sharp_row.pack(fill='x', pady=4)
-        tk.Label(sharp_row, text='Nitidez FSR (0–100)', bg=CARD, fg=MUTED, font=(FONT, 9), width=19, anchor='w').pack(side='left')
+        tk.Label(sharp_row, text='Nitidez FSR/CAS (0–100)', bg=CARD, fg=MUTED, font=(FONT, 9), width=19, anchor='w').pack(side='left')
         self.sharpness_spin = ttk.Spinbox(sharp_row, from_=0, to=100, textvariable=self.fsr_sharpness, width=7)
         self.sharpness_spin.pack(side='left')
-        self.sharpness_balanced_button = ttk.Button(sharp_row, text='Equilibrada', style='Ghost.TButton',
-                                                   command=lambda: self.fsr_sharpness.set(graphics.DEFAULT_FSR_SHARPNESS))
-        self.sharpness_balanced_button.pack(side='left', padx=(7, 0))
-        note(image, 'FSR 1 amplia a imagem; FXAA reduz serrilhados. Nitidez recomendada: 30; valores altos podem realçar granulação e contornos. MSAA preserva o comportamento original do jogo.')
+        self.sharpness_preset_buttons = []
+        for preset in ('soft', 'balanced', 'sharp'):
+            button = ttk.Button(sharp_row, text=graphics.FSR_PRESET_LABELS[preset], style='Ghost.TButton',
+                                command=lambda value=graphics.FSR_PRESET_SHARPNESS[preset]: self.fsr_sharpness.set(value))
+            button.pack(side='left', padx=(5, 0))
+            self.sharpness_preset_buttons.append(button)
+        note(image, 'FSR 1 amplia a imagem; CAS aplica nitidez adaptativa; FXAA reduz serrilhados. '
+                    'FSR 2/3 e DLSS não estão disponíveis nesta compilação (exigem FidelityFX/Streamline e '
+                    'vetores de movimento por quadro). MSAA preserva o comportamento original do jogo.')
 
         textures = section('TEXTURAS', 1, 0)
         combo(textures, 'Qualidade', self.custom_texture, list(graphics.TEXTURE_QUALITY_LABELS.values()), 'texture_combo', True)
@@ -1122,8 +1127,10 @@ class Launcher:
             self.vsync_check.configure(state='disabled')
         else:
             self.vsync_check.configure(state='normal')
-        self.sharpness_spin.configure(state='normal' if not self.busy and self.upscaler.get() == graphics.UPSCALER_LABELS['fsr1'] else 'disabled')
-        self.sharpness_balanced_button.configure(state=str(self.sharpness_spin['state']))
+        sharpenable = self.upscaler.get() in (graphics.UPSCALER_LABELS['fsr1'], graphics.UPSCALER_LABELS['cas'])
+        self.sharpness_spin.configure(state='normal' if not self.busy and sharpenable else 'disabled')
+        for button in self.sharpness_preset_buttons:
+            button.configure(state=str(self.sharpness_spin['state']))
         if self.busy:
             self.shader_combo.configure(state='disabled')
         else:

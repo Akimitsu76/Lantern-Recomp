@@ -10,6 +10,10 @@ from .errors import PortError
 
 SCHEMA = 1
 LAYOUTS = {'auto': 'Automático', 'xbox': 'Xbox', 'playstation': 'PlayStation'}
+INPUT_SPLITS = {
+    'auto': 'Automático (teclado e 1º controle no jogador 1)',
+    'keyboard_pad': 'Cooperativo: teclado no jogador 1, cada controle em um jogador',
+}
 ACTIONS = (
     ('a', 'A / ×', 'Confirmar / pular'), ('b', 'B / ○', 'Voltar / esquivar'),
     ('x', 'X / □', 'Ataque'), ('y', 'Y / △', 'Ataque pesado'),
@@ -58,7 +62,8 @@ AXIS_FIELDS = ('swap_sticks', 'invert_lx', 'invert_ly', 'invert_rx', 'invert_ry'
 
 
 def defaults():
-    return {'schema': SCHEMA, 'layout': 'auto', 'keyboard_enabled': True,
+    return {'schema': SCHEMA, 'layout': 'auto', 'input_split': 'auto',
+            'keyboard_enabled': True,
             'mouse_look': False, 'mouse_sensitivity': 1.0,
             'keyboard': dict(KEYBOARD_DEFAULTS),
             'gamepad': {'bindings': dict(zip(PAD_NAMES, PAD_NAMES)),
@@ -99,6 +104,8 @@ def validate(value):
     result.update(value)
     if not isinstance(result['layout'], str) or result['layout'] not in LAYOUTS:
         raise PortError('CONTROLS_VALUE', 'Layout de controle inválido.')
+    if result['input_split'] not in INPUT_SPLITS:
+        raise PortError('CONTROLS_VALUE', 'Divisão de jogadores inválida.')
     for field in ('keyboard_enabled', 'mouse_look'):
         if type(result[field]) is not bool:
             raise PortError('CONTROLS_VALUE', 'Opção de teclado/mouse inválida.')
@@ -143,5 +150,6 @@ def cvar_arguments(value):
     arguments += ['--aster_pad_map=' + ','.join(str(PAD_SOURCES.index(pad['bindings'][key])) for key in PAD_NAMES),
                   '--aster_pad_axes=' + ','.join('1' if pad[key] else '0' for key in AXIS_FIELDS),
                   f'--aster_pad_deadzone={pad["deadzone"]}',
-                  f'--aster_controller_layout={config["layout"]}']
+                  f'--aster_controller_layout={config["layout"]}',
+                  f'--aster_input_split={config["input_split"]}']
     return arguments

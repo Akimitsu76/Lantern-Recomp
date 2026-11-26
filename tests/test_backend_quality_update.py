@@ -16,7 +16,8 @@ def current_manifest(renderer):
         '0033-retire-present-queue.patch': 'verified',
         '0034-bounded-hd-source-cache.patch': 'verified',
         '0035-configurable-controls.patch': 'verified',
-        '0037-native-save-slots.patch': 'verified'}}},
+        '0037-native-save-slots.patch': 'verified',
+        '0038-keyboard-pad-coop.patch': 'verified'}}},
         'renderer': renderer, 'presentation_backend': 'sdk-spatial-fsr1'}
 
 

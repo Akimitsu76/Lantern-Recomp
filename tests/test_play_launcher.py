@@ -267,7 +267,8 @@ class PlayLauncherTests(unittest.TestCase):
                                               '0033-retire-present-queue.patch': 'verified',
                                               '0034-bounded-hd-source-cache.patch': 'verified',
                                               '0035-configurable-controls.patch': 'verified',
-                                              '0037-native-save-slots.patch': 'verified'}}}}), \
+                                              '0037-native-save-slots.patch': 'verified',
+                                               '0038-keyboard-pad-coop.patch': 'verified'}}}}), \
                     patch.object(launcher, 'verify_install'), \
                     patch('sys.argv', ['play_green_lantern.py', '--dry-run', '--graphics-preset',
                                        'high', str(game)]), \

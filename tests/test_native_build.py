@@ -123,6 +123,8 @@ class NativeBuildTests(unittest.TestCase):
                              'integrations/rexglue/portable_timing.cpp',
                              'integrations/rexglue/runtime_save_slots.cpp',
                              'integrations/rexglue/runtime_languages.cpp',
+                             'integrations/rexglue/runtime_graphics_menu.cpp',
+                             'integrations/rexglue/aster_graphics_menu.h',
                              'integrations/rexglue/plugin-only/CMakeLists.txt',
                              'integrations/rexglue/patches/0001-vulkan-driver-pipeline-cache.patch',
                              'integrations/rexglue/patches/0003-vulkan-deferred-pipelines.patch',

@@ -1,0 +1,91 @@
+diff --git a/include/rex/input/device_assignment.h b/include/rex/input/device_assignment.h
+index a318f2c..9739789 100644
+--- a/include/rex/input/device_assignment.h
++++ b/include/rex/input/device_assignment.h
+@@ -38,6 +38,19 @@ class SlotAssignment final : public DeviceAssignment {
+   std::vector<std::vector<DeviceId>> users_ = std::vector<std::vector<DeviceId>>(kMaxGuestUsers);
+ };
+ 
++/// Synthetic (keyboard/mouse) devices feed guest user 0 and every physical pad
++/// is promoted one slot (pad ordinal N feeds guest user N + 1). This lets one
++/// player use the keyboard while another uses the only connected pad, and
++/// still keeps a second pad on a separate user.
++class KeyboardPadAssignment final : public DeviceAssignment {
++ public:
++  void OnDevicesChanged(const std::vector<DeviceInfo>& devices) override;
++  void DevicesForUser(uint32_t user_index, std::vector<DeviceId>& out) const override;
++
++ private:
++  std::vector<std::vector<DeviceId>> users_ = std::vector<std::vector<DeviceId>>(kMaxGuestUsers);
++};
++
+ /// Every device feeds guest user 0. Users 1 and up report not connected. For
+ /// single-player titles that only ever poll user 0.
+ class SharedAssignment final : public DeviceAssignment {
+diff --git a/src/input/device_assignment.cpp b/src/input/device_assignment.cpp
+index 52e0073..ed36a64 100644
+--- a/src/input/device_assignment.cpp
++++ b/src/input/device_assignment.cpp
+@@ -37,6 +37,32 @@ void SlotAssignment::DevicesForUser(uint32_t user_index, std::vector<DeviceId>&
+   out = users_[user_index];
+ }
+ 
++void KeyboardPadAssignment::OnDevicesChanged(const std::vector<DeviceInfo>& devices) {
++  for (auto& user : users_) {
++    user.clear();
++  }
++
++  // The keyboard keeps player one; pads never merge into the keyboard's user,
++  // so a single pad is always a second player rather than a duplicate of the
++  // first one. Pads beyond the guest user limit are ignored.
++  for (const auto& device : devices) {
++    if (device.synthetic) {
++      users_[0].push_back(device.id);
++    } else if (device.ordinal + 1 < kMaxGuestUsers) {
++      users_[device.ordinal + 1].push_back(device.id);
++    }
++  }
++}
++
++void KeyboardPadAssignment::DevicesForUser(uint32_t user_index,
++                                           std::vector<DeviceId>& out) const {
++  out.clear();
++  if (user_index >= kMaxGuestUsers) {
++    return;
++  }
++  out = users_[user_index];
++}
++
+ void SharedAssignment::OnDevicesChanged(const std::vector<DeviceInfo>& devices) {
+   user0_.clear();
+   user0_.reserve(devices.size());
+diff --git a/src/input/input_system.cpp b/src/input/input_system.cpp
+index 813bb1c..784e457 100644
+--- a/src/input/input_system.cpp
++++ b/src/input/input_system.cpp
+@@ -28,6 +28,12 @@ REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput
+     .allowed({"sdl", "xinput"});
+ 
+ REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
++
++REXCVAR_DEFINE_STRING(aster_input_split, "auto", "Aster/Input",
++                      "Guest user split: auto shares the keyboard with the first pad; "
++                      "keyboard_pad keeps the keyboard on player one and gives each pad "
++                      "its own player, for local co-op with one controller")
++    .allowed({"auto", "keyboard_pad"});
+ namespace rex::input {
+ 
+ namespace {
+@@ -351,7 +357,11 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
+   // NOP driver (primary in tool mode, fallback otherwise)
+   uint8_t nop_index = tool_mode ? 0 : 1;
+   input->AddDriver(std::make_unique<nop::NopInputDriver>(nullptr, nop_index));
+-  input->SetDeviceAssignment(std::make_unique<SlotAssignment>());
++  if (REXCVAR_GET(aster_input_split) == "keyboard_pad") {
++    input->SetDeviceAssignment(std::make_unique<KeyboardPadAssignment>());
++  } else {
++    input->SetDeviceAssignment(std::make_unique<SlotAssignment>());
++  }
+   return input;
+ }
+ 

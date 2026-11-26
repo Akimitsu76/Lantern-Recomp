@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import tempfile
 import unittest
-from native_port.native_build import capture_windows_environment
+from native_port.native_build import capture_windows_environment, find_vcvars, vcvars_candidates
 from native_port.errors import PortError
 
 
@@ -54,3 +54,41 @@ class WindowsToolchainTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertNotIn('unknown argument', result.stderr)
             self.assertTrue((root / 'utf8.obj').is_file())
+
+
+class VcvarsDiscoveryTests(unittest.TestCase):
+    """Discovery must work on Linux and prefer the native Program Files root."""
+
+    def test_candidates_include_both_program_files_roots(self):
+        candidates = vcvars_candidates('C:/Program Files', 'C:/Program Files (x86)')
+        relative = Path('VC/Auxiliary/Build/vcvars64.bat')
+        self.assertIn(Path('C:/Program Files/Microsoft Visual Studio Build Tools/2022/BuildTools') / relative,
+                      candidates)
+        self.assertIn(Path('C:/Program Files (x86)/Microsoft Visual Studio Build Tools/2022/BuildTools') / relative,
+                      candidates)
+
+    def test_program_files_build_tools_precedes_x86(self):
+        candidates = vcvars_candidates('C:/Program Files', 'C:/Program Files (x86)')
+        relative = Path('VC/Auxiliary/Build/vcvars64.bat')
+        preferred = Path('C:/Program Files/Microsoft Visual Studio Build Tools/2022/BuildTools') / relative
+        legacy = Path('C:/Program Files (x86)/Microsoft Visual Studio Build Tools/2022/BuildTools') / relative
+        self.assertLess(candidates.index(preferred), candidates.index(legacy))
+
+    def test_find_vcvars_uses_program_files_when_x86_is_empty(self):
+        with tempfile.TemporaryDirectory(prefix='Aster vcvars discovery ') as temporary:
+            root = Path(temporary)
+            program_files = root / 'Program Files'
+            program_files_x86 = root / 'Program Files (x86)'
+            expected = (program_files / 'Microsoft Visual Studio/2022/Community'
+                        / 'VC/Auxiliary/Build/vcvars64.bat')
+            expected.parent.mkdir(parents=True)
+            expected.write_text('@echo off\nexit /b 0\n', encoding='ascii')
+            program_files_x86.mkdir()
+            self.assertEqual(find_vcvars(program_files=program_files,
+                                         program_files_x86=program_files_x86), expected)
+
+    def test_missing_roots_return_none_without_raising(self):
+        with tempfile.TemporaryDirectory(prefix='Aster missing vcvars ') as temporary:
+            root = Path(temporary)
+            self.assertIsNone(find_vcvars(program_files=root / 'Program Files',
+                                          program_files_x86=root / 'Program Files (x86)'))

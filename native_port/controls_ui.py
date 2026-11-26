@@ -17,6 +17,7 @@ class ControlsPanel(ttk.Frame):
         super().__init__(parent)
         config = controls.validate(config if config is not None else controls.defaults())
         self.layout = tk.StringVar(self, value=controls.LAYOUTS[config['layout']])
+        self.input_split = tk.StringVar(self, value=controls.INPUT_SPLITS[config['input_split']])
         self.keyboard_enabled = tk.BooleanVar(self, value=config['keyboard_enabled'])
         self.mouse_look = tk.BooleanVar(self, value=config['mouse_look'])
         self.mouse_sensitivity = tk.StringVar(self, value=str(config['mouse_sensitivity']))
@@ -36,6 +37,13 @@ class ControlsPanel(ttk.Frame):
         ttk.Combobox(options, state='readonly', width=17, values=list(controls.LAYOUTS.values()),
                      textvariable=self.layout).pack(side='left', padx=(16, 14))
         ttk.Label(options, text='Escolha a referência visual dos comandos.', foreground=MUTED).pack(side='left')
+        players = ttk.Frame(self)
+        players.pack(fill='x', pady=(0, 14))
+        ttk.Label(players, text='Jogadores', font=('DejaVu Sans', 10, 'bold')).pack(side='left')
+        ttk.Combobox(players, state='readonly', width=48, values=list(controls.INPUT_SPLITS.values()),
+                     textvariable=self.input_split).pack(side='left', padx=(16, 14))
+        ttk.Label(players, text='Cooperativo local: teclado no jogador 1 e cada controle em outro jogador.',
+                  foreground=MUTED).pack(side='left')
         wrapper = ttk.Frame(self)
         wrapper.pack(fill='both', expand=True)
         self.canvas = tk.Canvas(wrapper, bg=BG, highlightthickness=0, height=310)
@@ -172,9 +180,11 @@ class ControlsPanel(ttk.Frame):
 
     def get_settings(self):
         reverse_layout = {label: key for key, label in controls.LAYOUTS.items()}
+        reverse_split = {label: key for key, label in controls.INPUT_SPLITS.items()}
         reverse_buttons = {label: key for key, label in controls.PAD_LABELS.items()}
         try:
             config = {'schema': controls.SCHEMA, 'layout': reverse_layout[self.layout.get()],
+                      'input_split': reverse_split[self.input_split.get()],
                       'keyboard_enabled': self.keyboard_enabled.get(), 'mouse_look': self.mouse_look.get(),
                       'mouse_sensitivity': float(self.mouse_sensitivity.get()),
                       'keyboard': {key: var.get() for key, var in self.keyboard.items()},
@@ -188,6 +198,7 @@ class ControlsPanel(ttk.Frame):
     def set_settings(self, config):
         config = controls.validate(config)
         self.layout.set(controls.LAYOUTS[config['layout']]); self.keyboard_enabled.set(config['keyboard_enabled'])
+        self.input_split.set(controls.INPUT_SPLITS[config['input_split']])
         self.mouse_look.set(config['mouse_look']); self.mouse_sensitivity.set(str(config['mouse_sensitivity']))
         for key, value in config['keyboard'].items(): self.keyboard[key].set(value)
         for key, value in config['gamepad']['bindings'].items(): self.gamepad[key].set(controls.PAD_LABELS[value])

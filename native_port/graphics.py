@@ -40,9 +40,34 @@ TARGET_DESCRIPTIONS = {
 ANTIALIASING = ('none', 'fxaa', 'fxaa_extreme')
 ANTIALIASING_LABELS = {'none': 'Desligado', 'fxaa': 'FXAA', 'fxaa_extreme': 'FXAA intenso'}
 SHADER_MODES = ('async', 'blocking')
-UPSCALERS = ('bilinear', 'cubic', 'sharp', 'fsr1')  # Legacy cubic/sharp accepted by CLI.
-COMMON_UPSCALERS = ('bilinear', 'fsr1')
-UPSCALER_LABELS = {'bilinear': 'Bilinear', 'cubic': 'Bicúbico', 'sharp': 'Bicúbico + nitidez', 'fsr1': 'FSR 1 espacial (experimental)'}
+# The pinned SDK is built with REXGLUE_ENABLE_FIDELITYFX=OFF. Its presenter
+# therefore exposes only the embedded spatial filter: bilinear, CAS and the
+# project's own FSR 1 (EASU + RCAS). Temporal FSR 2/3 and DLSS need per-frame
+# depth and motion vectors from the guest, which this port does not extract,
+# and DLSS also needs NVIDIA Streamline. Do not advertise them as available.
+UPSCALERS = ('bilinear', 'cas', 'fsr1', 'cubic', 'sharp')  # Legacy cubic/sharp accepted by CLI.
+COMMON_UPSCALERS = ('bilinear', 'cas', 'fsr1')
+UPSCALER_LABELS = {
+    'bilinear': 'Bilinear',
+    'cas': 'CAS (nitidez adaptativa)',
+    'cubic': 'Bicúbico (compatibilidade)',
+    'sharp': 'Bicúbico + nitidez (compatibilidade)',
+    'fsr1': 'FSR 1 espacial (EASU + RCAS)',
+}
+FSR_PRESETS = ('off', 'soft', 'balanced', 'sharp', 'crisp')
+FSR_PRESET_LABELS = {
+    'off': 'Sem nitidez',
+    'soft': 'Suave',
+    'balanced': 'Equilibrado',
+    'sharp': 'Nítido',
+    'crisp': 'Muito nítido',
+}
+FSR_PRESET_SHARPNESS = {'off': 0, 'soft': 15, 'balanced': 30, 'sharp': 50, 'crisp': 70}
+TEMPORAL_UPSCALERS = ('fsr2', 'fsr3', 'dlss')
+BLOCKED_UPSCALER_REASON = (
+    'FSR 2/3 e DLSS exigem o SDK com FidelityFX/Streamline e vetores de '
+    'movimento por quadro; esta compilação usa apenas FSR 1 espacial e CAS.'
+)
 OUTPUT_RESOLUTIONS = ('auto', '1280x720', '1920x1080', '2560x1440', '3840x2160')
 TEXTURE_QUALITIES = ('low', 'default', 'high', 'ultra')
 TEXTURE_QUALITY_LABELS = {
@@ -203,6 +228,25 @@ def effective_target(data):
     return validate(data)['fps_target']
 
 
+def fsr_sharpness_for_preset(name):
+    """Map a player-facing preset to the stored 0-100 sharpness value."""
+    if name not in FSR_PRESET_SHARPNESS:
+        raise PortError('GRAPHICS_VALUE', f'Preset de nitidez inválido: {name}.')
+    return FSR_PRESET_SHARPNESS[name]
+
+
+def nearest_fsr_preset(sharpness):
+    """Return the preset whose value is closest to an arbitrary slider value."""
+    if type(sharpness) is not int:
+        raise PortError('GRAPHICS_VALUE', 'Nitidez FSR deve ser um número inteiro.')
+    return min(FSR_PRESET_SHARPNESS, key=lambda name: abs(FSR_PRESET_SHARPNESS[name] - sharpness))
+
+
+def upscaler_available(upscaler):
+    """Whether this build can really select the requested presenter path."""
+    return upscaler in UPSCALERS and upscaler not in TEMPORAL_UPSCALERS
+
+
 def internal_resolution(render_scale):
     width, height = 1280 * int(render_scale), 720 * int(render_scale)
     return f'{width}x{height}'
@@ -236,8 +280,10 @@ def cvar_arguments(data):
 
 def summary(data):
     data = validate(data)
+    sharpness = (f" · Nitidez {data['fsr_sharpness']}"
+                 if data['upscaler'] in ('cas', 'fsr1') else '')
     return (f"{PRESET_LABELS[data['preset']]} · {internal_resolution(data['render_scale'])} · "
-            f"{UPSCALER_LABELS[data['upscaler']]} · MSAA do jogo · "
+            f"{UPSCALER_LABELS[data['upscaler']]}{sharpness} · MSAA do jogo · "
             f"Aniso {ANISOTROPIC_LABELS[data['anisotropic']]} · "
             f"Texturas {TEXTURE_QUALITY_LABELS[data['texture_quality']]} · "
             f"{TARGET_LABELS[data['fps_target']]}")

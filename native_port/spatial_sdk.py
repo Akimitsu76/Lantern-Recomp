@@ -48,7 +48,8 @@ PATCHES = ('integrations/rexglue/patches/0004-embedded-spatial-sdk.patch',
            'integrations/rexglue/patches/0033-retire-present-queue.patch',
            'integrations/rexglue/patches/0034-bounded-hd-source-cache.patch',
            'integrations/rexglue/patches/0035-configurable-controls.patch',
-           'integrations/rexglue/patches/0037-native-save-slots.patch')
+           'integrations/rexglue/patches/0037-native-save-slots.patch',
+           'integrations/rexglue/patches/0038-keyboard-pad-coop.patch')
 CAPABILITY = 'sdk-spatial-fsr1'
 # Bump only when build semantics change. Logging/comments must not invalidate
 # gigabytes of correctly compiled source or force another source download.

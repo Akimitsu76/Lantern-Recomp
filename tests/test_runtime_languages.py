@@ -18,7 +18,8 @@ class RuntimeLanguageTests(unittest.TestCase):
             (root / 'rex/cvar.h').write_text(
                 '#define REXCVAR_DEFINE_INT32(name,value,group,description) int32_t name=value;\n'
                 '#define REXCVAR_GET(name) (name)\n')
-            (root / 'rex/logging.h').write_text('#define REXLOG_INFO(...) (++logs)\n')
+            (root / 'rex/logging.h').write_text(
+                '#define REXLOG_INFO(...) (++logs)\n#define REXLOG_WARN(...) (++logs)\n')
             (root / 'aster_green_lantern_pch.h').write_text(r'''
 #include <cstdint>
 #include <cassert>
@@ -70,7 +71,8 @@ int main() {
    aster_spoken_language=value;c.lr=0x82378d20;c.r3.s64=5;sub_823769D8(c,base);assert(voice_seen==5);
  }
  aster_spoken_language=11;c.lr=0x82378d20;c.r3.s64=4;sub_823769D8(c,base);assert(voice_seen==4);
- assert(logs==2);
+ // Unsupported slots are reported once per channel instead of forcing a value.
+ assert(logs==5);
 }
 ''')
             binary = root / 'language-test.exe'
