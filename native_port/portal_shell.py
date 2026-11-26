@@ -33,6 +33,7 @@ from typing import Callable
 
 from .portal_theme import PortalTheme, mix, shade
 from .portal_widgets import ConstructNav, PortalMark, RoundedCard
+from .rounded_buttons import install_rounded_buttons
 
 # Paleta ativa da base. ``apply_palette`` também exporta para o módulo da
 # distro (via ``apply_to=globals()``), para que o código legado continue usando
@@ -163,6 +164,9 @@ class PortalShell:
                         font=(FONT, 9, 'bold'))
         style.configure('Horizontal.TProgressbar', background=ACCENT, troughcolor=CARD_ALT,
                         bordercolor=CARD_ALT, lightcolor=ACCENT, darkcolor=ACCENT, thickness=6)
+        # Bordas dos botões desenhadas como imagem: todos os estilos continuam
+        # sendo ttk.Button, apenas a borda deixa de ser quadrada.
+        install_rounded_buttons(style, self.theme)
 
     # ------------------------------------------------------------- primitivas
     def card(self, parent, **pack_options):

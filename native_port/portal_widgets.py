@@ -13,6 +13,7 @@ from __future__ import annotations
 import tkinter as tk
 
 from .portal_theme import mix, shade
+from .rounded_buttons import button_photo
 
 
 def rounded_rect(canvas: tk.Canvas, x0: float, y0: float, x1: float, y1: float,
@@ -194,11 +195,12 @@ class ConstructNav(tk.Canvas):
         self._hover = False
         self._progress = 0.0
         self._anim = None
+        self._button_images = {}
         self.button = tk.Button(
             self, text=text, bg=theme.surface, fg=theme.muted,
-            activebackground=mix(theme.surface, theme.accent, .16),
+            activebackground=theme.surface,
             activeforeground=theme.ink, relief='flat', bd=0,
-            highlightthickness=0, anchor='w', padx=14, pady=9,
+            highlightthickness=0, anchor='w', padx=14, pady=9, compound='center',
             font=(theme.font, 10, 'bold'), cursor='hand2', command=self._clicked)
         self._window = self.create_window(8, 5, anchor='nw', window=self.button)
         self.bind('<Configure>', self._layout)
@@ -224,12 +226,15 @@ class ConstructNav(tk.Canvas):
         t = self.theme
         accent = t.accent
         if self._active:
-            fill = mix(t.surface, accent, .14)
-            self.button.configure(bg=fill, fg=t.ink)
+            fill, foreground = mix(t.surface, accent, .14), t.ink
         elif self._hover:
-            self.button.configure(bg=mix(t.surface, accent, .07), fg=t.ink)
+            fill, foreground = mix(t.surface, accent, .07), t.ink
         else:
-            self.button.configure(bg=t.surface, fg=t.muted)
+            fill, foreground = t.surface, t.muted
+        # O fundo do tk.Button permanece igual ao do Canvas; a borda arredondada
+        # vem da imagem, então não há cantos quadrados visíveis.
+        self.button.configure(bg=t.surface, fg=foreground,
+                              image=self._rounded_photo(width, height, fill))
 
         # Cantos de energia: a "construção" cresce a partir dos quatro cantos.
         strength = 1.0 if self._active else .55 if self._hover else .18
@@ -252,6 +257,16 @@ class ConstructNav(tk.Canvas):
                                      fill=mix(t.surface, t.accent_2, .9), width=2)
             self.addtag_withtag('construct', sweep)
         self.tag_lower('construct')
+
+    def _rounded_photo(self, width, height, fill):
+        w, h = max(8, int(width) - 16), max(8, int(height) - 10)
+        key = (w, h, fill)
+        photo = self._button_images.get(key)
+        if photo is None:
+            photo = button_photo(self, fill, mix(self.theme.surface, self.theme.accent, .34),
+                                 width=w, height=h, radius=min(14, h // 2))
+            self._button_images[key] = photo
+        return photo
 
     def _clicked(self):
         if self._anim:

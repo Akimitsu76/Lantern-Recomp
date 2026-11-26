@@ -35,9 +35,11 @@ class LanternHero(tk.Canvas):
         self._status = 'SEU DUMP. SEU PROGRESSO. SEU PC.'
         self._mission = {'dump': ('AGUARDANDO', 'off'),
                          'port': ('NÃO GERADO', 'off'),
-                         'session': ('0MIN', 'off')}
+                         'session': ('0 MIN', 'off')}
         self._session_ticks = 0
-        self._session_label_item = None
+        # IDs do bloco de informações alinhado abaixo do título. Uma única
+        # construção por paint;set_* apenas reconfigura o texto existente.
+        self._info_items = {}
         self.bind('<Configure>', self._resize)
         self.bind('<Destroy>', self._destroy, add='+')
 
@@ -60,31 +62,20 @@ class LanternHero(tk.Canvas):
         self.itemconfigure('hero-status', text=value)
 
     def set_import_state(self, label: str):
-        """Atualiza o texto de importação exibido ao lado do botão JOGAR."""
-        if self._session_label_item is not None:
-            self.itemconfigure(self._session_label_item, text=label)
+        """Atualiza a linha de importação do bloco, quando ela existir."""
+        item = self._info_items.get('import')
+        if item is not None:
+            self.itemconfigure(item, text=label)
 
     def set_session_seconds(self, seconds: int | None):
-        """Atualiza o temporizador da sessão atual no hero."""
-        if seconds is None:
-            self._session_ticks = 0
-        else:
-            self._session_ticks = max(0, int(seconds))
-        if self._session_label_item is None:
-            width, height = self._field_size
-            left = max(26, int(width * .028))
-            top = max(18, int(height * .07))
-            y = top + 96 + 48
-            self._session_label_item = self.create_text(
-                left, y, anchor='nw', tags='reveal',
-                text='SESSION 00MIN', fill=self.theme.muted,
-                font=self._font(9))
+        """Atualiza a linha de sessão do bloco alinhado abaixo do título."""
+        self._session_ticks = 0 if seconds is None else max(0, int(seconds))
         minutes = self._session_ticks // 60
-        self.itemconfigure(self._session_label_item,
-                           text=f'SESSION {minutes:02d}MIN')
+        self._mission['session'] = (f'{minutes} MIN', 'off' if seconds is None else 'on')
+        self._update_mission_markers()
 
     def set_mission(self, key: str, label: str, state: str):
-        """Atualiza um marcador de missão do hero."""
+        """Atualiza um marcador de missão do bloco alinhado do hero."""
         if key in self._mission:
             self._mission[key] = (label, state)
         self._update_mission_markers()
@@ -95,6 +86,16 @@ class LanternHero(tk.Canvas):
         family = self.theme.font if self.theme.font in available else 'fixed'
         return (family, max(8, int(size)), weight)
 
+    def _title_geometry(self, width, height):
+        """Coordenadas compartilhadas pelo título e pelo bloco de informações."""
+        left = max(26, int(width * .028))
+        top = max(18, int(height * .07))
+        display_size = max(34, min(62, int(height * .18)))
+        subtitle_size = max(10, display_size // 4)
+        title_y = top + 20
+        subtitle_y = title_y + display_size * 1.05
+        return left, top, title_y, subtitle_y, display_size, subtitle_size
+
     # ---------------------------------------------------------------- pintura
     def _paint(self):
         self._pending = None
@@ -104,6 +105,7 @@ class LanternHero(tk.Canvas):
         self.delete('all')
         self._orbit_items, self._spin_items, self._motes = [], [], []
         self._reveal_colors = []
+        self._info_items = {}
         self._field_size = (width, height)
         self.image_error = None
         self._paint_glow(width, height)
@@ -111,9 +113,8 @@ class LanternHero(tk.Canvas):
         geometry = self._paint_portal(width, height)
         self._paint_text(width, height, geometry)
         self._build_accent_column(width, height)
-        self._build_terminal_lines(width, height)
         self._build_playback_frame(width, height)
-        self._update_mission_markers()
+        self._build_info_block(width, height)
         self._start_reveal()
 
     def _paint_glow(self, width, height):
@@ -232,11 +233,9 @@ class LanternHero(tk.Canvas):
 
     def _paint_text(self, width, height, geometry):
         t = self.theme
-        left = max(26, int(width * .028))
-        top = max(18, int(height * .07))
-        portal_x = geometry[0]
+        left, top, title_y, subtitle_y, display_size, subtitle_size = self._title_geometry(width, height)
         small = ('DejaVu Sans', 9, 'bold')
-        display = ('DejaVu Sans Condensed', max(34, min(62, int(height * .18))), 'bold')
+        display = ('DejaVu Sans Condensed', display_size, 'bold')
 
         def record(item, color, attr='fill'):
             self._reveal_colors.append((item, color, attr))
@@ -248,26 +247,16 @@ class LanternHero(tk.Canvas):
                 attr = 'fill' if self.itemcget(item, 'fill') not in ('', None) else 'outline'
                 record(item, color or self.itemcget(item, attr), attr)
 
-        eyebrow = record(self.create_text(left, top, anchor='nw', tags='reveal',
-                                          text=f'XBOX 360 → PC  ·  {t.edition.upper()}',
-                                          fill=t.muted, font=small), t.muted)
+        record(self.create_text(left, top, anchor='nw', tags='reveal',
+                                text=f'XBOX 360 → PC  ·  {t.edition.upper()}',
+                                fill=t.muted, font=small), t.muted)
 
         title_x = left + 70
-        record(self.create_text(title_x, top + 20, anchor='nw', tags='reveal',
+        record(self.create_text(title_x, title_y, anchor='nw', tags='reveal',
                                 text=t.game.upper(), fill=t.ink, font=display), t.ink)
-        record(self.create_text(title_x + 2, top + 20 + display[1] * 1.05, anchor='nw',
+        record(self.create_text(title_x + 2, subtitle_y, anchor='nw',
                                 tags='reveal', text=t.subtitle.upper(), fill=t.accent,
-                                font=('DejaVu Sans', max(10, display[1] // 4), 'bold')), t.accent)
-
-        # Uma curva suave substitui a régua reta: menos "caixa", mesma leitura.
-        rule_y = top + 20 + display[1] * 1.05 + 34
-        rule_color = mix(t.bg, t.accent, .28)
-        rule = self.create_line(left, rule_y, left + (portal_x - left) * .46, rule_y + 7,
-                                min(width - 40, left + 520), rule_y, tags='reveal',
-                                fill=rule_color, width=1, smooth=True, splinesteps=24)
-        record(rule, rule_color)
-        record(self.create_text(left, rule_y + 14, anchor='nw', tags='reveal',
-                                text=t.tagline, fill=t.muted, font=('DejaVu Sans', 10)), t.muted)
+                                font=('DejaVu Sans', subtitle_size, 'bold')), t.accent)
 
         badge_color = mix(t.bg, t.accent, .42)
         badge = rounded_rect(self, width - 118, height - 52, width - 28, height - 20, 16,
@@ -291,21 +280,6 @@ class LanternHero(tk.Canvas):
             self.addtag_withtag('reveal', item)
             self._reveal_colors.append((item, mix(t.bg, t.accent, .22 + index * .08), 'outline'))
 
-    def _build_terminal_lines(self, width, height):
-        """Linhas de terminal acima do portal, simulando leitura do save."""
-        t = self.theme
-        left = max(26, int(width * .028))
-        top = max(18, int(height * .07))
-        y = top + 8
-        for text in ('DISCO 0 :: XEX 575207E9',
-                     'SHA-256 3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1',
-                     'ABERTURA :: MODOS 30 / 60 / 120 / 240 QUADROS'):
-            item = self.create_text(left, y, anchor='nw', tags='reveal',
-                                    text=text, fill=mix(t.bg, t.accent, .25),
-                                    font=self._font(8))
-            self._reveal_colors.append((item, mix(t.bg, t.accent, .25), 'fill'))
-            y += 13
-
     def _build_playback_frame(self, width, height):
         """Frame de reprodução ao redor do núcleo do portal."""
         t = self.theme
@@ -318,23 +292,63 @@ class LanternHero(tk.Canvas):
             self.addtag_withtag('reveal', item)
             self._reveal_colors.append((item, mix(t.bg, t.accent, .28), 'outline'))
 
-    def _update_mission_markers(self):
-        """Constrói ou reconfigura os três marcadores de missão do hero."""
+    def _build_info_block(self, width, height):
+        """Bloco único de informações, alinhado abaixo do título do jogo."""
         t = self.theme
-        left = max(26, int(width if False else 0))  # placeholder, corrigido abaixo
-        width, height = self._field_size
-        left = max(26, int(width * .028))
-        top = max(18, int(height * .07))
-        y = top + 96
-        order = ('dump', 'port', 'session')
-        glyphs = {'dump': '◆ ', 'port': '◉ ', 'session': '⟳ '}
-        for key in order:
+        left, _top, _title_y, subtitle_y, _display, subtitle_size = self._title_geometry(width, height)
+        left += 70  # mesma coluna do título, não da eyebrow
+        y = subtitle_y + subtitle_size + 24
+        dim = mix(t.bg, t.accent, .46)
+        sha = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
+        font = self._font(9)
+
+        rule_color = mix(t.bg, t.accent, .20)
+        rule = self.create_line(left, y - 10, left + min(420, int(width * .38)), y - 10,
+                                fill=rule_color, width=1)
+        self.addtag_withtag('reveal', rule)
+        self._reveal_colors.append((rule, rule_color, 'fill'))
+
+        static = (
+            ('disc', 'DISCO 0 :: XEX 575207E9', dim),
+            ('sha', f'SHA-256 {sha}', dim),
+            ('open', 'ABERTURA :: 30 / 60 / 120 / 240 QUADROS', dim),
+        )
+        for key, text, color in static:
+            item = self.create_text(left, y, anchor='nw', tags='reveal',
+                                    text=text, fill=color, font=font)
+            self._info_items[key] = item
+            self._reveal_colors.append((item, color, 'fill'))
+            y += 17
+
+        glyphs = {'dump': '◆', 'port': '◉', 'session': '⟳'}
+        for key in ('dump', 'port', 'session'):
             label, state = self._mission[key]
             color = t.muted if state == 'off' else (t.accent if state == 'on' else t.warn)
-            self.create_text(left, y, anchor='nw', tags='reveal',
-                             text=f'{glyphs[key]}{label}', fill=color,
-                             font=self._font(9))
-            y += 16
+            item = self.create_text(left, y, anchor='nw', tags='reveal',
+                                    text=f'{glyphs[key]}  {label}', fill=color, font=font)
+            self._info_items[key] = item
+            self._reveal_colors.append((item, color, 'fill'))
+            y += 17
+
+        item = self.create_text(left, y + 4, anchor='nw', tags='reveal',
+                                text=t.tagline.upper(), fill=t.accent_2, font=font)
+        self._info_items['tagline'] = item
+        self._reveal_colors.append((item, t.accent_2, 'fill'))
+
+    def _update_mission_markers(self):
+        """Reconfigura as três linhas dinâmicas sem criar novos itens."""
+        glyphs = {'dump': '◆', 'port': '◉', 'session': '⟳'}
+        for key in ('dump', 'port', 'session'):
+            item = self._info_items.get(key)
+            if item is None:
+                continue
+            label, state = self._mission[key]
+            color = self.theme.muted if state == 'off' else (
+                self.theme.accent if state == 'on' else self.theme.warn)
+            try:
+                self.itemconfigure(item, text=f'{glyphs[key]}  {label}', fill=color)
+            except tk.TclError:
+                pass
 
     def _start_reveal(self):
         if self._reveal:

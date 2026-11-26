@@ -14,6 +14,10 @@ INPUT_SPLITS = {
     'auto': 'Automático (teclado e 1º controle no jogador 1)',
     'keyboard_pad': 'Cooperativo: teclado no jogador 1, cada controle em um jogador',
 }
+# Dispositivo escolhido para cada jogador na interface. Os CVars herdados
+# (``input_split`` e ``keyboard_enabled``) continuam sendo derivados daqui.
+DEVICES = {'keyboard': 'Teclado', 'gamepad': 'Controle'}
+PLAYER_IDS = ('1', '2')
 ACTIONS = (
     ('a', 'A / ×', 'Confirmar / pular'), ('b', 'B / ○', 'Voltar / esquivar'),
     ('x', 'X / □', 'Ataque'), ('y', 'Y / △', 'Ataque pesado'),
@@ -64,6 +68,7 @@ AXIS_FIELDS = ('swap_sticks', 'invert_lx', 'invert_ly', 'invert_rx', 'invert_ry'
 def defaults():
     return {'schema': SCHEMA, 'layout': 'auto', 'input_split': 'auto',
             'keyboard_enabled': True,
+            'player_devices': {'1': 'keyboard', '2': 'keyboard'},
             'mouse_look': False, 'mouse_sensitivity': 1.0,
             'keyboard': dict(KEYBOARD_DEFAULTS),
             'gamepad': {'bindings': dict(zip(PAD_NAMES, PAD_NAMES)),
@@ -106,6 +111,11 @@ def validate(value):
         raise PortError('CONTROLS_VALUE', 'Layout de controle inválido.')
     if result['input_split'] not in INPUT_SPLITS:
         raise PortError('CONTROLS_VALUE', 'Divisão de jogadores inválida.')
+    devices = result['player_devices']
+    if (not isinstance(devices, dict) or set(devices) != set(PLAYER_IDS)
+            or any(device not in DEVICES for device in devices.values())):
+        raise PortError('CONTROLS_VALUE', 'Escolha teclado ou controle para cada jogador.')
+    result['player_devices'] = dict(devices)
     for field in ('keyboard_enabled', 'mouse_look'):
         if type(result[field]) is not bool:
             raise PortError('CONTROLS_VALUE', 'Opção de teclado/mouse inválida.')

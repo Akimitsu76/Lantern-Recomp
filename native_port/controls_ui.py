@@ -31,6 +31,9 @@ class ControlsPanel(ttk.Frame):
         self.layout = tk.StringVar(self, value=controls.LAYOUTS[config['layout']])
         self.input_split = tk.StringVar(self, value=controls.INPUT_SPLITS[config['input_split']])
         self.keyboard_enabled = tk.BooleanVar(self, value=config['keyboard_enabled'])
+        self.player_devices = dict(config['player_devices'])
+        self.player = tk.IntVar(self, value=1)
+        self.device = tk.StringVar(self, value=controls.DEVICES[self.player_devices['1']])
         self.mouse_look = tk.BooleanVar(self, value=config['mouse_look'])
         self.mouse_sensitivity = tk.StringVar(self, value=str(config['mouse_sensitivity']))
         self.keyboard = {key: tk.StringVar(self, value=value) for key, value in config['keyboard'].items()}
@@ -43,19 +46,25 @@ class ControlsPanel(ttk.Frame):
         header.pack(fill='x', pady=(0, 14))
         ttk.Label(header, text='Controles', font=('DejaVu Sans', 20, 'bold')).pack(side='left')
         ttk.Button(header, text='Restaurar padrão', command=lambda: self.set_settings(controls.defaults())).pack(side='right')
-        options = ttk.Frame(self)
-        options.pack(fill='x', pady=(0, 14))
-        ttk.Label(options, text='Layout dos botões', font=('DejaVu Sans', 10, 'bold')).pack(side='left')
-        ttk.Combobox(options, state='readonly', width=17, values=list(controls.LAYOUTS.values()),
-                     textvariable=self.layout).pack(side='left', padx=(16, 14))
-        ttk.Label(options, text='Escolha a referência visual dos comandos.', foreground=MUTED).pack(side='left')
         players = ttk.Frame(self)
-        players.pack(fill='x', pady=(0, 14))
+        players.pack(fill='x', pady=(0, 8))
         ttk.Label(players, text='Jogadores', font=('DejaVu Sans', 10, 'bold')).pack(side='left')
-        ttk.Combobox(players, state='readonly', width=48, values=list(controls.INPUT_SPLITS.values()),
-                     textvariable=self.input_split).pack(side='left', padx=(16, 14))
-        ttk.Label(players, text='Cooperativo local: teclado no jogador 1 e cada controle em outro jogador.',
-                  foreground=MUTED).pack(side='left')
+        self.player_buttons = {}
+        for number in (1, 2):
+            button = ttk.Button(players, text=f'Jogador {number}', style='Secondary.TButton',
+                                command=lambda selected=number: self._select_player(selected))
+            button.pack(side='left', padx=(16 if number == 1 else 6, 0))
+            self.player_buttons[number] = button
+        device_row = ttk.Frame(self)
+        device_row.pack(fill='x', pady=(0, 14))
+        self.device_label = ttk.Label(device_row, text='Jogador 1 · teclado ou controle',
+                                      font=('DejaVu Sans', 10, 'bold'))
+        self.device_label.pack(side='left')
+        device_combo = ttk.Combobox(device_row, state='readonly', width=18,
+                                    values=list(controls.DEVICES.values()), textvariable=self.device)
+        device_combo.pack(side='left', padx=(16, 0))
+        device_combo.bind('<<ComboboxSelected>>', self._device_changed)
+        self._refresh_player_controls()
         wrapper = ttk.Frame(self)
         wrapper.pack(fill='both', expand=True)
         self.canvas = tk.Canvas(wrapper, bg=BG, highlightthickness=0, height=310)
@@ -77,6 +86,7 @@ class ControlsPanel(ttk.Frame):
         gamepad = self._column(self.body, 1, 'Controle', 'Ação do jogo → botão físico do controle.')
         self._keyboard_fields(keyboard)
         self._gamepad_fields(gamepad)
+        self._refresh_player_controls()
         self._bind_scroll(self)
         ttk.Label(self, text='Salve para aplicar na próxima abertura do jogo. Seus saves permanecem os mesmos.',
                   foreground=MUTED, wraplength=950).pack(anchor='w', pady=(12, 0))
@@ -97,6 +107,32 @@ class ControlsPanel(ttk.Frame):
                         bordercolor=border, lightcolor=border, darkcolor=border, arrowcolor=MUTED)
         style.map('Controls.TCombobox', fieldbackground=[('readonly', field)],
                   selectbackground=[('readonly', field)], selectforeground=[('readonly', INK)])
+
+    def _device_key(self):
+        reverse = {label: key for key, label in controls.DEVICES.items()}
+        return reverse.get(self.device.get(), 'keyboard')
+
+    def _refresh_player_controls(self):
+        selected = self.player.get()
+        for number, button in self.player_buttons.items():
+            button.configure(style='Accent.TButton' if number == selected else 'Secondary.TButton')
+        self.device.set(controls.DEVICES[self.player_devices[str(selected)]])
+        self.device_label.configure(text=f'Jogador {selected} · teclado ou controle')
+        label = getattr(self, 'keyboard_state_label', None)
+        if label is not None:
+            users = [number for number in ('1', '2')
+                     if self.player_devices[number] == 'keyboard']
+            label.configure(text=('Teclado ativado para ' + ' e '.join(f'Jogador {n}' for n in users))
+                            if users else 'Teclado desativado')
+
+    def _select_player(self, number):
+        self.player_devices[str(self.player.get())] = self._device_key()
+        self.player.set(number)
+        self._refresh_player_controls()
+
+    def _device_changed(self, _event=None):
+        self.player_devices[str(self.player.get())] = self._device_key()
+        self._refresh_player_controls()
 
     @staticmethod
     def _column(parent, column, title, subtitle):
@@ -122,8 +158,9 @@ class ControlsPanel(ttk.Frame):
             row=row, column=0, sticky='w', padx=(0, 14), pady=5)
 
     def _keyboard_fields(self, parent):
-        ttk.Checkbutton(parent, text='Ativar teclado', style='Controls.TCheckbutton',
-                        variable=self.keyboard_enabled).grid(row=2, column=0, columnspan=2, sticky='w')
+        self.keyboard_state_label = ttk.Label(parent, text='Teclado ativado',
+                                              style='Controls.Muted.TLabel', wraplength=400)
+        self.keyboard_state_label.grid(row=2, column=0, columnspan=2, sticky='w')
         ttk.Label(parent, text='Ex.: Space ou Shift+Up. Use vírgula para alternativas.',
                   style='Controls.Muted.TLabel', wraplength=400).grid(row=3, column=0, columnspan=2, sticky='w', pady=(4, 0))
         groups = (
@@ -195,12 +232,17 @@ class ControlsPanel(ttk.Frame):
 
     def get_settings(self):
         reverse_layout = {label: key for key, label in controls.LAYOUTS.items()}
-        reverse_split = {label: key for key, label in controls.INPUT_SPLITS.items()}
         reverse_buttons = {label: key for key, label in controls.PAD_LABELS.items()}
+        devices = dict(self.player_devices)
+        devices[str(self.player.get())] = self._device_key()
+        keyboard_enabled = 'keyboard' in devices.values()
+        input_split = 'keyboard_pad' if devices['1'] != devices['2'] else 'auto'
+        self.input_split.set(controls.INPUT_SPLITS[input_split])
+        self.keyboard_enabled.set(keyboard_enabled)
         try:
             config = {'schema': controls.SCHEMA, 'layout': reverse_layout[self.layout.get()],
-                      'input_split': reverse_split[self.input_split.get()],
-                      'keyboard_enabled': self.keyboard_enabled.get(), 'mouse_look': self.mouse_look.get(),
+                      'input_split': input_split, 'keyboard_enabled': keyboard_enabled,
+                      'player_devices': devices, 'mouse_look': self.mouse_look.get(),
                       'mouse_sensitivity': float(self.mouse_sensitivity.get()),
                       'keyboard': {key: var.get() for key, var in self.keyboard.items()},
                       'gamepad': {'bindings': {key: reverse_buttons[var.get()] for key, var in self.gamepad.items()},
@@ -212,10 +254,15 @@ class ControlsPanel(ttk.Frame):
 
     def set_settings(self, config):
         config = controls.validate(config)
-        self.layout.set(controls.LAYOUTS[config['layout']]); self.keyboard_enabled.set(config['keyboard_enabled'])
+        devices = dict(config['player_devices'])
+        self.player_devices = devices
+        self.player.set(1)
+        self.layout.set(controls.LAYOUTS[config['layout']])
+        self.keyboard_enabled.set(config['keyboard_enabled'])
         self.input_split.set(controls.INPUT_SPLITS[config['input_split']])
         self.mouse_look.set(config['mouse_look']); self.mouse_sensitivity.set(str(config['mouse_sensitivity']))
         for key, value in config['keyboard'].items(): self.keyboard[key].set(value)
         for key, value in config['gamepad']['bindings'].items(): self.gamepad[key].set(controls.PAD_LABELS[value])
         for key in controls.AXIS_FIELDS: self.axes[key].set(config['gamepad'][key])
         self.deadzone.set(config['gamepad']['deadzone'])
+        self._refresh_player_controls()
