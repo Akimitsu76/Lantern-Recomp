@@ -15,6 +15,9 @@ REXCVAR_DEFINE_BOOL(aster_experimental_60fps, false, "Aster/Experimental",
 REXCVAR_DEFINE_BOOL(aster_experimental_unlimited_fps, false, "Aster/Experimental",
                    "Experimental uncapped presentation; skips the original vblank pacing wait");
 
+REXCVAR_DEFINE_INT32(aster_unlimited_target, 120, "Aster/Experimental",
+                     "Engine clock target when unlimited pacing is enabled");
+
 extern "C" void __imp__sub_8215E758(PPCContext&, uint8_t*);
 extern "C" void __imp__sub_825AEB90(PPCContext&, uint8_t*);
 extern "C" void __imp__sub_825AE760(PPCContext&, uint8_t*);
@@ -190,9 +193,14 @@ extern "C" void sub_82402E38(PPCContext& ctx, uint8_t* base) {
   thread_local uint32_t last = UINT32_MAX;
   constexpr uint32_t state = 0x82836A08;
   auto fps_bits = REX_LOAD_U32(state + 28);
-  if ((target_60 || unlimited) && fps_bits == 0x41F00000u) {
-    // This engine field already supports 30/60 (original setter 82375A28).
-    // Keep simulation timekeeping at 60 even when the pacing wait is skipped.
+  if (unlimited && (fps_bits == 0x41F00000u || fps_bits == 0x42700000u)) {
+    // The old experiment kept simulation timekeeping at 60, so gameplay never
+    // exceeded 60 even though presentation ran free. Raise the engine clock.
+    const uint32_t wanted = REXCVAR_GET(aster_unlimited_target) == 240
+                                ? 0x43700000u : 0x42F00000u;  // 240.0f / 120.0f
+    REX_STORE_U32(state + 28, wanted);
+    fps_bits = wanted;
+  } else if (target_60 && fps_bits == 0x41F00000u) {
     REX_STORE_U32(state + 28, 0x42700000u);
     fps_bits = 0x42700000u;
   }

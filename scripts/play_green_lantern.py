@@ -65,6 +65,9 @@ def parse_arguments(argv=None):
                         help='Alvo de quadros: 30 (padrão), 60 ou ilimitado. Os dois últimos são experimentais.')
     parser.add_argument('--experimental-60fps', action='store_true',
                         help='Atalho antigo para --fps-target 60.')
+    parser.add_argument('--unlimited-target', choices=graphics.UNLIMITED_TARGETS,
+                        default=graphics.DEFAULT_UNLIMITED_TARGET,
+                        help='Alvo do relógio da engine no modo ilimitado: 120 (padrão) ou 240 fps.')
     parser.add_argument('--graphics-preset', choices=graphics.PRESETS, default='default',
                         help='Preset gráfico. Padrão: default (mesmos valores do build principal).')
     parser.add_argument('--antialiasing', choices=graphics.ANTIALIASING,
@@ -133,6 +136,7 @@ def resolve_graphics(parser, args, target):
             texture_quality=args.texture_quality,
             present_dither=None if args.dither is None else args.dither == 'on',
             fps_target=target,
+            unlimited_target=args.unlimited_target,
             vsync=vsync_on,
             shader_mode=args.shader_mode,
             shader_preload=args.shader_preload == 'on',
@@ -309,6 +313,9 @@ def check_mode_report(parser, report, target):
                          'com VSync desligado e apresentação imediata.')
         if report.get('fps_target') != 'unlimited':
             parser.error('O relatório de referência não foi gerado com --fps-target unlimited.')
+        if not any(argument.startswith('--aster_unlimited_target=') for argument in command):
+            parser.error('O relatório ilimitado não registra o alvo da engine; '
+                         'gere um novo probe com --fps-target unlimited.')
         try:
             average = (float(report.get('present_calls_observed') or 0) /
                        float(report.get('elapsed_seconds') or 0))
@@ -588,8 +595,10 @@ def main():
         print('O passo de simulação foi medido em par com 30 fps, mas combate, física, animações, áudio e campanha não estão certificados.', flush=True)
         print(f'Perfil compartilhado: {run / "user"}', flush=True)
     elif target == 'unlimited':
-        print('MODO ILIMITADO EXPERIMENTAL: remove a espera de pacing, desliga VSync e usa apresentação imediata.', flush=True)
-        print('Pode consumir muito mais GPU, apresentar tearing e não garante velocidade correta da simulação.', flush=True)
+        print(f'MODO ILIMITADO EXPERIMENTAL: remove a espera de pacing e eleva o alvo da engine para '
+              f'{graphics_data["unlimited_target"]} fps (VSync off, apresentação imediata).', flush=True)
+        print('Pode consumir muito mais GPU, apresentar tearing e acelerar simulação/áudio. '
+              'Velocidade correta em combate, física e animações não está certificada.', flush=True)
         print(f'Perfil compartilhado: {run / "user"}', flush=True)
         print('Se o jogo parecer acelerado ou instável, volte para 30 fps.', flush=True)
     print('Compilação experimental local; campanha completa e qualidade do áudio ainda sem validação.', flush=True)
@@ -597,7 +606,9 @@ def main():
     if installation:
         print(f'Backend instalado: {installation["recipe"]["integration"]} | '
               f'{installation["renderer"]}', flush=True)
-    print(f'Próxima sessão: alvo={target} | VSync={"on" if graphics_data["vsync"] else "off"} | '
+    target_detail = (f'{target} ({graphics_data["unlimited_target"]})'
+                     if target == 'unlimited' else target)
+    print(f'Próxima sessão: alvo={target_detail} | VSync={"on" if graphics_data["vsync"] else "off"} | '
           f'apresentação={present_mode} | shaders={graphics_data["shader_mode"]}', flush=True)
     if not graphics_data['vsync']:
         print('VSync desligado é experimental: pode aumentar uso da GPU e causar tearing.', flush=True)

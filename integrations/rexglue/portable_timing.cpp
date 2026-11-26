@@ -9,6 +9,8 @@ REXCVAR_DEFINE_BOOL(aster_experimental_60fps, false, "Aster/Experimental",
                    "Select the game's existing 60 Hz pacing path");
 REXCVAR_DEFINE_BOOL(aster_experimental_unlimited_fps, false, "Aster/Experimental",
                    "Experimental: bypass guest pacing; gameplay not certified");
+REXCVAR_DEFINE_INT32(aster_unlimited_target, 120, "Aster/Experimental",
+                     "Engine clock target when unlimited pacing is enabled");
 REXCVAR_DEFINE_BOOL(aster_frame_diagnostics, false, "Aster/Experimental",
                    "Observe pacing, simulation and render calls in five-second aggregates");
 
@@ -100,11 +102,27 @@ extern "C" void sub_82402E38(PPCContext& ctx, uint8_t* base) {
     bool unlimited = REXCVAR_GET(aster_experimental_unlimited_fps);
     bool seeded = false;
     constexpr uint32_t target = 0x82836A24u;
-    if (unlimited || REXCVAR_GET(aster_experimental_60fps)) {
-        if (REX_LOAD_U32(target) == 0x41F00000u)
-            REX_STORE_U32(target, 0x42700000u);
+    constexpr uint32_t kTarget30 = 0x41F00000u;   // 30.0f
+    constexpr uint32_t kTarget60 = 0x42700000u;   // 60.0f
+    constexpr uint32_t kTarget120 = 0x42F00000u;  // 120.0f
+    constexpr uint32_t kTarget240 = 0x43700000u;  // 240.0f
+    const uint32_t current_target = REX_LOAD_U32(target);
+    if (unlimited) {
+        // The old hook pinned the guest clock to 60 while presentation ran
+        // free, so gameplay stayed at 60. Raise the engine target itself.
+        const uint32_t wanted = REXCVAR_GET(aster_unlimited_target) == 240
+                                    ? kTarget240 : kTarget120;
+        if (current_target == kTarget30 || current_target == kTarget60) {
+            REX_STORE_U32(target, wanted);
+        }
+    } else if (REXCVAR_GET(aster_experimental_60fps) && current_target == kTarget30) {
+        REX_STORE_U32(target, kTarget60);
     }
-    if (unlimited && REX_LOAD_U32(target) == 0x42700000u &&
+    const uint32_t raised_target = REX_LOAD_U32(target);
+    const bool known_raised_target = raised_target == kTarget60 ||
+                                     raised_target == kTarget120 ||
+                                     raised_target == kTarget240;
+    if (unlimited && known_raised_target &&
         REX_LOAD_U8(0x8283E2CCu) == 0 &&
         REX_LOAD_U32(0x82839488u) == 0x8247CE30u) {
         // The verified callback reads the display counter at 0x82BA0348.

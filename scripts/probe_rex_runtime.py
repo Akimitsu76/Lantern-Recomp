@@ -208,6 +208,9 @@ def main() -> int:
                         help='30 (default), 60 or unlimited. The latter two require an isolated hook build.')
     parser.add_argument('--experimental-unlimited-fps', action='store_true',
                         help='Legacy alias for --fps-target unlimited.')
+    parser.add_argument('--unlimited-target', choices=graphics.UNLIMITED_TARGETS,
+                        default=graphics.DEFAULT_UNLIMITED_TARGET,
+                        help='Engine clock target in unlimited mode: 120 (default) or 240 fps.')
     parser.add_argument('--graphics-preset', choices=graphics.PRESETS,
                         help='Apply a real graphics preset to this isolated probe.')
     parser.add_argument('--upscaler', choices=graphics.UPSCALERS, default=None)
@@ -443,7 +446,8 @@ def main() -> int:
                 anisotropic=args.anisotropic,
                 texture_quality=args.texture_quality,
                 present_dither=None if args.dither is None else args.dither == 'on',
-                fps_target=fps_target, vsync=args.vsync == 'on', shader_mode=args.shader_mode,
+                fps_target=fps_target, unlimited_target=args.unlimited_target,
+                vsync=args.vsync == 'on', shader_mode=args.shader_mode,
                 shader_preload=args.shader_preload == 'on', fullscreen=args.fullscreen,
                 upscaler=args.upscaler or env.get('ASTER_PRESENT_FILTER'), output_resolution=args.output_resolution,
                 antialiasing=args.antialiasing, fsr_sharpness=args.fsr_sharpness)
@@ -470,6 +474,10 @@ def main() -> int:
         command.append('--mnk_mode=true')
     if args.allow_invalid_fetch:
         command.append('--gpu_allow_invalid_fetch_constants=true')
+    if fps_target == 'unlimited' and not any(
+            argument.startswith('--aster_unlimited_target=') for argument in command):
+        # A graphics block already emits the CVar; isolated probes do not.
+        command.append(f'--aster_unlimited_target={args.unlimited_target}')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     start = time.monotonic()
     timed_out = False

@@ -120,6 +120,7 @@ class Launcher:
         self.hd_running = False
         self.graphics_preset = tk.StringVar(value=cfg['graphics']['preset'])
         self.fps_target = tk.StringVar(value=cfg['graphics']['fps_target'])
+        self.unlimited_target = tk.StringVar(value=graphics.UNLIMITED_TARGET_LABELS[cfg['graphics']['unlimited_target']])
         self.vsync = tk.BooleanVar(value=cfg['graphics']['vsync'])
         self.shader_mode = tk.StringVar(value=cfg['graphics']['shader_mode'])
         self.shader_preload = tk.BooleanVar(value=cfg['graphics']['shader_preload'])
@@ -182,6 +183,7 @@ class Launcher:
             variable.trace_add('write', lambda *_: self._on_custom_changed())
         self.fsr_sharpness.trace_add('write', lambda *_: self._refresh_graphics_ui() if not self._syncing else None)
         self.fps_target.trace_add('write', lambda *_: self._on_target_changed())
+        self.unlimited_target.trace_add('write', lambda *_: self._refresh_graphics_ui() if not self._syncing else None)
         self.vsync.trace_add('write', lambda *_: self._on_vsync_changed())
         self.refresh_paths()
         if self.settings_warning:
@@ -361,7 +363,8 @@ class Launcher:
                         self.sharpness_spin, *self.sharpness_preset_buttons, self.shader_preload_check,
                         self.lightweight_check]
         self._readonly_widgets = [self.build_combo, self.shader_combo, self.output_combo,
-            self.upscaler_combo, self.antialiasing_combo, *self.home_combos]
+            self.upscaler_combo, self.antialiasing_combo, self.unlimited_target_combo,
+            *self.home_combos]
 
     def _build_update_tab(self):
         tk.Label(self.update_tab, text='Atualizações do launcher', bg=BG, fg=INK,
@@ -712,6 +715,15 @@ class Launcher:
             self.target_buttons[target] = button
         self.target_note = tk.Label(self.graphics_tab, text='', bg=BG, fg=MUTED, font=(FONT, 8), wraplength=1000, justify='left')
         self.target_note.pack(anchor='w', pady=(5, 6))
+        self.unlimited_target_row = tk.Frame(self.graphics_tab, bg=BG)
+        tk.Label(self.unlimited_target_row, text='Alvo da engine', bg=BG, fg=MUTED,
+                 font=(FONT, 9), width=19, anchor='w').pack(side='left')
+        self.unlimited_target_combo = ttk.Combobox(
+            self.unlimited_target_row, textvariable=self.unlimited_target,
+            values=list(graphics.UNLIMITED_TARGET_LABELS.values()), state='readonly', width=18)
+        self.unlimited_target_combo.pack(side='left')
+        tk.Label(self.unlimited_target_row, text='(apenas no modo ilimitado)', bg=BG, fg=MUTED,
+                 font=(FONT, 8)).pack(side='left', padx=(8, 0))
 
         viewport = tk.Frame(self.graphics_tab, bg=BG)
         viewport.pack(fill='both', expand=True)
@@ -1031,6 +1043,7 @@ class Launcher:
         try:
             self.graphics_preset.set(data['preset'])
             self.fps_target.set(data['fps_target'])
+            self.unlimited_target.set(graphics.UNLIMITED_TARGET_LABELS[data['unlimited_target']])
             self.vsync.set(data['vsync'])
             self.shader_mode.set(data['shader_mode'])
             self.shader_preload.set(data['shader_preload'])
@@ -1053,7 +1066,10 @@ class Launcher:
     def _graphics_data(self):
         target = self.fps_target.get()
         preset = self.graphics_preset.get()
-        common = dict(fps_target=target, vsync=self.vsync.get(), fullscreen=self.fullscreen.get(), fsr_sharpness=self.fsr_sharpness.get(),
+        reverse_unlimited = {label: key for key, label in graphics.UNLIMITED_TARGET_LABELS.items()}
+        common = dict(fps_target=target,
+                      unlimited_target=reverse_unlimited.get(self.unlimited_target.get(), graphics.DEFAULT_UNLIMITED_TARGET),
+                      vsync=self.vsync.get(), fullscreen=self.fullscreen.get(), fsr_sharpness=self.fsr_sharpness.get(),
                       shader_mode=self.shader_mode.get(),
                       shader_preload=self.shader_preload.get(),
                       output_resolution='auto' if self.output_resolution.get() == 'Automática' else self.output_resolution.get())
@@ -1077,14 +1093,19 @@ class Launcher:
         except (PortError, tk.TclError) as exc:
             data, text = None, str(exc)
         self.graphics_summary.set(text)
-        self.home_preset.set(graphics.PRESET_LABELS[self.graphics_preset.get()])
-        self.home_fps.set(graphics.TARGET_LABELS[self.fps_target.get()])
-        self.home_display.set('Tela cheia' if self.fullscreen.get() else 'Em janela')
         target = self.fps_target.get()
         preset = self.graphics_preset.get()
+        self.home_preset.set(graphics.PRESET_LABELS[preset])
+        fps_label = graphics.TARGET_LABELS[target]
+        if target == 'unlimited':
+            fps_label += f" ({data['unlimited_target']})" if data else ''
+        self.home_fps.set(fps_label)
+        self.home_display.set('Tela cheia' if self.fullscreen.get() else 'Em janela')
         if data:
-            self.quick_target.set(graphics.TARGET_LABELS[target] +
-                                  (' · experimental' if target != '30' else ' · padrão'))
+            quick = graphics.TARGET_LABELS[target]
+            if target == 'unlimited':
+                quick += f" ({data['unlimited_target']})"
+            self.quick_target.set(quick + (' · experimental' if target != '30' else ' · padrão'))
             self.quick_graphics.set(
                 f"{graphics.PRESET_LABELS[preset]} · {graphics.internal_resolution(data['render_scale'])}")
             self.quick_profile.set({
@@ -1105,9 +1126,14 @@ class Launcher:
             self.warning_text.set('ILIMITADO EXPERIMENTAL · Pode aumentar a carga da GPU, causar tearing '
                                   'ou alterar a velocidade do jogo. Seus saves continuam compartilhados.')
             self.warning_frame.pack(side='bottom', fill='x', pady=(0, 10), before=self.hero)
+        if target == 'unlimited':
+            self.unlimited_target_row.pack(anchor='w', pady=(0, 6))
+            self.unlimited_target_combo.configure(state='disabled' if self.busy else 'readonly')
+        else:
+            self.unlimited_target_row.pack_forget()
         note = graphics.TARGET_DESCRIPTIONS[target]
         if target == 'unlimited':
-            note += ' VSync fica desligado. O save pertence ao usuário.'
+            note += f" Alvo selecionado: {data['unlimited_target']} fps. VSync fica desligado. O save pertence ao usuário." if data else ''
         self.target_note.configure(text=note, fg=WARN if target != '30' else MUTED)
         self._refresh_custom_state()
         self._refresh_engine_status()
@@ -1127,6 +1153,8 @@ class Launcher:
             self.vsync_check.configure(state='disabled')
         else:
             self.vsync_check.configure(state='normal')
+        if self.fps_target.get() != 'unlimited' or self.busy:
+            self.unlimited_target_combo.configure(state='disabled')
         sharpenable = self.upscaler.get() in (graphics.UPSCALER_LABELS['fsr1'], graphics.UPSCALER_LABELS['cas'])
         self.sharpness_spin.configure(state='normal' if not self.busy and sharpenable else 'disabled')
         for button in self.sharpness_preset_buttons:

@@ -217,6 +217,10 @@ class AsterGraphicsDialog final : public rex::ui::ImGuiDialog {
         Apply("aster_experimental_60fps", "false");
         Apply("aster_experimental_unlimited_fps", "true");
       }
+      if (unlimited && HasFlag("aster_unlimited_target")) {
+        static const Option kUnlimitedTargets[] = {{"120 fps", "120"}, {"240 fps", "240"}};
+        ChoiceRow("Alvo da engine", "aster_unlimited_target", kUnlimitedTargets, 2);
+      }
     }
     BoolRow("VSync", "vsync");
     BoolRow("Diagnóstico de quadros", "aster_frame_diagnostics");

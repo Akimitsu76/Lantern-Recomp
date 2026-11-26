@@ -178,8 +178,8 @@ class PlayLauncherTests(unittest.TestCase):
         identity = launcher.digest(game / 'default.xex')
         report.write_text(json.dumps({
             'command': [f'--game_data_root={game}', '--render_target_path_vulkan=fsi',
-                        '--aster_experimental_unlimited_fps=true', '--vsync=false',
-                        '--vulkan_allow_present_mode_immediate=true'],
+                        '--aster_experimental_unlimited_fps=true', '--aster_unlimited_target=120',
+                        '--vsync=false', '--vulkan_allow_present_mode_immediate=true'],
             'xex_sha256_after': identity,
             'executable_sha256': launcher.digest(binary),
             'xex_loaded_observed': True,
@@ -205,12 +205,30 @@ class PlayLauncherTests(unittest.TestCase):
             arguments = shlex.split(output.getvalue().splitlines()[-1])
             self.assertEqual(arguments[0], str(binary))
             self.assertIn('--aster_experimental_unlimited_fps=true', arguments)
+            self.assertIn('--aster_unlimited_target=120', arguments)
             self.assertIn('--vsync=false', arguments)
             self.assertIn('--vulkan_allow_present_mode_immediate=true', arguments)
             self.assertIn(f'--user_data_root={root / launcher.EXPERIMENTAL_UNLIMITED_RUNTIME / "user"}', arguments)
             self.assertIn('MODO ILIMITADO EXPERIMENTAL', output.getvalue())
+            self.assertIn('120 fps', output.getvalue())
             self.assertFalse((root / '.aster/runtime').exists())
             execute.assert_not_called()
+
+    def test_unlimited_240_target_is_forwarded_to_the_engine(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, game, _ = self._unlimited_install(folder)
+            output = io.StringIO()
+            with patch.object(launcher, '__file__', str(root / 'scripts/play_green_lantern.py')), \
+                    patch.object(launcher, 'EXPECTED_XEX', launcher.digest(game / 'default.xex')), \
+                    patch('sys.argv', ['play_green_lantern.py', '--dry-run', '--fps-target',
+                                       'unlimited', '--unlimited-target', '240', str(game)]), \
+                    patch.object(launcher.subprocess, 'run',
+                                 return_value=subprocess.CompletedProcess([], 0, '', '')), \
+                    patch.object(launcher.os, 'execv'), contextlib.redirect_stdout(output):
+                self.assertEqual(launcher.main(), 0)
+            arguments = shlex.split(output.getvalue().splitlines()[-1])
+            self.assertIn('--aster_unlimited_target=240', arguments)
+            self.assertIn('240 fps', output.getvalue())
 
     def test_unlimited_rejects_slow_reference(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -37,8 +37,8 @@ imports, mede taxas/tempos e captura callers conhecidos sem sondar a pilha.
 `--frame-diagnostics` habilita a observação no probe e no host experimental.
 A opção `--fps-target 60` (ou o atalho antigo `--experimental-60fps`) é opt-in no
 probe e no launcher: seleciona 60 quando a engine pede 30, mantendo a rotina
-original de espera. `--fps-target unlimited` usa outro hook, que remove a espera
-e força apresentação imediata. Nenhum dos dois é o padrão.
+original de espera. `--fps-target unlimited` usa outro hook, que remove a espera,
+eleva o alvo da engine e força apresentação imediata. Nenhum dos dois é o padrão.
 `ASTER_DELTA` mede o retorno do relógio de delta original por tempo de parede;
 mesmo uma razão próxima de 1 não certifica física, combate ou animação completos.
 
@@ -199,3 +199,32 @@ principal com preset Média (`preset30-default-001`, 12,52 s) carregou o XEX,
 aceitou as CVars, fez 461 apresentações em FSI/FIFO e não teve fatal; `ready=false`
 pelo prazo curto, então isso não é validação de gameplay. A avaliação visual dos
 presets e a sensação de 60/ilimitado continuam dependendo do usuário.
+
+## Alvo ilimitado configurável (120/240)
+
+O hook antigo (`portable_timing.cpp`, `sub_82402E38`) elevava o alvo global de
+30 (`0x41F00000`) para 60 (`0x42700000`) e removia a espera de pacing. Assim, a
+apresentação passava de 400/s, mas o relógio da simulação continuava em 60 — a
+queixa de que a gameplay ficava travada em 60 fps. O hook agora lê a CVar
+`aster_unlimited_target` (padrão `120`, valores `120`/`240`) e escreve
+`0x42F00000` (120.0f) ou `0x43700000` (240.0f) no mesmo endereço. O seed da
+comparação de pacing só ocorre quando o alvo é um dos valores conhecidos
+(60/120/240) e o callback original `8247CE30` está instalado; alvos
+desconhecidos e o callback modificado preservam a rotina original. Os relógios
+de delta e de simulação e os registros do guest não são substituídos.
+
+A opção está disponível em:
+
+- **Launcher**: aba **Gráficos**, seletor "Alvo da engine" ao escolher
+  **Ilimitado** (`native_port/graphics.py`, `native_port/launcher.py`);
+- **CLI**: `--fps-target unlimited --unlimited-target 120|240` em
+  `scripts/play_green_lantern.py` e `scripts/probe_rex_runtime.py`;
+- **Menu F1** dentro do jogo, quando o hook está ativo
+  (`integrations/rexglue/runtime_graphics_menu.cpp`).
+
+O relatório de referência do modo ilimitado agora precisa conter a flag
+`--aster_unlimited_target=` para provar que o alvo da engine foi elevado; probes
+antigos do build v10 são rejeitados. O modo continua **experimental**: a
+velocidade de física, combate, animações e áudio ainda não foi certificada acima
+de 60 fps. Constantes: 30 = `0x41F00000`, 60 = `0x42700000`,
+120 = `0x42F00000`, 240 = `0x43700000`.

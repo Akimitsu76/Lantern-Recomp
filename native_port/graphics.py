@@ -31,11 +31,18 @@ PRESET_DESCRIPTIONS = {
 }
 TARGETS = ('30', '60', 'unlimited')
 TARGET_LABELS = {'30': '30 fps', '60': '60 fps', 'unlimited': 'Ilimitado'}
+# The real engine clock target when pacing is bypassed. The old unlimited hook
+# pinned it to 60, so gameplay stayed at 60 even though presentation ran free.
+UNLIMITED_TARGETS = ('120', '240')
+UNLIMITED_TARGET_LABELS = {'120': '120 fps', '240': '240 fps'}
+DEFAULT_UNLIMITED_TARGET = '120'
 TARGET_DESCRIPTIONS = {
     '30': 'Padrão. Menor carga de CPU/GPU. Save compartilhado do usuário.',
     '60': 'Experimental. Usa o mesmo save do usuário, independente dos gráficos.',
-    'unlimited': ('Experimental. Reduz a espera de pacing e usa apresentação imediata; '
-                  'ganho real acima de 60 fps ainda não confirmado.'),
+    'unlimited': (f'Experimental. Remove a espera de pacing e eleva o alvo da engine para '
+                  f'{DEFAULT_UNLIMITED_TARGET} ou 240 fps (selecionável). Pode acelerar '
+                  'simulação/áudio, causar tearing e consumir muita GPU. Volte para 30 se '
+                  'o jogo parecer instável.'),
 }
 ANTIALIASING = ('none', 'fxaa', 'fxaa_extreme')
 ANTIALIASING_LABELS = {'none': 'Desligado', 'fxaa': 'FXAA', 'fxaa_extreme': 'FXAA intenso'}
@@ -108,6 +115,7 @@ def defaults():
         **_PRESET_VALUES['default'],
         'preset': 'default',
         'fps_target': '30',
+        'unlimited_target': DEFAULT_UNLIMITED_TARGET,
         'vsync': True,
         'shader_mode': 'async',
         'shader_preload': True,
@@ -142,7 +150,10 @@ def apply_preset(name, current=None):
 
 def from_options(preset='default', *, render_scale=None, msaa_2x=None,
                  anisotropic=None, texture_quality=None, present_dither=None,
-                 fps_target='30', vsync=True, shader_mode='async', shader_preload=True, output_resolution='auto', upscaler=None, antialiasing=None, fullscreen=False, fsr_sharpness=DEFAULT_FSR_SHARPNESS):
+                 fps_target='30', unlimited_target=DEFAULT_UNLIMITED_TARGET, vsync=True,
+                  shader_mode='async', shader_preload=True, output_resolution='auto',
+                  upscaler=None, antialiasing=None, fullscreen=False,
+                  fsr_sharpness=DEFAULT_FSR_SHARPNESS):
     """Build a graphics block from CLI/UI values.
 
     Any explicit rendering override switches the block to ``custom`` so a
@@ -168,7 +179,10 @@ def from_options(preset='default', *, render_scale=None, msaa_2x=None,
             applied = True
     if applied and preset != 'custom':
         values['preset'] = 'custom'
-    values.update(fps_target=fps_target, vsync=vsync, shader_mode=shader_mode, shader_preload=shader_preload, output_resolution=output_resolution, fullscreen=fullscreen, fsr_sharpness=fsr_sharpness)
+    values.update(fps_target=fps_target, unlimited_target=unlimited_target, vsync=vsync,
+                  shader_mode=shader_mode, shader_preload=shader_preload,
+                  output_resolution=output_resolution, fullscreen=fullscreen,
+                  fsr_sharpness=fsr_sharpness)
     if upscaler is not None:
         if values['upscaler'] != upscaler:
             values['preset'] = 'custom'
@@ -189,6 +203,8 @@ def validate(data):
         result.update(preset_values(result['preset']))
     if result['fps_target'] not in TARGETS:
         raise PortError('GRAPHICS_VALUE', 'Alvo de FPS deve ser 30, 60 ou ilimitado.')
+    if result['unlimited_target'] not in UNLIMITED_TARGETS:
+        raise PortError('GRAPHICS_VALUE', 'Alvo ilimitado deve ser 120 ou 240 fps.')
     if not isinstance(result['fullscreen'], bool):
         raise PortError('GRAPHICS_VALUE', 'Modo de tela inválido.')
     if type(result['fsr_sharpness']) is not int or not 0 <= result['fsr_sharpness'] <= 100:
@@ -275,6 +291,10 @@ def cvar_arguments(data):
     if data['output_resolution'] != 'auto':
         width, height = data['output_resolution'].split('x')
         arguments.extend([f'--window_width={width}', f'--window_height={height}'])
+    if data['fps_target'] == 'unlimited':
+        # The host hook reads this CVar to raise the guest engine clock target.
+        # Without it the old hook pinned gameplay at 60 even with pacing bypassed.
+        arguments.append(f"--aster_unlimited_target={data['unlimited_target']}")
     return arguments
 
 
@@ -282,8 +302,11 @@ def summary(data):
     data = validate(data)
     sharpness = (f" · Nitidez {data['fsr_sharpness']}"
                  if data['upscaler'] in ('cas', 'fsr1') else '')
+    target = TARGET_LABELS[data['fps_target']]
+    if data['fps_target'] == 'unlimited':
+        target += f" ({data['unlimited_target']})"
     return (f"{PRESET_LABELS[data['preset']]} · {internal_resolution(data['render_scale'])} · "
             f"{UPSCALER_LABELS[data['upscaler']]}{sharpness} · MSAA do jogo · "
             f"Aniso {ANISOTROPIC_LABELS[data['anisotropic']]} · "
             f"Texturas {TEXTURE_QUALITY_LABELS[data['texture_quality']]} · "
-            f"{TARGET_LABELS[data['fps_target']]}")
+            f"{target}")

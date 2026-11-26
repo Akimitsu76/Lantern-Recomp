@@ -17,6 +17,7 @@ class PortableTimingTests(unittest.TestCase):
             (root / 'rex').mkdir()
             (root / 'rex/cvar.h').write_text(
                 '#define REXCVAR_DEFINE_BOOL(name,value,group,description) bool name=value;\n'
+                '#define REXCVAR_DEFINE_INT32(name,value,group,description) int32_t name=value;\n'
                 '#define REXCVAR_GET(name) (name)\n')
             (root / 'rex/logging.h').write_text('#define REXLOG_INFO(...) Log(__VA_ARGS__)\n')
             (root / 'aster_green_lantern_pch.h').write_text(r'''
@@ -104,8 +105,8 @@ int main() {
     }
     words[0x8283E2F8u]=77;words[0x8283E2CCu]=1;
     invoke();assert(comparison_seen==77);
-    words[0x8283E2CCu]=0;words[0x82836A24u]=0x42F00000u;
-    invoke();assert(comparison_seen==77);
+    words[0x8283E2CCu]=0;words[0x82836A24u]=0xDEADBEEFu;
+    invoke();assert(comparison_seen==77 && words[0x82836A24u]==0xDEADBEEFu);
     words[0x82836A24u]=0x42700000u;
     for(uint32_t callback : {0u,0x82402710u,0xDEADBEEFu}) {
         words[0x82839488u]=callback;invoke();assert(comparison_seen==77);
