@@ -251,7 +251,7 @@ class Launcher(PortalShell):
                         self.hero_play_button,
                         self.source_entry, self.work_entry, self.jobs_spin, self.save_button,
                         self.quick_save_button, self.doctor_button, self.clear_button, self.export_button,
-                        self.copy_button, self.restore_graphics_button, self.build_start_button,
+                        self.copy_button, self.restore_graphics_button,
                         self.hd_select_button, self.hd_original_button, self.hd_catalog_button,
                         self.hd_prepare_button, self.hd_auto_button, self.fullscreen_check,
                         self.sharpness_spin, *self.sharpness_preset_buttons, self.shader_preload_check,
@@ -567,8 +567,6 @@ class Launcher(PortalShell):
             self.stage_widgets[key] = (number, label, state)
         actions = tk.Frame(left, bg=BG)
         actions.pack(side='bottom', fill='x', pady=(10, 0), before=card)
-        self.build_start_button = ttk.Button(actions, text='Gerar port', style='Secondary.TButton', command=self.generate_native)
-        self.build_start_button.pack(side='left')
         self.build_cancel_button = ttk.Button(actions, text='Cancelar geração', style='Ghost.TButton', state='disabled', command=self.stop_experimental)
         self.build_cancel_button.pack(side='left', padx=8)
         ttk.Button(actions, text='Ver logs', style='Ghost.TButton', command=lambda: self.tabs.select(self.diag_tab)).pack(side='right')
@@ -1242,7 +1240,6 @@ class Launcher(PortalShell):
         for button in (self.play_button, self.hero_play_button):
             button.configure(state=state, text=label)
         self.compile_button.configure(state='normal' if self._source_ready() else 'disabled')
-        self.build_start_button.configure(state='normal' if self._source_ready() else 'disabled')
 
     def _fps_choice(self):
         """Valor numérico do seletor (30/60/120/240), não o modo interno."""

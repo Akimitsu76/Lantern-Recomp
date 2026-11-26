@@ -359,7 +359,7 @@ class LauncherTests(unittest.TestCase):
         self.app.tabs.select(self.app.build_tab)
         self.root.update()
         bottom = self.app.build_tab.winfo_rooty() + self.app.build_tab.winfo_height()
-        for widget in [self.app.progress, self.app.build_start_button, self.app.build_cancel_button]:
+        for widget in [self.app.progress, self.app.build_cancel_button]:
             self.assertTrue(widget.winfo_ismapped())
             self.assertGreaterEqual(widget.winfo_height(), 5 if widget == self.app.progress else 24)
             self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(), bottom)

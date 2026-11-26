@@ -1,9 +1,9 @@
 """Botões ttk com cantos arredondados, gerados sem assets externos.
 
 O tema ``clam`` desenha botões retangulares. Para manter a API dos
-``ttk.Button`` intacta (estados, ``invoke``, estilos nomeados), trocamos apenas
-o elemento de borda por uma imagem PNG gerada em memória. Assim nenhum widget
-precisa ser substituído e os testes continuam usando ``ttk.Button``.
+``ttk.Button`` intacta (estados, ``invoke``, estilos nomeados), geramos PNGs
+em memória e usamos ``element_create`` para substituir o elemento de fundo
+pelo estilo arredondado. Nenhum widget precisa ser substituído.
 """
 from __future__ import annotations
 
@@ -26,7 +26,8 @@ def _chunk(kind: bytes, data: bytes) -> bytes:
             + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff))
 
 
-def _png(width: int, height: int, rows: list[list[tuple[int, int, int, int]]]) -> bytes:
+def _png(width: int, height: int,
+         rows: list[list[tuple[int, int, int, int]]]) -> bytes:
     raw = bytearray()
     for row in rows:
         raw.append(0)  # filtro PNG "none"
@@ -97,7 +98,8 @@ def _install_style(style: ttk.Style, name: str, fill: str, outline: str,
     element = f'{name.replace(".", "_")}_round'
     style.element_create(element, 'image', photos[0],
                          ('active', photos[1]), ('disabled', photos[2]),
-                         border=(12, 12), sticky='nsew')
+                         border=(10, 10), sticky='nsew')
+    # Sobrescreve o fundo retangular do clam com o elemento de imagem arredondada.
     style.layout(name, [
         (element, {'sticky': 'nsew', 'children': [
             ('Button.padding', {'sticky': 'nsew', 'children': [

@@ -46,7 +46,8 @@ class LanternHero(tk.Canvas):
     def _destroy(self, event):
         if event.widget is not self:
             return
-        for name in ('_pending', '_reveal', '_orbit'):
+        for name in ('_pending', '_reveal', '_orbit', '_juramento_anim',
+                     '_juramento_text_anim'):
             pending = getattr(self, name)
             if pending:
                 self.after_cancel(pending)
@@ -335,6 +336,15 @@ class LanternHero(tk.Canvas):
         self._info_items['tagline'] = item
         self._reveal_colors.append((item, t.accent_2, 'fill'))
 
+    def set_mission(self, key: str, label: str, state: str):
+        """Atualiza um marcador de missão e reconfigura o bloco de informações."""
+        if key in self._mission:
+            self._mission[key] = (label, state)
+        self._update_mission_markers()
+        # Quando o dump é reconhecido, dispara a animação do juramento.
+        if key == 'dump' and state == 'on':
+            self.after(600, self.animate_juramento)
+
     def _update_mission_markers(self):
         """Reconfigura as três linhas dinâmicas sem criar novos itens."""
         glyphs = {'dump': '◆', 'port': '◉', 'session': '⟳'}
@@ -342,9 +352,9 @@ class LanternHero(tk.Canvas):
             item = self._info_items.get(key)
             if item is None:
                 continue
-            label, state = self._mission[key]
-            color = self.theme.muted if state == 'off' else (
-                self.theme.accent if state == 'on' else self.theme.warn)
+            label, st = self._mission[key]
+            color = self.theme.muted if st == 'off' else (
+                self.theme.accent if st == 'on' else self.theme.warn)
             try:
                 self.itemconfigure(item, text=f'{glyphs[key]}  {label}', fill=color)
             except tk.TclError:
@@ -380,3 +390,118 @@ class LanternHero(tk.Canvas):
                 self._reveal = None
 
         self._reveal = self.after(24, step)
+
+    # ------------------------------------------------------------- juramento
+    def animate_juramento(self):
+        """Quando o dump é reconhecido, partículas giram e se fundem num
+        constructo de Hall Jordan, exibindo o juramento dos Lanternas Verdes."""
+        if getattr(self, '_juramento_done', False):
+            return
+        self._juramento_done = True
+        t = self.theme
+        width, height = self._field_size
+        cx, cy = width * .80, height * .48
+
+        # Para a órbita atual e reúne partículas no centro.
+        if self._orbit:
+            self.after_cancel(self._orbit)
+            self._orbit = None
+        for item, _ in self._orbit_items:
+            try:
+                self.delete(item)
+            except tk.TclError:
+                pass
+        self._orbit_items = []
+
+        # Círculo de convocação que se fecha.
+        summon = self.create_oval(cx - 2, cy - 2, cx + 2, cy + 2,
+                                  outline=t.accent, width=3, tags='juramento')
+        self._reveal_colors.append((summon, t.accent, 'outline'))
+
+        # Partículas que giram em espiral e se fundem.
+        mote_items = []
+        for index in range(24):
+            dot = self.create_oval(cx - 2, cy - 2, cx + 2, cy + 2,
+                                   fill=t.accent_2, outline='', tags='juramento')
+            mote_items.append(dot)
+            self._reveal_colors.append((dot, t.accent_2, 'fill'))
+
+        phase = [0.0]
+        ring_angle = [0.0]
+
+        def spin():
+            if not self.winfo_exists():
+                return
+            phase[0] += 0.18
+            ring_angle[0] += 0.06
+            radius = 140 * (1.0 - min(1.0, phase[0] / 12.0)) + 10
+            for i, dot in enumerate(mote_items):
+                angle = ring_angle[0] + i * (360 / len(mote_items))
+                rad = math.radians(angle + phase[0] * 10)
+                x = cx + math.cos(rad) * radius
+                y = cy + math.sin(rad) * radius * .72
+                try:
+                    self.coords(dot, x - 2, y - 2, x + 2, y + 2)
+                except tk.TclError:
+                    return
+            if phase[0] < 12.0:
+                self._juramento_anim = self.after(35, spin)
+            else:
+                self._juramento_anim = None
+                self._construir_constructo(cx, cy)
+
+        self._juramento_anim = self.after(35, spin)
+
+    def _construir_constructo(self, cx, cy):
+        """Desenha o constructo do anel de Hall Jordan no centro."""
+        t = self.theme
+        core = self.create_oval(cx - 6, cy - 6, cx + 6, cy + 6,
+                                fill=t.accent_2, outline=t.accent, width=2,
+                                tags='juramento')
+        self._reveal_colors.append((core, t.accent_2, 'fill'))
+        self._reveal_colors.append((core, t.accent, 'outline'))
+        ring = self.create_oval(cx - 18, cy - 18, cx + 18, cy + 18,
+                                outline=mix(t.bg, t.accent, .85), width=3,
+                                tags='juramento')
+        self._reveal_colors.append((ring, mix(t.bg, t.accent, .85), 'outline'))
+        halo = self.create_oval(cx - 34, cy - 34, cx + 34, cy + 34,
+                                outline=mix(t.bg, t.accent, .45), width=2,
+                                tags='juramento')
+        self._reveal_colors.append((halo, mix(t.bg, t.accent, .45), 'outline'))
+        self.create_text(cx, cy, text='GL', fill=t.bg,
+                         font=('DejaVu Sans Condensed', 14, 'bold'),
+                         tags='juramento')
+        self._juramento_lines = 0
+        self._juramento_texto = [
+            "NO DIA MAIS CLARO,",
+            "NA NOITE MAIS DENSA,",
+            "O MAL SUCUMBIRÁ PERANTE A MINHA PRESENÇA,",
+            "TODO AQUELE QUE VENERA O MAL IRÁ DE PENAR,",
+            "QUANDO O LANTERNA VERDE ENFRENTAR",
+        ]
+        self._escrever_juramento(cx, cy + 60)
+
+    def _escrever_juramento(self, x, y):
+        """Exibe o juramento linha por linha, como um constructo de luz."""
+        t = self.theme
+        if self._juramento_lines >= len(self._juramento_texto):
+            return
+        texto = self._juramento_texto[self._juramento_lines]
+        item = self.create_text(x, y + self._juramento_lines * 24,
+                                anchor='center', text=texto, fill=t.accent_2,
+                                font=('DejaVu Sans', 11, 'bold'), tags='juramento')
+        self._reveal_colors.append((item, t.accent_2, 'fill'))
+        self._juramento_lines += 1
+        self._juramento_text_anim = self.after(700,
+                                               lambda: self._escrever_juramento(x, y))
+
+    def cancel(self):
+        """Cancela animações decorativas antes de destruir."""
+        for name in ('_juramento_anim', '_juramento_text_anim', '_reveal', '_orbit'):
+            pending = getattr(self, name, None)
+            if pending:
+                try:
+                    self.after_cancel(pending)
+                except tk.TclError:
+                    pass
+                setattr(self, name, None)
