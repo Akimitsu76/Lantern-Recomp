@@ -1237,8 +1237,10 @@ class Launcher(PortalShell):
         label = ('JOGAR AGORA' if ready else
                  'ATUALIZAR PORT' if self._backend_update_needed() else 'GERAR PORT NATIVO')
         state = 'normal' if self._source_ready() else 'disabled'
-        for button in (self.play_button, self.hero_play_button):
-            button.configure(state=state, text=label)
+        # Só o botão do rodapé (canto inferior direito) exibe "GERAR PORT NATIVO".
+        # O botão do hero mantém "▶ JOGAR" (desabilitado quando não há fonte).
+        self.play_button.configure(state=state, text=label)
+        self.hero_play_button.configure(state=state, text='▶  JOGAR')
         self.compile_button.configure(state='normal' if self._source_ready() else 'disabled')
 
     def _fps_choice(self):

@@ -135,4 +135,9 @@ def install_rounded_buttons(style, theme):
     )
     for name, fill, outline, active, disabled in specs:
         _install_style(style, name, fill, outline, active, disabled)
+        # O ttk desenha o ``background`` do estilo como um retângulo por trás do
+        # elemento de imagem, cobrindo os cantos transparentes. Limpar o
+        # background faz com que apenas a imagem arredondada seja visível.
+        style.configure(name, background='')
+        style.map(name, background=[], foreground=[])
     return len(_IMAGES)

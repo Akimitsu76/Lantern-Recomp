@@ -297,8 +297,8 @@ class LanternHero(tk.Canvas):
         """Bloco único de informações, alinhado abaixo do título do jogo."""
         t = self.theme
         left, _top, _title_y, subtitle_y, _display, subtitle_size = self._title_geometry(width, height)
-        left += 70  # mesma coluna do título, não da eyebrow
-        y = subtitle_y + subtitle_size + 24
+        # Mesmo alinhamento horizontal do título, sem deslocamento extra para a direita.
+        y = subtitle_y + subtitle_size + 40  # mais abaixo do título
         dim = mix(t.bg, t.accent, .46)
         sha = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
         font = self._font(9)
