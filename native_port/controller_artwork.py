@@ -3,6 +3,8 @@ from pathlib import Path
 import math
 import tkinter as tk
 
+from .portal_theme import PortalTheme, mix, shade
+
 ASSETS = Path(__file__).resolve().parent / 'resources' / 'controllers'
 MODELS = {
     'xbox': ('Xbox', 'Xbox Wireless Controller · Series X|S', 'xbox-series.png', '#b4ed74'),
@@ -11,9 +13,14 @@ MODELS = {
 
 
 class ControllerCard(tk.Canvas):
-    def __init__(self, parent, family, variable):
-        super().__init__(parent, width=420, height=245, background='#111a16',
-                         highlightthickness=1, highlightbackground='#283a30',
+    def __init__(self, parent, family, variable, theme=None):
+        self.theme = (theme or PortalTheme()).validate()
+        accent = self.theme.accent if family == 'xbox' else MODELS[family][3]
+        self.accent = accent
+        self.bg = shade(self.theme.surface_2, .02)
+        self.edge = mix(self.theme.bg, accent, .15)
+        super().__init__(parent, width=420, height=245, background=self.bg,
+                         highlightthickness=1, highlightbackground=self.edge,
                          cursor='hand2', takefocus=True)
         self.family, self.variable = family, variable
         self._photo = self._source = None
@@ -57,14 +64,15 @@ class ControllerCard(tk.Canvas):
         if not self.winfo_exists():
             return
         width = max(260, self.winfo_width())
-        name, subtitle, filename, accent = MODELS[self.family]
+        name, subtitle, filename, _default_accent = MODELS[self.family]
+        accent = self.accent
         selected = self.variable.get() == name
-        self.configure(highlightbackground=accent if selected or self._hover else '#283a30',
+        self.configure(highlightbackground=accent if selected or self._hover else self.edge,
                        highlightcolor=accent)
         self.delete('all')
-        self.create_text(20, 21, text=name, anchor='w', fill='#f0f4f8',
+        self.create_text(20, 21, text=name, anchor='w', fill=self.theme.ink,
                          font=('DejaVu Sans', 12, 'bold'))
-        self.create_text(20, 44, text=subtitle, anchor='w', fill='#9aaa9f',
+        self.create_text(20, 44, text=subtitle, anchor='w', fill=self.theme.muted,
                          font=('DejaVu Sans', 9))
         if selected:
             self.create_text(width-18, 21, text='SELECIONADO', anchor='e',
@@ -95,4 +103,4 @@ class ControllerCard(tk.Canvas):
         if self._photo is not None:
             self.create_image(width/2, 153, image=self._photo)
         else:
-            self.create_text(width/2, 151, text='Imagem do controle indisponível', fill='#9aaa9f')
+            self.create_text(width/2, 151, text='Imagem do controle indisponível', fill=self.theme.muted)

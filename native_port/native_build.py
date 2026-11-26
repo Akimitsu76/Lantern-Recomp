@@ -24,7 +24,10 @@ from .workspace import Workspace
 
 XEX_SHA256 = '3218a70a78f2d258cd236c204ddbca0cee21c197d6de463f68f6e504385852d1'
 SDK_VERSION = '0.10.0'
-INTEGRATION_VERSION = 25
+# 26: o hook de pacing usa ``aster_unlimited_target`` e eleva o relógio real da
+# engine para 120/240. Um host gerado com a versão 25 ainda prende o gameplay
+# em 60 fps mesmo com apresentação livre; por isso o launcher pede regeneração.
+INTEGRATION_VERSION = 26
 HOST_SOURCES = ('portable_timing.cpp', 'runtime_save_slots.cpp', 'runtime_languages.cpp',
                 'runtime_graphics_menu.cpp')
 HOST_HEADERS = ('aster_graphics_menu.h',)

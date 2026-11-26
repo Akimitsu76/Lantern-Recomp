@@ -24,8 +24,8 @@ class LanguageControlsTests(unittest.TestCase):
         try:
             boxes = [w for w in panel.winfo_children() if isinstance(w, ttk.Combobox)]
             self.assertEqual(len(boxes), 2)
-            self.assertIn('Português', boxes[0]['values'])
-            self.assertNotIn('Português', boxes[1]['values'])
+            self.assertIn('Português (Brasil)', boxes[0]['values'])
+            self.assertNotIn('Português (Brasil)', boxes[1]['values'])
             self.assertEqual(panel.get(), languages.defaults())
             panel.voice_language.set('Français')
             self.assertEqual(panel.get(), {'subtitle_language': 'pt-BR', 'voice_language': 'fr'})

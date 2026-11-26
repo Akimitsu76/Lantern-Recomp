@@ -202,6 +202,10 @@ class AsterGraphicsDialog final : public rex::ui::ImGuiDialog {
     if (HasFlag("aster_experimental_unlimited_fps")) {
       bool unlimited = Current("aster_experimental_unlimited_fps") == "true";
       bool sixty = Current("aster_experimental_60fps") == "true";
+      const std::string engine_target = HasFlag("aster_unlimited_target")
+                                            ? Current("aster_unlimited_target") : "120";
+      bool target_120 = engine_target == "120";
+      bool target_240 = engine_target == "240";
       Label("Limite de quadros", "aster_experimental_unlimited_fps");
       if (ImGui::RadioButton("30 fps (original)", !sixty && !unlimited)) {
         Apply("aster_experimental_60fps", "false");
@@ -213,13 +217,16 @@ class AsterGraphicsDialog final : public rex::ui::ImGuiDialog {
         Apply("aster_experimental_unlimited_fps", "false");
       }
       ImGui::SameLine();
-      if (ImGui::RadioButton("Ilimitado", unlimited)) {
+      if (ImGui::RadioButton("120 fps", unlimited && target_120)) {
         Apply("aster_experimental_60fps", "false");
         Apply("aster_experimental_unlimited_fps", "true");
+        if (HasFlag("aster_unlimited_target")) Apply("aster_unlimited_target", "120");
       }
-      if (unlimited && HasFlag("aster_unlimited_target")) {
-        static const Option kUnlimitedTargets[] = {{"120 fps", "120"}, {"240 fps", "240"}};
-        ChoiceRow("Alvo da engine", "aster_unlimited_target", kUnlimitedTargets, 2);
+      ImGui::SameLine();
+      if (ImGui::RadioButton("240 fps", unlimited && target_240)) {
+        Apply("aster_experimental_60fps", "false");
+        Apply("aster_experimental_unlimited_fps", "true");
+        if (HasFlag("aster_unlimited_target")) Apply("aster_unlimited_target", "240");
       }
     }
     BoolRow("VSync", "vsync");

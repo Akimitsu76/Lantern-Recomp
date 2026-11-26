@@ -36,6 +36,23 @@ TARGET_LABELS = {'30': '30 fps', '60': '60 fps', 'unlimited': 'Ilimitado'}
 UNLIMITED_TARGETS = ('120', '240')
 UNLIMITED_TARGET_LABELS = {'120': '120 fps', '240': '240 fps'}
 DEFAULT_UNLIMITED_TARGET = '120'
+
+# O usuário escolhe números, não um modo abstrato. Internamente 120/240
+# continuam mapeando para ``fps_target='unlimited'`` com um alvo real no hook.
+FPS_CHOICES = ('30', '60', '120', '240')
+
+
+def fps_choice_label(choice: str) -> str:
+    """Rótulo único para o seletor de limite de quadros."""
+    if choice not in FPS_CHOICES:
+        raise PortError('GRAPHICS_VALUE', 'Limite de quadros deve ser 30, 60, 120 ou 240.')
+    return f'{choice} fps'
+
+
+def fps_choice(data: dict) -> str:
+    """Valor numérico mostrado na UI para um conjunto de opções validado."""
+    data = validate(data)
+    return data['unlimited_target'] if data['fps_target'] == 'unlimited' else data['fps_target']
 TARGET_DESCRIPTIONS = {
     '30': 'Padrão. Menor carga de CPU/GPU. Save compartilhado do usuário.',
     '60': 'Experimental. Usa o mesmo save do usuário, independente dos gráficos.',
@@ -202,9 +219,9 @@ def validate(data):
     if result['preset'] != 'custom':
         result.update(preset_values(result['preset']))
     if result['fps_target'] not in TARGETS:
-        raise PortError('GRAPHICS_VALUE', 'Alvo de FPS deve ser 30, 60 ou ilimitado.')
+        raise PortError('GRAPHICS_VALUE', 'Alvo de FPS deve ser 30, 60, 120 ou 240.')
     if result['unlimited_target'] not in UNLIMITED_TARGETS:
-        raise PortError('GRAPHICS_VALUE', 'Alvo ilimitado deve ser 120 ou 240 fps.')
+        raise PortError('GRAPHICS_VALUE', 'Alvo de alto FPS deve ser 120 ou 240.')
     if not isinstance(result['fullscreen'], bool):
         raise PortError('GRAPHICS_VALUE', 'Modo de tela inválido.')
     if type(result['fsr_sharpness']) is not int or not 0 <= result['fsr_sharpness'] <= 100:
@@ -302,9 +319,7 @@ def summary(data):
     data = validate(data)
     sharpness = (f" · Nitidez {data['fsr_sharpness']}"
                  if data['upscaler'] in ('cas', 'fsr1') else '')
-    target = TARGET_LABELS[data['fps_target']]
-    if data['fps_target'] == 'unlimited':
-        target += f" ({data['unlimited_target']})"
+    target = fps_choice_label(fps_choice(data))
     return (f"{PRESET_LABELS[data['preset']]} · {internal_resolution(data['render_scale'])} · "
             f"{UPSCALER_LABELS[data['upscaler']]}{sharpness} · MSAA do jogo · "
             f"Aniso {ANISOTROPIC_LABELS[data['anisotropic']]} · "

@@ -3,7 +3,7 @@
 //
 // X360_GL_EUROPE exposes text slots {0,1,3,4,5,11} and voice slots
 // {0,1,3,4,5}. The values are engine language IDs, not Xbox locale IDs:
-//   0 English, 1 French, 3 Spanish, 4 German, 5 Italian, 11 Portuguese (text).
+//   0 English, 1 French, 3 Spanish, 4 German, 5 Italian, 11 Brazilian Portuguese (text).
 // The European dump has no Portuguese dialogue bank, so voice 11 is rejected
 // and the original falls back to the first slot. The launcher therefore sends
 // Portuguese text with an English voice by default.

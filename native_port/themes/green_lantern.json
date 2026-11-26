@@ -1,0 +1,22 @@
+{
+  "key": "green_lantern",
+  "game": "Green Lantern",
+  "subtitle": "Rise of the Manhunters",
+  "edition": "Recomp · PC",
+  "tagline": "A luz do anel no seu PC",
+  "glyph": "GL",
+  "hero_motif": "ring",
+  "font": "DejaVu Sans",
+  "bg": "#05080c",
+  "bg_deep": "#03060a",
+  "surface": "#0d1720",
+  "surface_2": "#142431",
+  "line": "#1e3444",
+  "accent": "#34e0a1",
+  "accent_2": "#9ff7d6",
+  "ink": "#eaf7f2",
+  "muted": "#809b95",
+  "warn": "#ffb454",
+  "danger": "#ff6b6b",
+  "ok": "#34e0a1"
+}

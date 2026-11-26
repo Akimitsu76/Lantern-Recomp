@@ -1,8 +1,9 @@
 """Independent language selections for the reviewed Green Lantern edition.
 
 Engine language values are not Xbox language IDs. The Europe SKU declares
-Portuguese (engine 11) for text, while its shipped dialogue banks cover five
-other languages. Nothing in this module creates or distributes game text.
+Brazilian Portuguese text in engine slot 11, while its shipped dialogue banks
+cover five other languages. Nothing in this module creates or distributes game
+text.
 """
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from .errors import PortError
 LABELS = {
     'auto': 'Padrão do jogo',
     'en': 'English',
-    'pt-BR': 'Português',
+    'pt-BR': 'Português (Brasil)',
     'fr': 'Français',
     'de': 'Deutsch',
     'it': 'Italiano',

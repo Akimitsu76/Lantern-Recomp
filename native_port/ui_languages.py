@@ -26,9 +26,9 @@ class LanguageControls(ttk.Frame):
             box.grid(row=row, column=1, sticky='ew', pady=5)
             box.bind('<<ComboboxSelected>>', self._changed)
         ttk.Label(self, style='CardMuted.TLabel', wraplength=650,
-                  text='A interface e as legendas usam os textos originais da edição. '
-                       'Esta edição não contém dublagem em português. '
-                       'A mudança de idioma é aplicada ao iniciar o jogo.').grid(
+                  text='Português (Brasil) usa o slot de texto 11 da edição europeia e '
+                       'é aplicado às legendas ao iniciar o jogo. Esta edição não contém '
+                       'dublagem em português; a voz pode ficar em inglês.').grid(
                            row=3, column=0, columnspan=2, sticky='w', pady=(10, 0))
         self.set(value or languages.defaults())
 

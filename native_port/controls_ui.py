@@ -4,17 +4,29 @@ import tkinter as tk
 from tkinter import ttk
 from . import controls
 from .controller_artwork import ControllerCard
+from .portal_theme import PortalTheme, mix, shade
 
-BG = '#090c0b'
-CARD = '#111a16'
-INK = '#f0f4f8'
-MUTED = '#98a99f'
-ACCENT = '#b4ed74'
+_DEFAULT = PortalTheme().validate()
+BG = _DEFAULT.bg
+CARD = _DEFAULT.surface
+INK = _DEFAULT.ink
+MUTED = _DEFAULT.muted
+ACCENT = _DEFAULT.accent
+
+
+def _apply_theme(theme):
+    """Aplica a paleta do jogo aos estilos locais da aba de controles."""
+    global BG, CARD, INK, MUTED, ACCENT
+    BG, CARD = theme.bg, theme.surface
+    INK, MUTED, ACCENT = theme.ink, theme.muted, theme.accent
 
 
 class ControlsPanel(ttk.Frame):
-    def __init__(self, parent, config=None):
+    def __init__(self, parent, config=None, theme=None):
+        if theme is not None:
+            _apply_theme(theme)
         super().__init__(parent)
+        self.theme = theme or PortalTheme()
         config = controls.validate(config if config is not None else controls.defaults())
         self.layout = tk.StringVar(self, value=controls.LAYOUTS[config['layout']])
         self.input_split = tk.StringVar(self, value=controls.INPUT_SPLITS[config['input_split']])
@@ -58,7 +70,7 @@ class ControlsPanel(ttk.Frame):
         self.body.columnconfigure((0, 1), weight=1, uniform='control-columns')
         self.previews = {}
         for column, family in enumerate(('xbox', 'playstation')):
-            card = ControllerCard(self.body, family, self.layout)
+            card = ControllerCard(self.body, family, self.layout, self.theme)
             card.grid(row=0, column=column, sticky='ew', padx=(0, 8) if column == 0 else (8, 0), pady=(0, 18))
             self.previews[family] = card
         keyboard = self._column(self.body, 0, 'Teclado e mouse', 'Personalize as teclas e os movimentos da câmera.')
@@ -77,16 +89,19 @@ class ControlsPanel(ttk.Frame):
         style.configure('Controls.Group.TLabel', background=CARD, foreground=ACCENT, font=('DejaVu Sans', 9, 'bold'))
         style.configure('Controls.TCheckbutton', background=CARD, foreground=INK, padding=(0, 4))
         style.map('Controls.TCheckbutton', background=[('active', CARD)])
-        style.configure('Controls.TEntry', padding=(10, 8), fieldbackground='#0b120e', foreground=INK,
-                        bordercolor='#304237', lightcolor='#304237', darkcolor='#304237')
-        style.configure('Controls.TCombobox', padding=(8, 7), fieldbackground='#0b120e', foreground=INK,
-                        bordercolor='#304237', lightcolor='#304237', darkcolor='#304237', arrowcolor=MUTED)
-        style.map('Controls.TCombobox', fieldbackground=[('readonly', '#0b120e')],
-                  selectbackground=[('readonly', '#0b120e')], selectforeground=[('readonly', INK)])
+        field = shade(BG, .04)
+        border = mix(BG, ACCENT, .22)
+        style.configure('Controls.TEntry', padding=(10, 8), fieldbackground=field, foreground=INK,
+                        bordercolor=border, lightcolor=border, darkcolor=border)
+        style.configure('Controls.TCombobox', padding=(8, 7), fieldbackground=field, foreground=INK,
+                        bordercolor=border, lightcolor=border, darkcolor=border, arrowcolor=MUTED)
+        style.map('Controls.TCombobox', fieldbackground=[('readonly', field)],
+                  selectbackground=[('readonly', field)], selectforeground=[('readonly', INK)])
 
     @staticmethod
     def _column(parent, column, title, subtitle):
-        outer = tk.Frame(parent, bg=CARD, highlightthickness=1, highlightbackground='#283a30')
+        outer = tk.Frame(parent, bg=CARD, highlightthickness=1,
+                         highlightbackground=mix(BG, ACCENT, .15))
         outer.grid(row=1, column=column, sticky='new', padx=(0, 8) if column == 0 else (8, 0))
         inner = ttk.Frame(outer, style='Controls.Card.TFrame', padding=18)
         inner.pack(fill='both', expand=True)

@@ -762,7 +762,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(self.app.fps_target.get(), 'unlimited')
         self.assertFalse(self.app.vsync.get())
         self.assertTrue(self.app.warning_frame.winfo_ismapped())
-        self.assertIn('ILIMITADO', self.app.warning_text.get())
+        self.assertIn('120 FPS · EXPERIMENTAL', self.app.warning_text.get())
         self.assertEqual(self.app.target_buttons['unlimited']['style'], 'PresetOn.TButton')
         self.app.choose_target('30')
         self.root.update()
