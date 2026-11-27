@@ -106,6 +106,7 @@ class LanternHero(tk.Canvas):
         self._field_size = (width, height)
         self.image_error = None
         self._paint_glow(width, height)
+        self._paint_grid(width, height)
         self._paint_energy_field(width, height)
         geometry = self._paint_portal(width, height)
         # Constructo Hall Jordan: anéis concêntricos, espirais e distorção,
@@ -115,6 +116,26 @@ class LanternHero(tk.Canvas):
         self._build_accent_column(width, height)
         self._build_playback_frame(width, height)
         self._start_reveal()
+
+    def _paint_grid(self, width, height):
+        """Grade tecnológica discreta no fundo, como um HUD de radar.
+
+        Linhas verticais e horizontais finas, mais densas à direita (perto do
+        portal), dando profundidade sem competir com o conteúdo textual.
+        """
+        t = self.theme
+        # Linhas verticais: espaçamento regular, acento só perto do portal.
+        step = 46
+        for x in range(step, width, step):
+            near_port = abs(x - width * .62) < width * .30
+            alpha = .055 if near_port else .028
+            self.create_line(x, 0, x, height, fill=mix(t.bg, t.accent, alpha), width=1)
+        # Linhas horizontais: mais sutis, ancoradas no centro do portal.
+        cy = height * .46
+        for y in range(int(height * .12), height, 34):
+            distance = abs(y - cy) / max(1, height)
+            alpha = .05 * (1.0 - distance) + .018
+            self.create_line(0, y, width, y, fill=mix(t.bg, t.accent, alpha), width=1)
 
     def _paint_glow(self, width, height):
         """Fundo da capa: gradiente, manchas de luz e halo do construtor."""
@@ -366,23 +387,24 @@ class LanternHero(tk.Canvas):
                                 fill=t.muted, font=small), t.muted)
         record(self.create_text(left, top + 18, anchor='nw', tags='reveal',
                                 text=t.game.upper(), fill=t.ink, font=display), t.ink)
-        record(self.create_text(left, top + 24 + title_size, anchor='nw', tags='reveal',
+        record(self.create_text(left, top + 26 + title_size, anchor='nw', tags='reveal',
                                 text=t.subtitle.upper(), fill=t.accent,
-                                font=('DejaVu Sans', max(11, title_size // 4), 'bold')), t.accent)
+                                font=('DejaVu Sans', max(12, title_size // 4), 'bold')), t.accent)
 
-        # Painel de status do dump: abertura, disco, hash e missões.
-        y = top + 26 + title_size + 32
+        # Bloco de informações alinhado com o título (mesma coluna esquerda).
+        # Começa logo abaixo do subtítulo com espaçamento hierárquico consistente.
+        y = top + 40 + title_size + 24
         record(self.create_text(left, y, anchor='nw', tags='reveal',
                                 text=self._info_lines['abertura'],
                                 fill=t.accent_2, font=mono), t.accent_2)
-        y += 17
+        y += 18
         for key in ('disc', 'sha'):
             item = self.create_text(left, y, anchor='nw', tags='reveal',
                                     text=self._info_lines[key], fill=t.muted, font=mono)
             self._info_items[key] = item
             record(item, t.muted)
-            y += 16
-        y += 8
+            y += 17
+        y += 10
         glyphs = {'dump': '◆', 'port': '◉', 'session': '⟳'}
         for key in ('dump', 'port', 'session'):
             label, st = self._mission[key]
@@ -391,12 +413,12 @@ class LanternHero(tk.Canvas):
                                     text=f'{glyphs[key]}  {label}', fill=color, font=tiny)
             self._info_items[key] = item
             record(item, color)
-            y += 16
-        y += 10
+            y += 17
+        y += 12
         record(self.create_text(left, y, anchor='nw', tags='reveal',
                                 text=t.tagline.upper(), fill=t.ink,
                                 font=('DejaVu Sans', 11, 'bold')), t.ink)
-        y += 22
+        y += 24
         record(self.create_text(left, y, anchor='nw', tags=('hero-status', 'reveal'),
                                 text=self._status, fill=t.muted, font=tiny), t.muted)
 

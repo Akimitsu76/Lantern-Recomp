@@ -254,12 +254,13 @@ class Launcher(PortalShell):
         self.stop_experimental_button = flat_button(actions, text='Encerrar jogo',
             style='Danger.TButton', state='disabled', command=self.stop_experimental)
         self.quick_save_button = flat_button(actions, text='Salvar', style='Secondary.TButton',
-                                            font=('DejaVu Sans', 10),
+                                            font=('DejaVu Sans', 10, 'bold'),
                                             command=self.save_settings)
-        self.quick_save_button.pack(side='left', padx=(0, 14))
+        self.quick_save_button.pack(side='left', padx=(0, 20))
         self.play_button = flat_button(actions, text='JOGAR', style='Accent.TButton',
                                       font=('DejaVu Sans Condensed', 15, 'bold'),
-                                      padx=30, pady=12, command=self.play)
+                                      padx=50, pady=19, command=self.play,
+                                      reserve_text='GERAR PORT NATIVO')
         self.play_button.pack(side='right')
         self.launch_button = self.experimental_button = self.play_button
 
@@ -308,7 +309,7 @@ class Launcher(PortalShell):
         self.update_check_button.pack(side='left')
         self.update_install_button = flat_button(actions, text='Baixar e instalar',
             style='Accent.TButton', state='disabled', command=self.install_launcher_update)
-        self.update_install_button.pack(side='left', padx=10)
+        self.update_install_button.pack(side='left', padx=12)
         self.update_cancel_button = flat_button(actions, text='Cancelar download',
             style='Ghost.TButton', state='disabled', command=lambda: self.update_cancel.cancel())
         self.update_cancel_button.pack(side='left')
@@ -478,24 +479,24 @@ class Launcher(PortalShell):
         self.source_entry.pack(side='left', fill='x', expand=True)
         self.folder_button = flat_button(row, text='Escolher…', style='Secondary.TButton',
                                          command=self.select_folder)
-        self.folder_button.pack(side='left', padx=(8, 0))
+        self.folder_button.pack(side='left', padx=(10, 0))
         self.select_button = flat_button(row, text='ISO / XEX…', style='Ghost.TButton', command=self.select)
-        self.select_button.pack(side='left', padx=(6, 0))
+        self.select_button.pack(side='left', padx=(8, 0))
         actions = tk.Frame(self.source_card, bg=PANEL)
         actions.pack(fill='x', pady=(4, 0))
         self.inspect_button = flat_button(actions, text='Conferir arquivos', style='Ghost.TButton', command=self.inspect)
         self.inspect_button.pack(side='left')
         self.prepare_button = flat_button(actions, text='Análise avançada', style='Ghost.TButton', command=self.prepare)
-        self.prepare_button.pack(side='left', padx=(4, 0))
+        self.prepare_button.pack(side='left', padx=(8, 0))
         self.open_profile_button = flat_button(actions, text='Abrir pasta', style='Ghost.TButton',
                                               command=self.open_profile)
-        self.open_profile_button.pack(side='left', padx=(4, 0))
+        self.open_profile_button.pack(side='left', padx=(8, 0))
         self.import_save_button = flat_button(actions, text='Importar save', style='Ghost.TButton',
                                              command=self.import_save)
-        self.import_save_button.pack(side='left', padx=(4, 0))
+        self.import_save_button.pack(side='left', padx=(8, 0))
         self.export_save_button = flat_button(actions, text='Exportar save', style='Ghost.TButton',
                                              command=self.export_save)
-        self.export_save_button.pack(side='left', padx=(4, 0))
+        self.export_save_button.pack(side='left', padx=(8, 0))
         flat_button(actions, text='Ver preparação  →', style='Ghost.TButton',
                    command=lambda: self.tabs.select(self.build_tab)).pack(side='right')
 
@@ -679,23 +680,26 @@ class Launcher(PortalShell):
         tk.Label(self.graphics_tab, text='Escolha um preset ou ajuste cada opção. As alterações valem para a próxima sessão.',
                  bg=BG, fg=MUTED, font=(FONT, 9)).pack(anchor='w', pady=(4, 10))
         preset_frame = tk.Frame(self.graphics_tab, bg=BG)
-        preset_frame.pack(fill='x')
+        preset_frame.pack(fill='x', pady=(0, 8))
         preset_text = {'low': 'BAIXA\nOriginais · leve', 'default': 'MÉDIA\nOriginais · equilíbrio',
                        'high': 'ALTA\n1440p · HD 2x', 'ultra': 'ULTRA\n4K · HD 4x',
                        'custom': 'PERSONALIZADA\najuste fino'}
         for index, name in enumerate(graphics.PRESETS):
             preset_frame.columnconfigure(index, weight=1, uniform='preset')
-            button = flat_button(preset_frame, text=preset_text[name], style='Preset.TButton', command=lambda n=name: self.choose_preset(n))
-            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 5, 0))
+            button = flat_button(preset_frame, text=preset_text[name], style='Preset.TButton',
+                                 command=lambda n=name: self.choose_preset(n))
+            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 8, 0),
+                        ipady=4)
             self.preset_buttons[name] = button
         target_frame = tk.Frame(self.graphics_tab, bg=BG)
-        target_frame.pack(fill='x', pady=(10, 0))
+        target_frame.pack(fill='x', pady=(0, 10))
         for index, choice in enumerate(graphics.FPS_CHOICES):
             target_frame.columnconfigure(index, weight=1, uniform='target')
             suffix = ' · padrão' if choice == '30' else (' · sem VSync' if choice in ('120', '240') else ' · experimental')
             button = flat_button(target_frame, text=graphics.fps_choice_label(choice) + suffix,
                                 style='Preset.TButton', command=lambda c=choice: self.choose_target(c))
-            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 5, 0))
+            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 8, 0),
+                        ipady=4)
             self.target_buttons[choice] = button
         # Compatibilidade: ``target_buttons['unlimited']`` aponta para o botão
         # numérico ativo (120 ou 240), como esperam abas e testes existentes.
@@ -723,8 +727,8 @@ class Launcher(PortalShell):
             self.graphics_canvas.yview_scroll(delta * 3, 'units')
             return 'break'
         def section(title, row, col):
-            card = RoundedCard(body, fill=CARD, outline=LINE, radius=12,
-                               padx=14, pady=12)
+            card = RoundedCard(body, fill=CARD, outline=LINE, radius=10,
+                               border=1, padx=14, pady=12)
             card.grid(row=row, column=col, sticky='nsew', padx=(0 if col == 0 else 8, 0), pady=(0, 8))
             self._caps(card, title).pack(anchor='w', pady=(0, 8))
             return card
@@ -770,7 +774,7 @@ class Launcher(PortalShell):
                                  style='Ghost.TButton',
                                  command=lambda value=graphics.FSR_PRESET_SHARPNESS[preset]:
                                  self.fsr_sharpness.set(value))
-            button.pack(side='left', padx=(0 if index == 0 else 5, 0))
+            button.pack(side='left', padx=(0 if index == 0 else 8, 0))
             self.sharpness_preset_buttons.append(button)
         note(image, 'FSR 1 amplia a imagem; CAS aplica nitidez adaptativa; FXAA reduz serrilhados. '
                     'FSR 2/3 e DLSS não estão disponíveis nesta compilação (exigem FidelityFX/Streamline e '

@@ -226,9 +226,9 @@ class ConstructNav(tk.Canvas):
         t = self.theme
         accent = t.accent
         if self._active:
-            fill, foreground = mix(t.surface, accent, .14), t.ink
+            fill, foreground = mix(t.surface, accent, .20), t.ink
         elif self._hover:
-            fill, foreground = mix(t.surface, accent, .07), t.ink
+            fill, foreground = mix(t.surface, accent, .10), t.accent_2
         else:
             fill, foreground = t.surface, t.muted
         # O fundo do tk.Button permanece igual ao do Canvas; a borda arredondada
@@ -264,7 +264,7 @@ class ConstructNav(tk.Canvas):
         photo = self._button_images.get(key)
         if photo is None:
             photo = button_photo(self, fill, mix(self.theme.surface, self.theme.accent, .34),
-                                 width=w, height=h, radius=min(14, h // 2))
+                                 width=w, height=h, radius=min(4, h // 2))
             self._button_images[key] = photo
         return photo
 
@@ -364,7 +364,7 @@ class NavIndicator(tk.Canvas):
         self.delete('indicator')
         x0, y0, x1, y1 = self._current
         pad = 2
-        radius = min(15.0, (y1 - y0) / 2)
+        radius = min(8.0, (y1 - y0) / 2)
         for item in rounded_rect(self, x0 + pad, y0 + pad, x1 - pad, y1 - pad,
                                  radius, fill=self._color):
             self.addtag_withtag('indicator', item)

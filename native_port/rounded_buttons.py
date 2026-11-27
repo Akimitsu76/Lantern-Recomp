@@ -54,7 +54,7 @@ def _coverage(px: float, py: float, width: int, height: int, radius: float) -> f
 
 
 def button_png(fill: str, outline: str, *, width: int = 48, height: int = 32,
-               radius: int = 12) -> str:
+               radius: int = 4) -> str:
     """Retorna uma PNG RGBA em base64 com borda arredondada e antialias."""
     fill_rgb, outline_rgb = _rgb(fill), _rgb(outline)
     radius = max(2, min(int(radius), width // 2, height // 2))
@@ -81,7 +81,7 @@ def button_png(fill: str, outline: str, *, width: int = 48, height: int = 32,
 
 
 def button_photo(master, fill: str, outline: str, *, width: int = 48,
-                 height: int = 32, radius: int = 12) -> tk.PhotoImage:
+                 height: int = 32, radius: int = 4) -> tk.PhotoImage:
     """Foto de borda arredondada para botões ``tk.Button`` (navegação)."""
     return tk.PhotoImage(master=master, format='png',
                          data=button_png(fill, outline, width=max(8, int(width)),

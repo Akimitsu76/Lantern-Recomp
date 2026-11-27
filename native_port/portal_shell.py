@@ -147,7 +147,7 @@ class PortalShell:
                         bordercolor=BG, lightcolor=BG, darkcolor=BG)
         style.layout('Modern.TNotebook.Tab', [])
         style.configure('TNotebook.Tab', padding=(20, 10), background=BG, foreground=MUTED,
-                        font=(FONT, 10, 'bold'), borderwidth=0, style='Clipped.TTab')
+                        font=(FONT, 10, 'bold'), borderwidth=0)
         style.map('TNotebook.Tab', background=[('selected', CARD), ('active', CARD_ALT)],
                   foreground=[('selected', ACCENT), ('active', INK)])
         style.configure('TEntry', fieldbackground=BG, foreground=INK, insertcolor=INK,
