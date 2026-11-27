@@ -33,7 +33,7 @@ from typing import Callable
 
 from .portal_theme import PortalTheme, mix, shade
 from .portal_widgets import ConstructNav, PortalMark, RoundedCard
-from .rounded_buttons import install_rounded_buttons
+from .flat_buttons import set_theme as set_button_theme
 
 # Paleta ativa da base. ``apply_palette`` também exporta para o módulo da
 # distro (via ``apply_to=globals()``), para que o código legado continue usando
@@ -84,6 +84,7 @@ class PortalShell:
         self.root = root
         self.theme = (theme or PortalTheme()).validate()
         self.palette = apply_palette(self.theme, apply_to=apply_to)
+        set_button_theme(self.theme)
         self.theme_error = None
         root.title(title or f'Portal dos Recomps | {self.theme.game}')
         root.geometry(geometry or self.DEFAULT_GEOMETRY)
@@ -145,8 +146,8 @@ class PortalShell:
         style.configure('Modern.TNotebook', background=BG, borderwidth=0,
                         bordercolor=BG, lightcolor=BG, darkcolor=BG)
         style.layout('Modern.TNotebook.Tab', [])
-        style.configure('TNotebook.Tab', padding=(22, 12), background=BG, foreground=MUTED,
-                        font=(FONT, 10, 'bold'), borderwidth=0)
+        style.configure('TNotebook.Tab', padding=(20, 10), background=BG, foreground=MUTED,
+                        font=(FONT, 10, 'bold'), borderwidth=0, style='Clipped.TTab')
         style.map('TNotebook.Tab', background=[('selected', CARD), ('active', CARD_ALT)],
                   foreground=[('selected', ACCENT), ('active', INK)])
         style.configure('TEntry', fieldbackground=BG, foreground=INK, insertcolor=INK,
@@ -164,9 +165,9 @@ class PortalShell:
                         font=(FONT, 9, 'bold'))
         style.configure('Horizontal.TProgressbar', background=ACCENT, troughcolor=CARD_ALT,
                         bordercolor=CARD_ALT, lightcolor=ACCENT, darkcolor=ACCENT, thickness=6)
-        # Bordas dos botões desenhadas como imagem: todos os estilos continuam
-        # sendo ttk.Button, apenas a borda deixa de ser quadrada.
-        install_rounded_buttons(style, self.theme)
+        # Observação: os botões do launcher são ``FlatButton`` (tk.Button com PNG
+        # arredondado, ver ``flat_buttons``). O ttk ``element_create`` não gera
+        # transparência real, então não substituímos o layout dos estilos ttk.
 
     # ------------------------------------------------------------- primitivas
     def card(self, parent, **pack_options):
@@ -256,9 +257,13 @@ class PortalShell:
 
         footer_frame = tk.Frame(main, bg=BG, padx=20, pady=12)
         footer_frame.pack(side='bottom', fill='x', before=self.tabs)
+        # Grade: status à esquerda (elástico), ações reservadas à direita.
+        footer_frame.columnconfigure(0, weight=1)
+        footer_frame.rowconfigure(0, weight=1)
         actions = tk.Frame(footer_frame, bg=BG)
-        actions.pack(side='right')
+        actions.grid(row=0, column=1, sticky='e')
         status = tk.Frame(footer_frame, bg=BG)
+        status.grid(row=0, column=0, sticky='nsew', padx=(0, 16))
         self.status_bar = tk.Label(status, textvariable=self.status_display, bg=BG, fg=MUTED,
                                    anchor='w', justify='left', font=(FONT, 10), wraplength=570)
         self.status_bar.pack(fill='x', expand=True)
@@ -267,7 +272,6 @@ class PortalShell:
         self.footer_progress.pack(fill='x', pady=(9, 0))
         status.bind('<Configure>', lambda e: self.status_bar.configure(
             wraplength=max(150, e.width - 8)))
-        status.pack(side='left', fill='both', expand=True, padx=(0, 20))
 
         if footer is not None:
             footer(footer_frame, actions, status)

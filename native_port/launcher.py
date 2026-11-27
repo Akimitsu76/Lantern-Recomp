@@ -18,15 +18,16 @@ from tkinter import filedialog, messagebox, ttk
 
 from games.green_lantern import GreenLantern
 from . import __version__, launcher_update
-from . import controls, graphics, languages, save_manager, session_stats, settings
+from . import graphics, save_manager, session_stats, settings
 from .controls_ui import ControlsPanel
 from .ui_languages import LanguageControls
 from .native_build import build_native, read_install, backend_update_reason
 from .paths import project_root, python_command, external_env
 from .diagnostics import diagnostics
 from .errors import PortError
-from .portal_theme import PortalTheme, discover as discover_theme, mix, shade
+from .portal_theme import PortalTheme, discover as discover_theme
 from .portal_shell import PortalShell, apply_palette
+from .flat_buttons import flat_button
 from .pipeline import prepare
 from .sources import inspect_source
 from .tasks import Cancellation
@@ -220,18 +221,46 @@ class Launcher(PortalShell):
     def _caps(self, parent, text, bg=None):
         return super().caps(parent, text, bg)
 
+    @staticmethod
+    def _auto_wrap(label, parent, margin=24):
+        """Mantém o ``wraplength`` igual à largura útil do pai.
+
+        Evita texto cortado quando o card encolhe (janela menor) ou cresce.
+        """
+        def resize(event, widget=label, gap=margin):
+            try:
+                widget.configure(wraplength=max(120, event.width - gap))
+            except tk.TclError:
+                pass
+        parent.bind('<Configure>', resize, add='+')
+        try:
+            label.configure(wraplength=max(120, parent.winfo_width() - margin))
+        except tk.TclError:
+            pass
+        return label
+
     def _build_footer(self, footer, actions, status):
         """Botões específicos da distro; o shell já criou status e progresso."""
-        self.cancel_button = ttk.Button(actions, text='Cancelar', style='Ghost.TButton',
+        # Dicas e versão abaixo do status, como na coluna esquerda do rodapé.
+        hint = tk.Label(status, bg=BG, fg=MUTED, font=(FONT, 8), anchor='w', justify='left',
+                        text='F11 ou Alt+Enter no jogo: tela cheia · saves e cache ficam no perfil do usuário')
+        hint.pack(fill='x')
+        self._auto_wrap(hint, status, margin=8)
+        tk.Label(status, text=f'v{__version__} · recompilação XBOX 360 → PC', bg=BG, fg=MUTED,
+                 font=(FONT, 8), anchor='w').pack(fill='x', pady=(2, 0))
+
+        self.cancel_button = flat_button(actions, text='Cancelar', style='Ghost.TButton',
                                         state='disabled', command=self.stop_experimental)
-        self.stop_experimental_button = ttk.Button(actions, text='Encerrar jogo',
+        self.stop_experimental_button = flat_button(actions, text='Encerrar jogo',
             style='Danger.TButton', state='disabled', command=self.stop_experimental)
-        self.quick_save_button = ttk.Button(actions, text='Salvar', style='Secondary.TButton',
+        self.quick_save_button = flat_button(actions, text='Salvar', style='Secondary.TButton',
+                                            font=('DejaVu Sans', 10),
                                             command=self.save_settings)
-        self.quick_save_button.pack(side='left', padx=(0, 12))
-        self.play_button = ttk.Button(actions, text='JOGAR AGORA', style='Accent.TButton',
-                                      command=self.play)
-        self.play_button.pack(side='right', ipadx=10)
+        self.quick_save_button.pack(side='left', padx=(0, 14))
+        self.play_button = flat_button(actions, text='JOGAR', style='Accent.TButton',
+                                      font=('DejaVu Sans Condensed', 15, 'bold'),
+                                      padx=30, pady=12, command=self.play)
+        self.play_button.pack(side='right')
         self.launch_button = self.experimental_button = self.play_button
 
     def _build_shell(self):
@@ -248,7 +277,6 @@ class Launcher(PortalShell):
                         self.prepare_button, self.cancel_button, self.compile_button,
                         self.stop_experimental_button, self.open_profile_button,
                         self.import_save_button, self.export_save_button, self.play_button,
-                        self.hero_play_button,
                         self.source_entry, self.work_entry, self.jobs_spin, self.save_button,
                         self.quick_save_button, self.doctor_button, self.clear_button, self.export_button,
                         self.copy_button, self.restore_graphics_button,
@@ -267,28 +295,33 @@ class Launcher(PortalShell):
         card = self._card(self.update_tab, fill='x')
         tk.Label(card, textvariable=self.update_version, bg=CARD, fg=ACCENT,
                  font=(FONT, 16, 'bold')).pack(anchor='w', padx=20, pady=(18, 10))
-        tk.Label(card, textvariable=self.update_message, bg=CARD, fg=MUTED,
-                 wraplength=950, justify='left', font=(FONT, 10)).pack(anchor='w', padx=20)
+        update_message_label = tk.Label(card, textvariable=self.update_message, bg=CARD,
+                                        fg=MUTED, justify='left', font=(FONT, 10))
+        update_message_label.pack(anchor='w', padx=20)
+        self._auto_wrap(update_message_label, card)
         ttk.Progressbar(card, variable=self.update_progress, maximum=100).pack(
             fill='x', padx=20, pady=16)
         actions = tk.Frame(card, bg=CARD)
         actions.pack(fill='x', padx=20, pady=(0, 18))
-        self.update_check_button = ttk.Button(actions, text='Verificar agora',
+        self.update_check_button = flat_button(actions, text='Verificar agora',
             style='Secondary.TButton', command=self.check_updates)
         self.update_check_button.pack(side='left')
-        self.update_install_button = ttk.Button(actions, text='Baixar e instalar',
+        self.update_install_button = flat_button(actions, text='Baixar e instalar',
             style='Accent.TButton', state='disabled', command=self.install_launcher_update)
         self.update_install_button.pack(side='left', padx=10)
-        self.update_cancel_button = ttk.Button(actions, text='Cancelar download',
+        self.update_cancel_button = flat_button(actions, text='Cancelar download',
             style='Ghost.TButton', state='disabled', command=lambda: self.update_cancel.cancel())
         self.update_cancel_button.pack(side='left')
         ttk.Checkbutton(self.update_tab, text='Incluir versões de teste (pré-releases)',
             variable=self.update_prerelease).pack(anchor='w', pady=(16, 10))
-        tk.Label(self.update_tab, text='O download é conferido pelo SHA-256 publicado no release. '
-            'O launcher reinicia após instalar e mantém somente a versão nova. '
-            'Se a nova interface falhar ao abrir, a versão anterior é restaurada e reaberta. '
-            'Saves, cache, preferências e dump continuam na pasta do usuário.',
-            bg=BG, fg=MUTED, font=(FONT, 10), wraplength=970, justify='left').pack(anchor='w', pady=(0, 16))
+        update_note = tk.Label(self.update_tab,
+            text='O download é conferido pelo SHA-256 publicado no release. '
+                 'O launcher reinicia após instalar e mantém somente a versão nova. '
+                 'Se a nova interface falhar ao abrir, a versão anterior é restaurada e reaberta. '
+                 'Saves, cache, preferências e dump continuam na pasta do usuário.',
+            bg=BG, fg=MUTED, font=(FONT, 10), justify='left')
+        update_note.pack(anchor='w', pady=(0, 16))
+        self._auto_wrap(update_note, self.update_tab)
         self.update_notes = tk.Text(self.update_tab, bg=PANEL, fg=INK, relief='flat',
             font=(FONT, 10), wrap='word', height=6, padx=16, pady=14, state='disabled')
         self.update_notes.pack(fill='both', expand=True)
@@ -401,99 +434,102 @@ class Launcher(PortalShell):
 
     def _build_play_tab(self):
         from .launcher_artwork import LanternHero
-        hero_box = tk.Frame(self.play_tab, bg=BG)
-        hero_box.pack(fill='both', expand=True, pady=(0, 10))
-        self.hero = LanternHero(hero_box, self.theme)
-        self.hero.pack(fill='both', expand=True)
-        self.hero_actions = tk.Frame(hero_box, bg=BG)
-        self.hero_actions.pack(fill='x', pady=(8, 0))
-        self.hero_play_button = ttk.Button(self.hero_actions, text='▶  JOGAR',
-                                           style='Accent.TButton', command=self.play)
-        self.hero_play_button.pack(side='left')
-        self.hero_dump_button = ttk.Button(self.hero_actions, text='ABRIR DUMP',
-                                           style='Ghost.TButton', command=self.select_folder)
-        self.hero_dump_button.pack(side='left', padx=(8, 0))
-        self.hero_dump_button.pack_forget()
-        self.hero_import_label = tk.Label(self.hero_actions, text='', bg=BG, fg=MUTED,
-                                          font=(FONT, 8), anchor='e')
-        self.hero_import_label.pack(side='right', padx=(18, 0))
-        continue_box = tk.Frame(self.hero_actions, bg=BG)
-        continue_box.pack(side='left', padx=(18, 0))
-        tk.Label(continue_box, text='CONTINUAR', bg=BG, fg=ACCENT,
-                 font=(FONT, 8, 'bold')).pack(anchor='w')
-        tk.Label(continue_box, textvariable=self.last_played, bg=BG, fg=MUTED,
-                 font=(FONT, 9)).pack(anchor='w', pady=(1, 0))
-        self.warning_frame = tk.Frame(self.play_tab, bg=WARN_BG,
+        # Arte em tela cheia: ocupa todo o espaço livre da aba, como uma capa.
+        self.hero = LanternHero(self.play_tab, self.theme)
+        self.hero.pack(side='top', fill='both', expand=True)
+
+        # Painel de configurações rápidas ancorado no rodapé, sobre a arte.
+        panel = tk.Frame(self.play_tab, bg=PANEL)
+        panel.pack(side='bottom', fill='x')
+        tk.Frame(panel, bg=LINE, height=1).pack(fill='x')
+        body = tk.Frame(panel, bg=PANEL, padx=20, pady=8)
+        body.pack(fill='x')
+
+        # Aviso de modo experimental, entre a pasta e as configurações.
+        self.warning_frame = tk.Frame(body, bg=WARN_BG,
                                       highlightthickness=1, highlightbackground='#5c4b24')
         self.warning_label = tk.Label(self.warning_frame, textvariable=self.warning_text,
-            bg=WARN_BG, fg=WARN, font=(FONT, 9), anchor='w', justify='left',
-            wraplength=1020, padx=12, pady=8)
+            bg=WARN_BG, fg=WARN, font=(FONT, 8), anchor='w', justify='left',
+            padx=10, pady=5)
         self.warning_label.pack(fill='x')
-        self.source_card = self._card(self.play_tab, side='bottom', fill='x', before=self.hero)
-        head = tk.Frame(self.source_card, bg=CARD)
-        head.pack(fill='x', padx=16, pady=(10, 5))
-        self._caps(head, 'Pasta do jogo').pack(side='left')
-        tk.Label(head, textvariable=self.engine_status, bg=CARD, fg=MUTED,
+        self._auto_wrap(self.warning_label, self.warning_frame, margin=26)
+
+        head = tk.Frame(body, bg=PANEL)
+        head.pack(fill='x')
+        tk.Label(head, text='CONFIGURAÇÕES RÁPIDAS', bg=PANEL, fg=INK,
+                 font=(FONT, 12, 'bold')).pack(side='left')
+        session_short = tk.Label(head, textvariable=self.hours_played, bg=PANEL,
+                                 fg=MUTED, font=(FONT, 8), wraplength=220,
+                                 justify='right')
+        session_short.pack(side='right')
+        self._auto_wrap(session_short, head, margin=40)
+
+        # Pasta do jogo: entrada e ações compactas dentro do painel.
+        self.source_card = tk.Frame(body, bg=PANEL)
+        self.source_card.pack(fill='x', pady=(6, 0))
+        source_head = tk.Frame(self.source_card, bg=PANEL)
+        source_head.pack(fill='x')
+        self._caps(source_head, 'Pasta do jogo', PANEL).pack(side='left')
+        tk.Label(source_head, textvariable=self.engine_status, bg=PANEL, fg=MUTED,
                  font=(FONT, 8)).pack(side='right')
-        row = tk.Frame(self.source_card, bg=CARD)
-        row.pack(fill='x', padx=16)
+        row = tk.Frame(self.source_card, bg=PANEL)
+        row.pack(fill='x', pady=(3, 0))
         self.source_entry = ttk.Entry(row, textvariable=self.source)
         self.source_entry.pack(side='left', fill='x', expand=True)
-        self.folder_button = ttk.Button(row, text='Escolher pasta…', style='Secondary.TButton',
-                                        command=self.select_folder)
+        self.folder_button = flat_button(row, text='Escolher…', style='Secondary.TButton',
+                                         command=self.select_folder)
         self.folder_button.pack(side='left', padx=(8, 0))
-        self.select_button = ttk.Button(row, text='ISO / XEX…', style='Ghost.TButton', command=self.select)
+        self.select_button = flat_button(row, text='ISO / XEX…', style='Ghost.TButton', command=self.select)
         self.select_button.pack(side='left', padx=(6, 0))
-        actions = tk.Frame(self.source_card, bg=CARD)
-        actions.pack(fill='x', padx=16, pady=(6, 8))
-        self.inspect_button = ttk.Button(actions, text='Conferir arquivos', style='Ghost.TButton', command=self.inspect)
+        actions = tk.Frame(self.source_card, bg=PANEL)
+        actions.pack(fill='x', pady=(4, 0))
+        self.inspect_button = flat_button(actions, text='Conferir arquivos', style='Ghost.TButton', command=self.inspect)
         self.inspect_button.pack(side='left')
-        self.prepare_button = ttk.Button(actions, text='Análise avançada', style='Ghost.TButton', command=self.prepare)
-        self.prepare_button.pack(side='left', padx=(5, 0))
-        self.open_profile_button = ttk.Button(actions, text='Abrir pasta', style='Ghost.TButton',
+        self.prepare_button = flat_button(actions, text='Análise avançada', style='Ghost.TButton', command=self.prepare)
+        self.prepare_button.pack(side='left', padx=(4, 0))
+        self.open_profile_button = flat_button(actions, text='Abrir pasta', style='Ghost.TButton',
                                               command=self.open_profile)
-        self.open_profile_button.pack(side='left', padx=(5, 0))
-        self.import_save_button = ttk.Button(actions, text='Importar save', style='Ghost.TButton',
+        self.open_profile_button.pack(side='left', padx=(4, 0))
+        self.import_save_button = flat_button(actions, text='Importar save', style='Ghost.TButton',
                                              command=self.import_save)
-        self.import_save_button.pack(side='left', padx=(5, 0))
-        self.export_save_button = ttk.Button(actions, text='Exportar save', style='Ghost.TButton',
+        self.import_save_button.pack(side='left', padx=(4, 0))
+        self.export_save_button = flat_button(actions, text='Exportar save', style='Ghost.TButton',
                                              command=self.export_save)
-        self.export_save_button.pack(side='left', padx=(5, 0))
-        ttk.Button(actions, text='Ver preparação  →', style='Ghost.TButton',
+        self.export_save_button.pack(side='left', padx=(4, 0))
+        flat_button(actions, text='Ver preparação  →', style='Ghost.TButton',
                    command=lambda: self.tabs.select(self.build_tab)).pack(side='right')
-        quick = tk.Frame(self.play_tab, bg=PANEL, padx=14, pady=10)
-        quick.pack(side='bottom', fill='x', pady=(10, 0), before=self.source_card)
+
+        # CONFIGURAÇÕES RÁPIDAS: quatro escolhas em linha, rótulo acima do combo.
+        self.quick_config = tk.Frame(body, bg=PANEL)
+        self.quick_config.pack(fill='x', pady=(6, 0))
+        grid = tk.Frame(self.quick_config, bg=PANEL)
+        grid.pack(fill='x')
         self.home_combos = []
         fields = [
-            ('QUALIDADE', self.home_preset, list(graphics.PRESET_LABELS.values()),
-             lambda: self.choose_preset(next(k for k,v in graphics.PRESET_LABELS.items() if v == self.home_preset.get()))),
-            ('RESOLUÇÃO DE SAÍDA', self.output_resolution, ['Automática', *graphics.OUTPUT_RESOLUTIONS[1:]],
-             self._refresh_graphics_ui),
-            ('LIMITE DE QUADROS', self.home_fps,
+            ('Qualidade', self.home_preset, list(graphics.PRESET_LABELS.values()),
+             lambda: self.choose_preset(next(k for k, v in graphics.PRESET_LABELS.items()
+                                             if v == self.home_preset.get()))),
+            ('Resolução', self.output_resolution,
+             ['Automática', *graphics.OUTPUT_RESOLUTIONS[1:]], self._refresh_graphics_ui),
+            ('Limite de quadros', self.home_fps,
              [graphics.fps_choice_label(c) for c in graphics.FPS_CHOICES],
              lambda: self.choose_target(next(c for c in graphics.FPS_CHOICES
                                              if graphics.fps_choice_label(c) == self.home_fps.get()))),
-            ('EXIBIÇÃO', self.home_display, ['Em janela', 'Tela cheia'], self._home_display_changed),
+            ('Exibição', self.home_display, ['Em janela', 'Tela cheia'],
+             self._home_display_changed),
         ]
-        for col, (title, variable, values, callback) in enumerate(fields):
-            quick.columnconfigure(col, weight=1, uniform='quick')
-            cell = tk.Frame(quick, bg=PANEL)
-            cell.grid(row=0, column=col, sticky='ew', padx=(0 if col == 0 else 12, 0))
-            tk.Label(cell, text=title, bg=PANEL, fg=MUTED, font=(FONT, 8, 'bold')).pack(anchor='w', pady=(0, 5))
-            combo = ttk.Combobox(cell, textvariable=variable, values=values, state='readonly', width=16)
+        for index, (title, variable, values, callback) in enumerate(fields):
+            grid.columnconfigure(index, weight=1, uniform='quick')
+            cell = tk.Frame(grid, bg=PANEL)
+            cell.grid(row=0, column=index, sticky='ew',
+                      padx=(0 if index == 0 else 14, 0))
+            tk.Label(cell, text=title, bg=PANEL, fg=MUTED, font=(FONT, 8, 'bold'),
+                     anchor='w').pack(fill='x')
+            combo = ttk.Combobox(cell, textvariable=variable, values=values,
+                                 state='readonly', width=18)
             combo.pack(fill='x')
             combo.bind('<<ComboboxSelected>>', lambda _, cb=callback: cb())
             self.home_combos.append(combo)
-        session_col = len(fields)
-        quick.columnconfigure(session_col, weight=1, uniform='quick')
-        session_cell = tk.Frame(quick, bg=PANEL)
-        session_cell.grid(row=0, column=session_col, sticky='ew', padx=(12, 0))
-        tk.Label(session_cell, text='SESSÃO', bg=PANEL, fg=MUTED,
-                 font=(FONT, 8, 'bold')).pack(anchor='w', pady=(0, 5))
-        tk.Label(session_cell, textvariable=self.hours_played, bg=PANEL, fg=ACCENT,
-                 font=(FONT, 11, 'bold')).pack(anchor='w')
-        tk.Label(session_cell, textvariable=self.last_played, bg=PANEL, fg=MUTED,
-                 font=(FONT, 8)).pack(anchor='w', pady=(2, 0))
 
     def _refresh_session_stats(self):
         try:
@@ -531,21 +567,27 @@ class Launcher(PortalShell):
                             ('Continue depois', 'Se cancelar, o que já foi compilado fica disponível para retomar.'),
                             ('Progresso da etapa', 'Downloads mostram MB transferidos. Compilações mostram tarefas concluídas.')]:
             tk.Label(side, text=title, bg=PANEL, fg=ACCENT, font=(FONT, 9, 'bold')).pack(anchor='w', pady=(12, 4))
-            tk.Label(side, text=body, bg=PANEL, fg=MUTED, font=(FONT, 9), wraplength=205,
-                     justify='left').pack(anchor='w')
+            body_label = tk.Label(side, text=body, bg=PANEL, fg=MUTED, font=(FONT, 9),
+                                  justify='left')
+            body_label.pack(anchor='w')
+            self._auto_wrap(body_label, side, margin=40)
         card = self._card(left, fill='x')
         head = tk.Frame(card, bg=CARD)
         head.pack(fill='x', padx=18, pady=(10, 5))
         tk.Label(head, textvariable=self.build_count, bg=CARD, fg=ACCENT,
                  font=(FONT, 9, 'bold')).pack(side='left')
         tk.Label(head, textvariable=self.build_percent, bg=CARD, fg=ACCENT,
-                 font=('DejaVu Sans Condensed', 19, 'bold')).pack(side='right', padx=(10, 0))
+                 font=(FONT, 19, 'bold')).pack(side='right', padx=(10, 0))
         tk.Label(head, textvariable=self.build_elapsed, bg=CARD, fg=MUTED,
                  font=(MONO, 10)).pack(side='right')
-        tk.Label(card, textvariable=self.build_heading, bg=CARD, fg=INK,
-                 font=(FONT, 15, 'bold'), anchor='w', wraplength=650).pack(fill='x', padx=18)
-        tk.Label(card, textvariable=self.build_detail, bg=CARD, fg=MUTED,
-                 font=(FONT, 9), wraplength=650, anchor='w', justify='left').pack(fill='x', padx=18, pady=(6, 8))
+        heading_label = tk.Label(card, textvariable=self.build_heading, bg=CARD, fg=INK,
+                                 font=(FONT, 15, 'bold'), anchor='w', justify='left')
+        heading_label.pack(fill='x', padx=18)
+        self._auto_wrap(heading_label, card, margin=36)
+        detail_label = tk.Label(card, textvariable=self.build_detail, bg=CARD, fg=MUTED,
+                                font=(FONT, 9), anchor='w', justify='left')
+        detail_label.pack(fill='x', padx=18, pady=(6, 8))
+        self._auto_wrap(detail_label, card, margin=36)
         self.overall_progress = ttk.Progressbar(card, variable=self.task_progress, maximum=100)
         self.overall_progress.pack(fill='x', padx=18, pady=(0, 8))
         self.progress = ttk.Progressbar(card, mode='determinate', value=0)
@@ -567,9 +609,9 @@ class Launcher(PortalShell):
             self.stage_widgets[key] = (number, label, state)
         actions = tk.Frame(left, bg=BG)
         actions.pack(side='bottom', fill='x', pady=(10, 0), before=card)
-        self.build_cancel_button = ttk.Button(actions, text='Cancelar geração', style='Ghost.TButton', state='disabled', command=self.stop_experimental)
+        self.build_cancel_button = flat_button(actions, text='Cancelar geração', style='Ghost.TButton', state='disabled', command=self.stop_experimental)
         self.build_cancel_button.pack(side='left', padx=8)
-        ttk.Button(actions, text='Ver logs', style='Ghost.TButton', command=lambda: self.tabs.select(self.diag_tab)).pack(side='right')
+        flat_button(actions, text='Ver logs', style='Ghost.TButton', command=lambda: self.tabs.select(self.diag_tab)).pack(side='right')
 
     def _paint_build_steps(self):
         for key, widgets in self.stage_widgets.items():
@@ -631,8 +673,8 @@ class Launcher(PortalShell):
         from .portal_widgets import RoundedCard
         top = tk.Frame(self.graphics_tab, bg=BG)
         top.pack(fill='x')
-        tk.Label(top, text='Gráficos', bg=BG, fg=INK, font=(FONT, 17, 'bold')).pack(side='left')
-        self.restore_graphics_button = ttk.Button(top, text='Restaurar padrão', style='Ghost.TButton', command=self.restore_graphics)
+        tk.Label(top, text='Gráficos', bg=BG, fg=INK, font=(FONT, 22, 'bold')).pack(side='left')
+        self.restore_graphics_button = flat_button(top, text='Restaurar padrão', style='Ghost.TButton', command=self.restore_graphics)
         self.restore_graphics_button.pack(side='right')
         tk.Label(self.graphics_tab, text='Escolha um preset ou ajuste cada opção. As alterações valem para a próxima sessão.',
                  bg=BG, fg=MUTED, font=(FONT, 9)).pack(anchor='w', pady=(4, 10))
@@ -643,7 +685,7 @@ class Launcher(PortalShell):
                        'custom': 'PERSONALIZADA\najuste fino'}
         for index, name in enumerate(graphics.PRESETS):
             preset_frame.columnconfigure(index, weight=1, uniform='preset')
-            button = ttk.Button(preset_frame, text=preset_text[name], style='Preset.TButton', command=lambda n=name: self.choose_preset(n))
+            button = flat_button(preset_frame, text=preset_text[name], style='Preset.TButton', command=lambda n=name: self.choose_preset(n))
             button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 5, 0))
             self.preset_buttons[name] = button
         target_frame = tk.Frame(self.graphics_tab, bg=BG)
@@ -651,15 +693,17 @@ class Launcher(PortalShell):
         for index, choice in enumerate(graphics.FPS_CHOICES):
             target_frame.columnconfigure(index, weight=1, uniform='target')
             suffix = ' · padrão' if choice == '30' else (' · sem VSync' if choice in ('120', '240') else ' · experimental')
-            button = ttk.Button(target_frame, text=graphics.fps_choice_label(choice) + suffix,
+            button = flat_button(target_frame, text=graphics.fps_choice_label(choice) + suffix,
                                 style='Preset.TButton', command=lambda c=choice: self.choose_target(c))
             button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 5, 0))
             self.target_buttons[choice] = button
         # Compatibilidade: ``target_buttons['unlimited']`` aponta para o botão
         # numérico ativo (120 ou 240), como esperam abas e testes existentes.
         self.target_buttons['unlimited'] = self.target_buttons[graphics.DEFAULT_UNLIMITED_TARGET]
-        self.target_note = tk.Label(self.graphics_tab, text='', bg=BG, fg=MUTED, font=(FONT, 9), wraplength=1000, justify='left')
+        self.target_note = tk.Label(self.graphics_tab, text='', bg=BG, fg=MUTED,
+                                    font=(FONT, 9), justify='left')
         self.target_note.pack(anchor='w', pady=(5, 10))
+        self._auto_wrap(self.target_note, self.graphics_tab)
 
         viewport = tk.Frame(self.graphics_tab, bg=BG)
         viewport.pack(fill='both', expand=True)
@@ -695,8 +739,10 @@ class Launcher(PortalShell):
             setattr(self, attr, widget)
             return widget
         def note(parent, text):
-            tk.Label(parent, text=text, bg=CARD, fg=MUTED, font=(FONT, 9),
-                     wraplength=430, justify='left').pack(anchor='w', pady=(7, 0))
+            label = tk.Label(parent, text=text, bg=CARD, fg=MUTED, font=(FONT, 9),
+                             justify='left')
+            label.pack(anchor='w', pady=(7, 0))
+            self._auto_wrap(label, parent)
 
         display = section('TELA', 0, 0)
         combo(display, 'Resolução de saída', self.output_resolution, ['Automática', *graphics.OUTPUT_RESOLUTIONS[1:]], 'output_combo')
@@ -715,11 +761,16 @@ class Launcher(PortalShell):
         tk.Label(sharp_row, text='Nitidez FSR/CAS (0–100)', bg=CARD, fg=MUTED, font=(FONT, 9), width=19, anchor='w').pack(side='left')
         self.sharpness_spin = ttk.Spinbox(sharp_row, from_=0, to=100, textvariable=self.fsr_sharpness, width=7)
         self.sharpness_spin.pack(side='left')
+        # Presets em linha própria: antes eram esmagados ao lado do spinbox.
+        preset_row = tk.Frame(image, bg=CARD)
+        preset_row.pack(fill='x', pady=(0, 2))
         self.sharpness_preset_buttons = []
-        for preset in ('soft', 'balanced', 'sharp'):
-            button = ttk.Button(sharp_row, text=graphics.FSR_PRESET_LABELS[preset], style='Ghost.TButton',
-                                command=lambda value=graphics.FSR_PRESET_SHARPNESS[preset]: self.fsr_sharpness.set(value))
-            button.pack(side='left', padx=(5, 0))
+        for index, preset in enumerate(('soft', 'balanced', 'sharp')):
+            button = flat_button(preset_row, text=graphics.FSR_PRESET_LABELS[preset],
+                                 style='Ghost.TButton',
+                                 command=lambda value=graphics.FSR_PRESET_SHARPNESS[preset]:
+                                 self.fsr_sharpness.set(value))
+            button.pack(side='left', padx=(0 if index == 0 else 5, 0))
             self.sharpness_preset_buttons.append(button)
         note(image, 'FSR 1 amplia a imagem; CAS aplica nitidez adaptativa; FXAA reduz serrilhados. '
                     'FSR 2/3 e DLSS não estão disponíveis nesta compilação (exigem FidelityFX/Streamline e '
@@ -728,12 +779,15 @@ class Launcher(PortalShell):
         textures = section('TEXTURAS', 1, 0)
         combo(textures, 'Qualidade', self.custom_texture, list(graphics.TEXTURE_QUALITY_LABELS.values()), 'texture_combo', True)
         combo(textures, 'Filtro anisotrópico', self.custom_aniso, list(ANISO_LABELS.values()), 'aniso_combo', True)
-        tk.Label(textures, textvariable=self.hd_status, bg=CARD, fg=ACCENT, font=(FONT, 9), wraplength=430, justify='left').pack(anchor='w', pady=(7, 4))
+        hd_status_label = tk.Label(textures, textvariable=self.hd_status, bg=CARD,
+                                   fg=ACCENT, font=(FONT, 9), justify='left')
+        hd_status_label.pack(anchor='w', pady=(7, 4))
+        self._auto_wrap(hd_status_label, textures)
         hd_actions = tk.Frame(textures, bg=CARD)
         hd_actions.pack(fill='x')
-        self.hd_auto_button = ttk.Button(hd_actions, text='Preparar texturas deste preset', style='Ghost.TButton', command=self.prepare_graphics_textures)
+        self.hd_auto_button = flat_button(hd_actions, text='Preparar texturas deste preset', style='Ghost.TButton', command=self.prepare_graphics_textures)
         self.hd_auto_button.pack(side='left')
-        self.hd_cancel_button = ttk.Button(hd_actions, text='Cancelar', style='Ghost.TButton', command=lambda: self.cancel.cancel(), state='disabled')
+        self.hd_cancel_button = flat_button(hd_actions, text='Cancelar', style='Ghost.TButton', command=lambda: self.cancel.cancel(), state='disabled')
         self.hd_cancel_button.pack(side='left', padx=5)
         self.hd_progress = ttk.Progressbar(textures, mode='determinate', value=0)
         self.hd_progress.pack(fill='x', pady=(7, 0))
@@ -750,8 +804,9 @@ class Launcher(PortalShell):
         # MSAA follows guest state and is not offered as a misleading toggle.
         self.msaa_check = ttk.Checkbutton(performance, variable=self.custom_msaa)
         self.custom_grid = performance
-        self.graphics_summary_label = tk.Label(body, textvariable=self.graphics_summary, bg=BG, fg=ACCENT,
-                                                font=(FONT, 9), wraplength=950, justify='left')
+        self.graphics_summary_label = tk.Label(body, textvariable=self.graphics_summary, bg=BG,
+                                                fg=ACCENT, font=(FONT, 9), justify='left')
+        self._auto_wrap(self.graphics_summary_label, body)
         self.graphics_summary_label.grid(row=2, column=0, columnspan=2, sticky='w', pady=5)
         def bind_scroll(widget):
             # Comboboxes and spinboxes retain native wheel selection; other
@@ -767,24 +822,33 @@ class Launcher(PortalShell):
 
     def _build_texture_tools(self):
         parent = self.hd_tab
-        tk.Label(parent, text='Ferramentas de texturas · avançado', bg=BG, fg=INK, font=(FONT, 17, 'bold')).pack(anchor='w', pady=10)
-        tk.Label(parent, text='Inspeção e seleção manual para diagnóstico. O fluxo normal usa os presets na página Gráficos.',
-                 bg=BG, fg=MUTED, wraplength=820, justify='left').pack(anchor='w')
+        tk.Label(parent, text='Ferramentas de texturas · avançado', bg=BG, fg=INK, font=(FONT, 22, 'bold')).pack(anchor='w', pady=10)
+        tools_note = tk.Label(parent,
+                 text='Inspeção e seleção manual para diagnóstico. O fluxo normal usa os presets na página Gráficos.',
+                 bg=BG, fg=MUTED, justify='left')
+        tools_note.pack(anchor='w')
+        self._auto_wrap(tools_note, parent)
         row = tk.Frame(parent, bg=BG)
         row.pack(fill='x', pady=12)
-        self.hd_select_button = ttk.Button(row, text='Selecionar pacote HD…', style='Ghost.TButton', command=self.select_hd_pack)
+        self.hd_select_button = flat_button(row, text='Selecionar pacote HD…', style='Ghost.TButton', command=self.select_hd_pack)
         self.hd_select_button.pack(side='left')
-        self.hd_original_button = ttk.Button(row, text='Limpar seleção manual', style='Ghost.TButton', command=self.use_original_textures)
+        self.hd_original_button = flat_button(row, text='Limpar seleção manual', style='Ghost.TButton', command=self.use_original_textures)
         self.hd_original_button.pack(side='left', padx=6)
         prepare_row = tk.Frame(parent, bg=BG)
         prepare_row.pack(fill='x', pady=5)
-        self.hd_catalog_button = ttk.Button(prepare_row, text='Selecionar catálogo revisado…', style='Ghost.TButton', command=self.select_hd_catalog)
+        self.hd_catalog_button = flat_button(prepare_row, text='Selecionar catálogo revisado…', style='Ghost.TButton', command=self.select_hd_catalog)
         self.hd_catalog_button.pack(side='left')
-        self.hd_prepare_button = ttk.Button(prepare_row, text='Preparar catálogo com IA', style='Ghost.TButton', command=self.prepare_hd_pack)
+        self.hd_prepare_button = flat_button(prepare_row, text='Preparar catálogo com IA', style='Ghost.TButton', command=self.prepare_hd_pack)
         self.hd_prepare_button.pack(side='left', padx=6)
-        tk.Label(parent, textvariable=self.hd_texture_catalog, bg=BG, fg=MUTED, wraplength=820, justify='left').pack(anchor='w', pady=8)
-        tk.Label(parent, textvariable=self.hd_status, bg=BG, fg=ACCENT, wraplength=820, justify='left').pack(anchor='w')
-        ttk.Button(parent, text='Voltar aos gráficos', command=lambda: (parent.withdraw(), self.tabs.select(self.graphics_tab))).pack(anchor='w', pady=12)
+        catalog_label = tk.Label(parent, textvariable=self.hd_texture_catalog, bg=BG,
+                                 fg=MUTED, justify='left')
+        catalog_label.pack(anchor='w', pady=8)
+        self._auto_wrap(catalog_label, parent)
+        hd_tools_status = tk.Label(parent, textvariable=self.hd_status, bg=BG, fg=ACCENT,
+                                   justify='left')
+        hd_tools_status.pack(anchor='w')
+        self._auto_wrap(hd_tools_status, parent)
+        flat_button(parent, text='Voltar aos gráficos', command=lambda: (parent.withdraw(), self.tabs.select(self.graphics_tab))).pack(anchor='w', pady=12)
 
     def show_texture_tools(self):
         self.hd_tab.deiconify()
@@ -840,11 +904,13 @@ class Launcher(PortalShell):
         self.language_controls = LanguageControls(page, self.cfg['languages'])
         self.language_controls.pack(fill='x', pady=(0, 12))
         tk.Label(page, text='Jogo e arquivos', bg=BG, fg=INK,
-                 font=(FONT, 17, 'bold')).pack(anchor='w')
-        tk.Label(page, text='O dump precisa conter default.xex. A pasta de trabalho e os '
-                  'perfis ficam em .aster, separados dos arquivos originais.',
-                 bg=BG, fg=MUTED, font=(FONT, 9), wraplength=1050,
-                 justify='left').pack(anchor='w', pady=(4, 10))
+                 font=(FONT, 22, 'bold')).pack(anchor='w')
+        game_note = tk.Label(page,
+                 text='O dump precisa conter default.xex. A pasta de trabalho e os '
+                      'perfis ficam em .aster, separados dos arquivos originais.',
+                 bg=BG, fg=MUTED, font=(FONT, 9), justify='left')
+        game_note.pack(anchor='w', pady=(4, 10))
+        self._auto_wrap(game_note, page)
         workspace_card = self._card(page, fill='x')
         left = tk.Frame(workspace_card, bg=CARD)
         left.pack(fill='x', padx=16, pady=13)
@@ -853,11 +919,12 @@ class Launcher(PortalShell):
         work_row.pack(fill='x', pady=(6, 0))
         self.work_entry = ttk.Entry(work_row, textvariable=self.workspace)
         self.work_entry.pack(side='left', fill='x', expand=True)
-        self.work_button = ttk.Button(work_row, text='Escolher…', style='Ghost.TButton',
+        self.work_button = flat_button(work_row, text='Escolher…', style='Ghost.TButton',
                                       command=self.select_workspace)
         self.work_button.pack(side='left', padx=(8, 0))
         self.paths_label = tk.Label(left, text='', bg=CARD, fg=MUTED, font=(FONT, 8),
-                                    wraplength=1000, justify='left')
+                                    justify='left')
+        self._auto_wrap(self.paths_label, left)
         self.paths_label.pack(anchor='w', pady=(6, 0))
         config_row = tk.Frame(left, bg=CARD)
         config_row.pack(fill='x', pady=(9, 0))
@@ -869,21 +936,24 @@ class Launcher(PortalShell):
                  font=(FONT, 9)).pack(side='left')
         self.jobs_spin = ttk.Spinbox(config_row, from_=1, to=64, textvariable=self.jobs, width=5)
         self.jobs_spin.pack(side='left', padx=(8, 18))
-        self.save_button = ttk.Button(config_row, text='Salvar preferências', style='Secondary.TButton',
+        self.save_button = flat_button(config_row, text='Salvar preferências', style='Secondary.TButton',
                                       command=self.save_settings)
         self.save_button.pack(side='left')
-        tk.Label(left, text='Gerar port valida a revisão do dump, gera C++ e compila localmente. '
-                  'Requer CMake, Ninja e Clang/C++23 (Build Tools + Windows SDK no Windows).', bg=CARD, fg=MUTED,
-                 font=(FONT, 8)).pack(anchor='w', pady=(6, 0))
+        generate_note = tk.Label(left,
+                 text='Gerar port valida a revisão do dump, gera C++ e compila localmente. '
+                      'Requer CMake, Ninja e Clang/C++23 (Build Tools + Windows SDK no Windows).',
+                 bg=CARD, fg=MUTED, font=(FONT, 8), justify='left')
+        generate_note.pack(anchor='w', pady=(6, 0))
+        self._auto_wrap(generate_note, left)
         actions = tk.Frame(page, bg=BG)
         actions.pack(fill='x', pady=(10, 0))
-        self.compile_button = ttk.Button(actions, text='Gerar port nativo', style='Secondary.TButton',
+        self.compile_button = flat_button(actions, text='Gerar port nativo', style='Secondary.TButton',
                                          command=self.generate_native, state='disabled')
         self.compile_button.pack(side='left')
-        self.doctor_button = ttk.Button(actions, text='Verificar ambiente', style='Secondary.TButton',
+        self.doctor_button = flat_button(actions, text='Verificar ambiente', style='Secondary.TButton',
                                         command=self.doctor)
         self.doctor_button.pack(side='left', padx=(6, 0))
-        self.clear_button = ttk.Button(actions, text='Limpar cache…', style='Ghost.TButton',
+        self.clear_button = flat_button(actions, text='Limpar cache…', style='Ghost.TButton',
                                        command=self.clear_cache)
         self.clear_button.pack(side='left', padx=(6, 0))
         self.summary = tk.Text(page, height=4, bg=BG, fg=INK, relief='flat',
@@ -900,11 +970,13 @@ class Launcher(PortalShell):
         self.requirements.pack(fill='x', pady=(10, 0))
         tk.Label(self.requirements, text='Para outro computador com o mesmo dump', bg=CARD_ALT,
                  fg=ACCENT, font=(FONT, 9, 'bold'), anchor='w').pack(fill='x', padx=12, pady=(8, 1))
-        tk.Label(self.requirements, text='1. Confirme o SHA-256 do default.xex.  2. Compile o host '
-                 'local e o plugin xenos.  3. Gere/valide o probe FSI.  4. Selecione o dump aqui: '
-                 'nada do jogo é escrito fora do perfil isolado.', bg=CARD_ALT, fg=MUTED,
-                 font=(FONT, 8), anchor='w', justify='left', wraplength=1030).pack(fill='x', padx=12,
-                                                                                  pady=(0, 8))
+        requirements_note = tk.Label(self.requirements,
+                 text='1. Confirme o SHA-256 do default.xex.  2. Compile o host '
+                      'local e o plugin xenos.  3. Gere/valide o probe FSI.  4. Selecione o dump aqui: '
+                      'nada do jogo é escrito fora do perfil isolado.', bg=CARD_ALT, fg=MUTED,
+                 font=(FONT, 8), anchor='w', justify='left')
+        requirements_note.pack(fill='x', padx=12, pady=(0, 8))
+        self._auto_wrap(requirements_note, self.requirements, margin=34)
         def scroll(event):
             if getattr(event, 'num', None) == 4:
                 amount = -3
@@ -927,7 +999,7 @@ class Launcher(PortalShell):
         top = tk.Frame(self.diag_tab, bg=BG)
         top.pack(fill='x')
         tk.Label(top, text='Diagnóstico', bg=BG, fg=INK,
-                 font=(FONT, 17, 'bold')).pack(side='left')
+                 font=(FONT, 22, 'bold')).pack(side='left')
         self.environment_status_label = tk.Label(top, textvariable=self.environment_status,
                                                  bg=BG, fg=MUTED, font=(FONT, 9))
         self.environment_status_label.pack(side='right', pady=(5, 0))
@@ -954,11 +1026,11 @@ class Launcher(PortalShell):
         self.logs.configure(state='disabled')
         actions = tk.Frame(self.diag_tab, bg=BG)
         actions.pack(fill='x', pady=(10, 0))
-        self.export_button = ttk.Button(actions, text='Salvar diagnóstico e logs', style='Secondary.TButton',
+        self.export_button = flat_button(actions, text='Salvar diagnóstico e logs', style='Secondary.TButton',
                                         command=self.export_report)
         self.export_button.pack(side='left')
-        ttk.Button(actions, text='Ferramentas de texturas…', style='Ghost.TButton', command=self.show_texture_tools).pack(side='left', padx=6)
-        self.copy_button = ttk.Button(actions, text='Copiar logs', style='Ghost.TButton',
+        flat_button(actions, text='Ferramentas de texturas…', style='Ghost.TButton', command=self.show_texture_tools).pack(side='left', padx=6)
+        self.copy_button = flat_button(actions, text='Copiar logs', style='Ghost.TButton',
                                       command=self.copy_logs)
         self.copy_button.pack(side='left', padx=(6, 0))
         lightweight_row = tk.Frame(self.diag_tab, bg=BG)
@@ -966,14 +1038,18 @@ class Launcher(PortalShell):
         self.lightweight_check = ttk.Checkbutton(
             lightweight_row, text='Manter instalação leve',
             variable=self.lightweight, command=lambda: self.save_settings(quiet=True))
-        self.lightweight_check.pack(side='left')
-        tk.Label(lightweight_row,
+        self.lightweight_check.pack(anchor='w')
+        # Texto em linha própria: dividir a linha com o checkbox cortava o texto.
+        lightweight_note = tk.Label(lightweight_row,
                  text='Remove ferramentas e caches de textura após gerar/atualizar. '
                       'Saves, configurações, shaders, recibos e o pack HD são preservados.',
-                 bg=BG, fg=MUTED, font=(FONT, 9), wraplength=720,
-                 justify='left').pack(side='left', padx=(8, 0))
-        tk.Label(self.diag_tab, textvariable=self.report_path, bg=BG, fg=MUTED,
-                 font=(FONT, 8), wraplength=1000, justify='left').pack(anchor='w', pady=(7, 0))
+                 bg=BG, fg=MUTED, font=(FONT, 9), justify='left')
+        lightweight_note.pack(anchor='w', pady=(4, 0))
+        self._auto_wrap(lightweight_note, lightweight_row)
+        report_label = tk.Label(self.diag_tab, textvariable=self.report_path, bg=BG,
+                                fg=MUTED, font=(FONT, 8), justify='left')
+        report_label.pack(anchor='w', pady=(7, 0))
+        self._auto_wrap(report_label, self.diag_tab)
 
     # ---------------------------------------------------------- graphics sync
     def _set_graphics_vars(self, data):
@@ -1058,12 +1134,12 @@ class Launcher(PortalShell):
         if target == '60':
             self.warning_text.set('60 FPS EXPERIMENTAL · Seus saves são compartilhados entre os modos. '
                                   'A campanha completa ainda está em validação.')
-            self.warning_frame.pack(side='bottom', fill='x', pady=(0, 10), before=self.hero)
+            self.warning_frame.pack(side='top', fill='x', pady=(0, 10), before=self.quick_config)
         elif target == 'unlimited':
             self.warning_text.set(f'{choice} FPS · EXPERIMENTAL · Pacing desativado. Pode aumentar '
                                   'a carga da GPU, causar tearing ou alterar a velocidade do jogo. '
                                   'Seus saves continuam compartilhados.')
-            self.warning_frame.pack(side='bottom', fill='x', pady=(0, 10), before=self.hero)
+            self.warning_frame.pack(side='top', fill='x', pady=(0, 10), before=self.quick_config)
         note = graphics.TARGET_DESCRIPTIONS[target]
         if target == 'unlimited':
             risk = note.split('Pode acelerar', 1)
@@ -1234,13 +1310,16 @@ class Launcher(PortalShell):
         self.hero.set_status('PRONTO PARA JOGAR · SAVE COMPARTILHADO DO USUÁRIO' if ready else
                              'SELECIONE SEU DUMP PARA COMEÇAR' if not self._source_ready() else
                              'PREPARE O JOGO UMA VEZ. REUTILIZE NAS PRÓXIMAS ABERTURAS.')
-        label = ('JOGAR AGORA' if ready else
+        # Painel de status da arte: disco e hash do dump reconhecido.
+        result = self.last_result if isinstance(self.last_result, dict) else {}
+        manifest = result.get('directory_manifest_sha256') or result.get('digest')
+        if manifest:
+            self.hero.set_info('disc', f'DISCO :: XEX {str(manifest)[:8].upper()}')
+            self.hero.set_info('sha', f'SHA-256 :: {str(manifest)[:32]}…')
+        label = ('JOGAR' if ready else
                  'ATUALIZAR PORT' if self._backend_update_needed() else 'GERAR PORT NATIVO')
         state = 'normal' if self._source_ready() else 'disabled'
-        # Só o botão do rodapé (canto inferior direito) exibe "GERAR PORT NATIVO".
-        # O botão do hero mantém "▶ JOGAR" (desabilitado quando não há fonte).
         self.play_button.configure(state=state, text=label)
-        self.hero_play_button.configure(state=state, text='▶  JOGAR')
         self.compile_button.configure(state='normal' if self._source_ready() else 'disabled')
 
     def _fps_choice(self):
@@ -2085,7 +2164,6 @@ class Launcher(PortalShell):
         self._refresh_play_state()
         if self.update_installing:
             self.play_button.configure(state='disabled')
-            self.hero_play_button.configure(state='disabled')
         self._sync_session_actions()
         if self.build_running:
             elapsed = int(time.monotonic() - self.task_started)

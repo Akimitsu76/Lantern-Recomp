@@ -5,6 +5,7 @@ from tkinter import ttk
 from . import controls
 from .controller_artwork import ControllerCard
 from .portal_theme import PortalTheme, mix, shade
+from .flat_buttons import flat_button
 
 _DEFAULT = PortalTheme().validate()
 BG = _DEFAULT.bg
@@ -45,13 +46,13 @@ class ControlsPanel(ttk.Frame):
         header = ttk.Frame(self)
         header.pack(fill='x', pady=(0, 14))
         ttk.Label(header, text='Controles', font=('DejaVu Sans', 20, 'bold')).pack(side='left')
-        ttk.Button(header, text='Restaurar padrão', command=lambda: self.set_settings(controls.defaults())).pack(side='right')
+        flat_button(header, text='Restaurar padrão', command=lambda: self.set_settings(controls.defaults())).pack(side='right')
         players = ttk.Frame(self)
         players.pack(fill='x', pady=(0, 8))
         ttk.Label(players, text='Jogadores', font=('DejaVu Sans', 10, 'bold')).pack(side='left')
         self.player_buttons = {}
         for number in (1, 2):
-            button = ttk.Button(players, text=f'Jogador {number}', style='Secondary.TButton',
+            button = flat_button(players, text=f'Jogador {number}', style='Secondary.TButton',
                                 command=lambda selected=number: self._select_player(selected))
             button.pack(side='left', padx=(16 if number == 1 else 6, 0))
             self.player_buttons[number] = button

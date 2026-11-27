@@ -15,5 +15,8 @@ analysis = ["capstone==5.0.7"]
 [project.scripts]
 aster-native = "native_port.__main__:main"
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.setuptools.packages.find]
 include = ["native_port*", "games*"]
