@@ -769,6 +769,23 @@ class LauncherTests(unittest.TestCase):
         self.assertTrue(self.app.vsync.get())
         self.assertFalse(self.app.warning_frame.winfo_ismapped())
 
+    def test_graphics_selection_keeps_capsule_at_widget_size(self):
+        self.root.geometry('1280x800')
+        self.app.tabs.select(self.app.graphics_tab)
+        self.root.update()
+        for name in ('low', 'default', 'high', 'ultra', 'custom'):
+            button = self.app.preset_buttons[name]
+            self.app.choose_preset(name)
+            self.root.update()
+            self.assertEqual(button._img_size,
+                             (button.winfo_width() - 2, button.winfo_height() - 2), name)
+        for name in ('30', '60', '120', '240'):
+            button = self.app.target_buttons[name]
+            self.app.choose_target(name)
+            self.root.update()
+            self.assertEqual(button._img_size,
+                             (button.winfo_width() - 2, button.winfo_height() - 2), name)
+
     def test_play_command_forwards_selected_preset_without_custom_overrides(self):
         folder = self.experimental_folder()
         self.app.choose_preset('high')

@@ -186,7 +186,15 @@ class FlatButton(tk.Button):
             probe.destroy()
 
     def _render(self):
-        self._render_job = None
+        # Um configure síncrono pode ocorrer antes do ``after(1)`` inicial.
+        # Cancelar o job pendente aqui evita que ele dispare depois do widget
+        # ser destruído (``invalid command name ..._render``).
+        job, self._render_job = self._render_job, None
+        if job:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
         if not self.winfo_exists():
             return
         if self._base_dirty or self._img_size is None:
@@ -268,11 +276,13 @@ class FlatButton(tk.Button):
     # ------------------------------------------------------- configure patched
     def configure(self, *args, **kwargs):
         state = None
+        style = None
         options = args[0] if args and isinstance(args[0], dict) else None
         relayout = bool(kwargs.keys() & {'text', 'font', 'padx', 'pady'})
         if options is not None:
             relayout = relayout or bool(options.keys() & {'text', 'font', 'padx', 'pady'})
             state = options.pop('state', None)
+            style = options.pop('style', None)
             if 'command' in options:
                 self._command = options.pop('command')
             if 'padx' in options:
@@ -282,18 +292,28 @@ class FlatButton(tk.Button):
             args = (options, *args[1:]) if options else args[1:]
         if 'state' in kwargs:
             state = kwargs.pop('state')
+        if 'style' in kwargs:
+            style = kwargs.pop('style')
         if 'command' in kwargs:
             self._command = kwargs.pop('command')
         if 'padx' in kwargs:
             self._pad_x = int(kwargs.pop('padx'))
         if 'pady' in kwargs:
             self._pad_y = int(kwargs.pop('pady'))
-        if 'style' in kwargs:
-            self._style_name = kwargs.pop('style')
-            self._spec.update(spec_for(self._style_name))
-            self._radius = self._spec.pop('radius')
-            self._base_dirty = True
-            self._photos.clear()
+        if style is not None:
+            # Trocar Preset -> PresetOn é só uma mudança de cor. Não remede o
+            # texto nem descarte a cápsula no tamanho natural: o botão pode
+            # estar esticado pelo grid, e a imagem menor deixaria a cápsula
+            # encolhida e o texto com outro espaçamento.
+            self._style_name = style
+            spec = spec_for(style)
+            radius = spec.pop('radius')
+            spec.pop('padx', None)
+            spec.pop('pady', None)
+            if spec != self._spec or radius != self._radius:
+                self._spec = spec
+                self._radius = radius
+                self._photos.clear()
         if relayout:
             # A foto gerada NÃO contém texto — é somente o fundo arredondado.
             # Por isso trocar o rótulo não invalida as imagens: ``_render``
