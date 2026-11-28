@@ -60,14 +60,13 @@ index 52e0073..ed36a64 100644
    user0_.clear();
    user0_.reserve(devices.size());
 diff --git a/src/input/input_system.cpp b/src/input/input_system.cpp
-index 813bb1c..784e457 100644
+index d2ff093..0bb97b4 100644
 --- a/src/input/input_system.cpp
 +++ b/src/input/input_system.cpp
-@@ -28,6 +28,12 @@ REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput
-     .allowed({"sdl", "xinput"});
+@@ -35,6 +35,11 @@ REXCVAR_DEFINE_INT32(aster_pad_deadzone, 0, "Aster/Input", "Additional stick dea
+ REXCVAR_DEFINE_STRING(aster_controller_layout, "auto", "Aster/Input", "Controller prompt family").allowed({"auto", "xbox", "playstation"});
  
  REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
-+
 +REXCVAR_DEFINE_STRING(aster_input_split, "auto", "Aster/Input",
 +                      "Guest user split: auto shares the keyboard with the first pad; "
 +                      "keyboard_pad keeps the keyboard on player one and gives each pad "
@@ -76,7 +75,7 @@ index 813bb1c..784e457 100644
  namespace rex::input {
  
  namespace {
-@@ -351,7 +357,11 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
+@@ -413,7 +418,11 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
    // NOP driver (primary in tool mode, fallback otherwise)
    uint8_t nop_index = tool_mode ? 0 : 1;
    input->AddDriver(std::make_unique<nop::NopInputDriver>(nullptr, nop_index));
