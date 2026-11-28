@@ -126,6 +126,7 @@ class FlatButton(tk.Button):
         self._img_size = None
         self._base_dirty = True
         self._render_job = None
+        self.bind('<Configure>', self._on_configure, add='+')
         self.bind('<Enter>', lambda _e: self._set_hover(True), add='+')
         self.bind('<Leave>', lambda _e: self._set_hover(False), add='+')
         self._render_job = self.after(1, self._render)
@@ -201,10 +202,15 @@ class FlatButton(tk.Button):
                 self._img_size = measured
                 self._photos.clear()
             self._base_dirty = False
-        bw, bh = self._img_size
+        self._paint()
+
+    def _paint(self):
+        """Aplica a foto no tamanho atual do widget (a cápsula acompanha o grid)."""
+        if not self.winfo_exists() or self._img_size is None:
+            return
         # A imagem cobre todo o botão; o padding já está embutido na medição,
         # então o texto fica centralizado com margem dentro da cápsula.
-        img_w, img_h = bw, bh
+        img_w, img_h = self._img_size
         key = (self._disabled, self._hover)
         photo = self._photos.get(key)
         if photo is None:
@@ -220,6 +226,28 @@ class FlatButton(tk.Button):
                   else self._spec['fg'])
             super().configure(image=photo, foreground=fg,
                               cursor='arrow' if self._disabled else 'hand2')
+
+    def _on_configure(self, _event=None):
+        """Regenera a cápsula quando o layout estica o botão.
+
+        O Tk adiciona 2px ao tamanho requisitado por causa da borda do widget;
+        descontá-los evita um laço de ``<Configure>`` (imagem maior → botão
+        maior → imagem maior...).
+        """
+        if getattr(self, '_configuring', False):
+            return
+        w, h = self.winfo_width(), self.winfo_height()
+        if w < 4 or h < 4:
+            return
+        size = (w - 2, h - 2)
+        if size != self._img_size:
+            self._configuring = True
+            try:
+                self._img_size = size
+                self._photos.clear()
+                self._paint()
+            finally:
+                self._configuring = False
 
     def _schedule(self):
         """Repinta imediatamente, sem atraso.

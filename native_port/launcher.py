@@ -687,9 +687,8 @@ class Launcher(PortalShell):
         for index, name in enumerate(graphics.PRESETS):
             preset_frame.columnconfigure(index, weight=1, uniform='preset')
             button = flat_button(preset_frame, text=preset_text[name], style='Preset.TButton',
-                                 command=lambda n=name: self.choose_preset(n))
-            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 8, 0),
-                        ipady=4)
+                                 padx=30, pady=24, command=lambda n=name: self.choose_preset(n))
+            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 4, 0))
             self.preset_buttons[name] = button
         target_frame = tk.Frame(self.graphics_tab, bg=BG)
         target_frame.pack(fill='x', pady=(0, 10))
@@ -697,9 +696,9 @@ class Launcher(PortalShell):
             target_frame.columnconfigure(index, weight=1, uniform='target')
             suffix = ' · padrão' if choice == '30' else (' · sem VSync' if choice in ('120', '240') else ' · experimental')
             button = flat_button(target_frame, text=graphics.fps_choice_label(choice) + suffix,
-                                style='Preset.TButton', command=lambda c=choice: self.choose_target(c))
-            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 8, 0),
-                        ipady=4)
+                                style='Preset.TButton', padx=30, pady=24,
+                                command=lambda c=choice: self.choose_target(c))
+            button.grid(row=0, column=index, sticky='nsew', padx=(0 if index == 0 else 4, 0))
             self.target_buttons[choice] = button
         # Compatibilidade: ``target_buttons['unlimited']`` aponta para o botão
         # numérico ativo (120 ou 240), como esperam abas e testes existentes.
